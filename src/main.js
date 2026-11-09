@@ -3,11 +3,11 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
-import { Game } from './game.js';
-import { UI } from './ui.js';
-import { Audio } from './audio.js';
-import { makeSky, makeStarLayer, makeDust } from './world.js';
-import { SECTORS, sectorAt } from './data.js';
+import { Game } from './game.js?v=3';
+import { UI } from './ui.js?v=3';
+import { Audio } from './audio.js?v=3';
+import { makeSky, makeStarLayer, makeDust } from './world.js?v=3';
+import { SECTORS, sectorAt } from './data.js?v=3';
 
 const canvas = document.getElementById('c');
 let renderer;
@@ -60,7 +60,7 @@ function setupQuality() {
   const pr = q === 'low' ? Math.min(dpr, 1) : q === 'medium' ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
   renderer.setPixelRatio(pr);
   renderer.setSize(innerWidth, innerHeight, false);
-  game.fx.budget = q === 'low' ? 0.5 : 1; game.setQuality(q);
+  game.fx.budget = q === 'low' ? 0.5 : 1; game.setQuality(q); audio.setLow(q === 'low');
   sky.material.uniforms.uDetail.value = q === 'low' ? 0 : 1; dust.visible = q !== 'low'; motes.visible = q === 'high';
   if (q === 'low') { composer = null; bloom = null; }
   else {
@@ -72,8 +72,9 @@ function setupQuality() {
   }
   resize();
 }
-function applySettings() {
-  const s = game.s.settings; audio.setMusic(s.music); audio.setSfx(s.sfx);
+function applySettings(audioOnly) {
+  const s = game.s.settings; audio.setVolumes({ master: s.masterVol, music: s.musicVol, sfx: s.sfxVol, mute: s.mute });
+  if (audioOnly === true) return;
   opts.showFps = s.fps; document.getElementById('fps').style.display = s.fps ? '' : 'none';
   setupQuality();
 }
@@ -87,7 +88,6 @@ function resize() {
   game.fx.mat.uniforms.uScale.value = scale; game.smoke.mat.uniforms.uScale.value = scale; for (const l of starLayers) l.material.uniforms.uScale.value = scale;
 }
 addEventListener('resize', resize);
-audio.musicOn = game.s.settings.music; audio.sfxOn = game.s.settings.sfx;
 applySettings();
 
 // fps tracking + auto quality
@@ -104,7 +104,7 @@ btnPlay.classList.remove('hidden'); btnLoad.classList.remove('hidden');
 if (hasSave) { btnPlay.textContent = `CONTINUE · LV ${game.s.level}`; btnNew.classList.remove('hidden'); }
 function startGame() {
   if (playing) return;
-  audio.init(); audio.setMusic(game.s.settings.music); audio.setSfx(game.s.settings.sfx);
+  audio.init(); applySettings(true);
   title.classList.add('gone'); playing = true; setTimeout(() => title.remove(), 700);
   const sec = sectorAt(Math.hypot(game.player.x, game.player.z)); ui.sectorBanner(sec);
   if (game.offlineGain > 1) ui.toast(`Your factory produced ${Math.floor(game.offlineGain)} credits while you were away`, 'good');
@@ -112,7 +112,7 @@ function startGame() {
   else document.getElementById('hint').classList.add('gone');
 }
 btnPlay.addEventListener('click', startGame);
-btnLoad.addEventListener('click', () => { audio.init(); ui.open('saves'); });
+btnLoad.addEventListener('click', () => { audio.init(); applySettings(true); ui.open('saves'); });
 opts.onLoaded = () => { if (!playing) { game.offlineGain = 0; startGame(); } };
 let newArmed = 0;
 btnNew.addEventListener('click', () => {
@@ -144,6 +144,7 @@ function frame() {
     game.field.update(game.player.x, game.player.z, game.time, dt);
   }
   ui.update(dt, innerWidth, innerHeight);
+  audioTick(rawDt);
   game.updateCamera(dt, innerWidth / innerHeight);
   // background follow
   sky.position.copy(camera.position);
@@ -157,8 +158,13 @@ function frame() {
   perf.upd = perf.upd * 0.95 + (t1 - t0) * 0.05; perf.calls = renderer.info.render.calls; perf.tris = renderer.info.render.triangles;
 }
 const perf = { upd: 0, calls: 0, tris: 0 };
+function audioTick(dt) {
+  if (!audio.ctx) return; const g = game, p = g.player; let threat = 0;
+  if (playing && !g.dead) for (const e of g.enemies) { if (e.dead || ((e.type === 'sentinel' || e.type === 'boss') && e.state === 'idle')) continue; if (Math.hypot(e.x - p.x, e.z - p.z) < 60) threat += e.type === 'boss' ? 3 : e.type === 'gunship' ? 1.5 : 1; }
+  audio.tick(Math.min(dt, 0.25), { x: p.x, z: p.z, thrust: p.thrust || 0, tier: g.s.tier, docked: g.docked, dockT: g.dockT || 0, combat: Math.min(1, threat / 3), hull: p.maxHp ? p.hp / p.maxHp : 1, dead: g.dead, paused: !!ui.modalOpen, playing });
+}
 resize();
 frame();
 
 // test / debug hook
-window.SF = { perf, game, ui, renderer, camera, scene, get fps() { return fps; }, setQuality(q) { game.s.settings.quality = q; applySettings(); } };
+window.SF = { perf, game, ui, audio, renderer, camera, scene, get fps() { return fps; }, setQuality(q) { game.s.settings.quality = q; applySettings(); } };

@@ -1,8 +1,8 @@
 // HUD, joystick, radar and menus (DOM overlay)
-import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, WEAPONS, WEAPON_KEYS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt, BOSS_LAIR } from './data.js';
-import { fmt, clamp } from './util.js';
-import { FloatText } from './fx.js';
-import { Preview } from './preview.js';
+import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, WEAPONS, WEAPON_KEYS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt, BOSS_LAIR } from './data.js?v=3';
+import { fmt, clamp } from './util.js?v=3';
+import { FloatText } from './fx.js?v=3';
+import { Preview } from './preview.js?v=3';
 
 const $ = (id) => document.getElementById(id);
 const TIER_CROPS = [[18, 368, 120, 100], [122, 305, 232, 190], [320, 228, 275, 255], [495, 220, 385, 310], [745, 105, 530, 490]];
@@ -66,6 +66,10 @@ export class UI {
     click('modalClose', () => this.close());
     $('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') this.close(); });
     $('modalBody').addEventListener('click', (e) => this.onAction(e));
+    // live volume sliders (applied while dragging, saved on release)
+    $('modalBody').addEventListener('input', (e) => { const k = e.target.dataset && e.target.dataset.vol; if (!k) return; const v = clamp(+e.target.value / 100, 0, 1); this.g.s.settings[k] = v;
+      if (k === 'musicVol') this.g.s.settings.music = v > 0; if (k === 'sfxVol') this.g.s.settings.sfx = v > 0; const l = $('vol_' + k); if (l) l.textContent = Math.round(v * 100) + '%'; this.opts.applySettings(true); });
+    $('modalBody').addEventListener('change', (e) => { if (e.target.dataset && e.target.dataset.vol) { this.g.save(); if (e.target.dataset.vol !== 'musicVol') this.audio.click(); } });
     $('modalTabs').addEventListener('click', (e) => { const t = e.target.closest('[data-tab]'); if (t) { this.audio.click(); this.tab = t.dataset.tab; this.render(); } });
   }
   readInput() {
@@ -79,7 +83,7 @@ export class UI {
   stationBtn() {
     if (this.g.docked) this.open('station', 'market');
     else if (this.g.dead) return;
-    else { this.g.autopilot = !this.g.autopilot; this.toast(this.g.autopilot ? 'Autopilot engaged: returning to station' : 'Autopilot off'); }
+    else { this.g.autopilot = !this.g.autopilot; if (this.g.autopilot) this.audio.boost(); this.toast(this.g.autopilot ? 'Autopilot engaged: returning to station' : 'Autopilot off'); }
   }
 
   // ---------- feedback ----------
@@ -200,13 +204,13 @@ export class UI {
 
   // ---------- modals ----------
   open(which, tab) {
-    this.audio.init();
+    this.audio.init(); if (!this.modalOpen) this.audio.menuOpen();
     this.modalOpen = which; if (tab) this.tab = tab; else if (which === 'station' && !this.tab) this.tab = 'market';
     $('modal').classList.remove('hidden'); $('modal').dataset.kind = which;
     this.render(true);
   }
   close() {
-    if (!this.modalOpen) return; this.modalOpen = null; this.preview.hide(); this.confirmKey = null;
+    if (!this.modalOpen) return; this.modalOpen = null; this.preview.hide(); this.confirmKey = null; this.audio.menuClose();
     $('modal').classList.add('hidden'); if (this.opts.isPlaying()) this.g.save();
   }
   render(resetScroll) {
@@ -349,12 +353,13 @@ export class UI {
   }
   renderSettings() {
     const st = this.g.s.settings; const tg = (k, label) => `<div class="card row"><span>${label}</span><button class="toggle ${st[k] ? 'on' : ''}" data-act="toggle" data-k="${k}">${st[k] ? 'ON' : 'OFF'}</button></div>`;
-    return tg('music', 'Music') + tg('sfx', 'Sound effects') + tg('shake', 'Camera shake') + tg('fps', 'Show FPS') +
+    const sl = (k, label) => { const v = Math.round((st[k] ?? 0) * 100); return `<div class="card row vol"><span>${label}</span><input type="range" min="0" max="100" step="1" value="${v}" data-vol="${k}" aria-label="${label} volume"><b class="volv" id="vol_${k}">${v}%</b></div>`; };
+    return `<div class="card"><h4>AUDIO</h4></div>` + sl('masterVol', 'Master') + sl('musicVol', 'Music') + sl('sfxVol', 'Sound effects') + tg('mute', 'Mute all') + tg('shake', 'Camera shake') + tg('fps', 'Show FPS') +
       `<div class="card row"><span>Graphics quality</span><div class="seg">${['auto', 'low', 'medium', 'high'].map((q) => `<button class="${st.quality === q ? 'on' : ''}" data-act="quality" data-q="${q}">${q.toUpperCase()}</button>`).join('')}</div></div>
       <div class="card"><h4>CONTROLS</h4><p>Touch: drag anywhere to steer (virtual joystick). Weapons fire automatically.<br>Desktop: WASD / arrow keys or drag with the mouse. U = upgrades, M = missions, F = factory, H = station/autopilot, Esc = close.</p></div>
       <div class="card row"><span>Progress autosaves every few seconds.</span><span class="btnrow"><button class="btn sm gold" data-act="save">Save game</button><button class="btn sm" data-act="saves">Save / Load…</button></span></div>
       <div class="card row"><span>Erase all progress</span><button class="btn sm danger" data-act="reset" data-confirm="1">Reset</button></div>
-      <p class="muted">Stellar Frontier v2.0 · Built with three.js</p>`;
+      <p class="muted">Stellar Frontier v3.0 · Built with three.js · All sound and music synthesised in real time</p>`;
   }
   slotCard(i) {
     const g = this.g; const auto = i === 'auto'; const m = g.slotMeta(i); const name = auto ? 'AUTOSAVE' : `SLOT ${i}`;
@@ -388,7 +393,7 @@ export class UI {
   doImport(text) {
     const r = this.g.importSave(text);
     if (!r.ok) { this.toast('Import failed: ' + r.error, 'warn'); return false; }
-    this.toast('Save imported', 'good'); this.afterLoad(); return true;
+    this.toast('Save imported', 'good'); this.audio.saved(); this.afterLoad(); return true;
   }
   afterLoad() { this.close(); this.refreshHud(true); this.opts.onLoaded && this.opts.onLoaded(); }
   onAction(e) {
@@ -418,13 +423,13 @@ export class UI {
       case 'up': g.buyUpgrade(b.dataset.k); break;
       case 'claimstory': g.claimStory(); break;
       case 'claimc': g.claimContract(+b.dataset.i); break;
-      case 'autopilot': this.close(); g.autopilot = true; this.toast('Autopilot engaged: returning to station'); return;
+      case 'autopilot': this.close(); g.autopilot = true; this.audio.boost(); this.toast('Autopilot engaged: returning to station'); return;
       case 'toggle': { const k = b.dataset.k; g.s.settings[k] = !g.s.settings[k]; this.opts.applySettings(); g.save(); break; }
       case 'quality': g.s.settings.quality = b.dataset.q; this.opts.applySettings(); g.save(); break;
-      case 'save': { const ok = g.save(); this.toast(ok ? 'Game saved' : 'Save failed: storage is unavailable', ok ? 'good' : 'warn'); break; }
+      case 'save': { const ok = g.save(); if (ok) this.audio.saved(); this.toast(ok ? 'Game saved' : 'Save failed: storage is unavailable', ok ? 'good' : 'warn'); break; }
       case 'saves': this.open('saves'); return;
       case 'pvtier': this.pvTier = +b.dataset.t; break;
-      case 'slotsave': { const ok = g.saveSlot(+b.dataset.i); this.toast(ok ? `Game saved to slot ${b.dataset.i}` : 'Save failed: storage is unavailable', ok ? 'good' : 'warn'); break; }
+      case 'slotsave': { const ok = g.saveSlot(+b.dataset.i); if (ok) this.audio.saved(); this.toast(ok ? `Game saved to slot ${b.dataset.i}` : 'Save failed: storage is unavailable', ok ? 'good' : 'warn'); break; }
       case 'slotload': { const i = b.dataset.i === 'auto' ? 'auto' : +b.dataset.i; if (g.loadSlot(i)) { this.toast(i === 'auto' ? 'Autosave loaded' : `Slot ${i} loaded`, 'good'); this.afterLoad(); } else this.toast('That save could not be read', 'warn'); return; }
       case 'slotdel': g.deleteSlot(+b.dataset.i); this.toast(`Slot ${b.dataset.i} deleted`); break;
       case 'export': this.exportShown = true; break;

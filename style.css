@@ -226,3 +226,9 @@ textarea.code{width:100%;height:70px;margin-top:8px;border-radius:8px;background
 .filebtn{cursor:pointer}.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
 #btnLoad{display:block;margin:14px auto 0;min-width:150px}
 .toast{backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);box-shadow:0 0 14px rgba(60,200,255,.25)}
+/* v3 audio sliders */
+.card.row.vol{gap:10px}.card.row.vol span{min-width:96px}
+.card.row.vol input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:6px;border-radius:4px;background:linear-gradient(90deg,#1d6f8f,#4fd2ff);outline:none;margin:0 4px;touch-action:none}
+.card.row.vol input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#d9f3ff;border:2px solid #4fd2ff;box-shadow:0 0 8px rgba(79,210,255,.6)}
+.card.row.vol input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#d9f3ff;border:2px solid #4fd2ff}
+.volv{min-width:42px;text-align:right;font-size:13px;color:#9fe6ff}

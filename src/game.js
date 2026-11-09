@@ -1,12 +1,12 @@
 // Core game: state, player ship, weapons, enemies, economy, quests, saving
 import * as THREE from 'three';
-import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js';
-import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, WEAPONS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js';
-import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture } from './models.js';
-import { freshState, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT } from './save.js';
-import { AsteroidField, Minerals } from './world.js';
-import { Particles, Debris, Rings, Bolts, Flashes } from './fx.js';
-import { STORY, makeContract } from './quests.js';
+import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=3';
+import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, WEAPONS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=3';
+import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture } from './models.js?v=3';
+import { freshState, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT } from './save.js?v=3';
+import { AsteroidField, Minerals } from './world.js?v=3';
+import { Particles, Debris, Rings, Bolts, Flashes } from './fx.js?v=3';
+import { STORY, makeContract } from './quests.js?v=3';
 
 const DOCK_R = 28;
 const DRONES = [0, 2, 3, 4, 6, 10];
@@ -150,7 +150,7 @@ export class Game {
   upgradeStation() {
     const inf = this.stationUpgradeInfo(); if (!inf || !inf.ok || !this.docked) return false;
     this.s.credits -= inf.next.cost; for (const k in (inf.next.mats || {})) this.s.vault[k] -= inf.next.mats[k];
-    this.s.stationLvl++; this.buildStationModel(); this.audio.levelUp();
+    this.s.stationLvl++; this.buildStationModel(); this.audio.stationUp();
     this.fx.burst(0, 4, 0, 80, 30, 1.2, 1.5, 0.2, [0.6, 2.4, 3.2], 1.5); this.rings.spawn(0, 0, 0, 40, [0.4, 1.6, 2.4], 1.2);
     this.toast(`Station upgraded: ${inf.next.name}!`, 'good'); this.emit('station', {}); this.save(); return true;
   }
@@ -204,7 +204,7 @@ export class Game {
     const inf = this.tierInfo(t); if (!inf || !inf.ok || t !== this.s.tier + 1 || !this.docked) return false;
     this.s.credits -= inf.T.cost; for (const k in (inf.T.mats || {})) this.s.vault[k] -= inf.T.mats[k];
     this.s.tier = t; this.buildPlayerShip(); this.player.hp = this.player.maxHp;
-    this.audio.levelUp(); this.rings.spawn(this.player.x, 0, this.player.z, 18 * inf.T.cam, [0.6, 2, 3], 1);
+    this.audio.tierUp(); this.rings.spawn(this.player.x, 0, this.player.z, 18 * inf.T.cam, [0.6, 2, 3], 1);
     this.fx.burst(this.player.x, 1, this.player.z, 90, 20, 1.2, 1.5, 0.1, [0.5, 2.2, 3.2], 1.5);
     this.toast(`New ship: ${inf.T.name} (${inf.T.cls})!`, 'level'); this.emit('tier', {}); this.save(); return true;
   }
@@ -250,12 +250,12 @@ export class Game {
   claimStory() {
     const st = this.currentStory(); if (!st || !this.storyDone()) return false;
     this.addCredits(st.reward.credits); this.addXP(st.reward.xp); this.s.story++; this.s.storyProg = 0;
-    this.audio.coins(); this.toast(`Mission complete: ${st.title} +${st.reward.credits} cr`, 'good'); this.save(); return true;
+    this.audio.questComplete(); this.toast(`Mission complete: ${st.title} +${st.reward.credits} cr`, 'good'); this.save(); return true;
   }
   claimContract(i) {
     const c = this.s.contracts[i]; if (!c || this.questState(c, c.prog) < c.need) return false;
     this.addCredits(c.reward.credits); this.addXP(c.reward.xp); this.s.contracts[i] = this.newContract();
-    this.audio.coins(); this.toast(`Contract complete +${c.reward.credits} cr`, 'good'); this.save(); return true;
+    this.audio.questComplete(); this.toast(`Contract complete +${c.reward.credits} cr`, 'good'); this.save(); return true;
   }
 
   // ---------- player ship ----------
@@ -433,7 +433,7 @@ export class Game {
           e.summonT -= dt; e.burstT -= dt;
           if (e.hp < e.maxHp * 0.5 && e.phase === 1) { e.phase = 2; this.toast('The Warlord is enraged!', 'warn'); }
           if (e.summonT <= 0) { e.summonT = e.phase === 2 ? 10 : 15; const n = E.filter((x) => x.type === 'drone').length; if (n < 8) for (let k = 0; k < 3; k++) this.spawnEnemy('drone', e.x + rand(-6, 6), e.z + rand(-6, 6)); }
-          if (e.burstT <= 0) { e.burstT = e.phase === 2 ? 3.5 : 5.5; const n = e.phase === 2 ? 24 : 16; for (let k = 0; k < n; k++) { const a2 = k / n * TAU + e.t; this.enemyShot(e.x, e.z, Math.cos(a2), Math.sin(a2), 16, D.dmg * 0.8 * e.dmgMul, [3.5, 0.6, 1.2]); } this.audio.enemyShoot(); }
+          if (e.burstT <= 0) { e.burstT = e.phase === 2 ? 3.5 : 5.5; const n = e.phase === 2 ? 24 : 16; for (let k = 0; k < n; k++) { const a2 = k / n * TAU + e.t; this.enemyShot(e.x, e.z, Math.cos(a2), Math.sin(a2), 16, D.dmg * 0.8 * e.dmgMul, [3.5, 0.6, 1.2]); } this.audio.enemyShoot('boss', e.x, e.z); }
         } else { tx = e.x; tz = e.z; wantFire = false; }
         const ring = e.group.getObjectByName('ring'); if (ring) ring.rotation.y += dt * (e.phase === 2 ? 2 : 0.8);
       }
@@ -464,7 +464,7 @@ export class Game {
         else this.enemyShot(e.x + ux * e.radius, e.z + uz * e.radius, ux, uz, e.type === 'drone' ? 20 : 30, dmg, e.type === 'sentinel' ? [3.2, 1.8, 0.3] : [3.5, 0.4, 0.4]);
         for (const tu of e.turrets) tu.userData.rec = 1;
         this.fx.emit(e.x + ux * e.radius, 0.6, e.z + uz * e.radius, 0, 0, 0, 0.08, 1.2 + e.radius * 0.3, 0.3, 3, 0.8, 0.4, 0);
-        this.audio.enemyShoot();
+        this.audio.enemyShoot(e.type, e.x, e.z);
       }
       // engine trail
       if (Math.random() < 0.3 * this.fx.budget) this.fx.emit(e.x - Math.sin(e.yaw) * e.radius, 0.2, e.z - Math.cos(e.yaw) * e.radius, -e.vx * 0.2, 0, -e.vz * 0.2, 0.4, 0.7 * (e.radius * 0.5 + 0.5), 0.1, 2.5, 0.6, 0.3, 2);
@@ -486,7 +486,7 @@ export class Game {
     const big = e.type === 'boss' ? 4 : e.type === 'gunship' ? 1.8 : 1;
     this.boom(e.x, 0.5, e.z, big, [3.2, 0.5, 0.4]);
     this.debris.spawn(e.x, 0.3, e.z, Math.round(6 * big), 10, 0.6, 0x2a1416);
-    this.audio.explode(big > 1); this.addShake(0.25 * big, e.x, e.z);
+    this.audio.explode(big > 1, e.x, e.z, e.type === 'boss'); this.addShake(0.25 * big, e.x, e.z);
     const credits = Math.round(e.D.credits * e.dmgMul); this.addCredits(credits); this.addXP(Math.round(e.D.xp * e.dmgMul));
     this.ui && this.ui.float(e.x, 2, e.z, `+${credits} cr`, '#ffd166', true);
     const sec = sectorAt(Math.hypot(e.x, e.z)); const keys = Object.keys(sec.minerals);
@@ -509,13 +509,13 @@ export class Game {
       const lx = fx - p.x, lz = fz - p.z, c = Math.cos(-p.yaw), s = Math.sin(-p.yaw);
       this.shieldMat.uniforms.uHit.value.set(lx * c + lz * s, 0.2, -lx * s + lz * c).normalize(); this.shieldMat.uniforms.uT.value = 1;
     }
-    this.addShake(0.18); this.audio.hurt(); this.ui && this.ui.hurtFlash();
+    this.addShake(0.18); this.audio.hurt(fx !== undefined && this.shieldOn !== false && !!p.shield, fx === undefined ? p.x : fx, fz === undefined ? p.z : fz); this.ui && this.ui.hurtFlash();
     if (p.hp <= 0) this.playerDie();
   }
   playerDie() {
     const p = this.player; this.dead = true; p.hp = 0; this.autopilot = false;
     this.boom(p.x, 0.5, p.z, 2.5, [0.5, 2, 3]); this.debris.spawn(p.x, 0, p.z, 20, 14, 0.7);
-    this.audio.explode(true); this.addShake(0.8); p.group.visible = false;
+    this.audio.explode(true, p.x, p.z); this.addShake(0.8); p.group.visible = false;
     let lost = 0; for (const k of MINERAL_KEYS) { const n = Math.ceil(this.s.cargo[k] / 2); lost += n; this.s.cargo[k] -= n; if (n) this.minerals.spawn(p.x, p.z, k, Math.min(n, 12), 12); }
     this.s.stats.deaths++;
     this.toast(`Hull breached! Lost ${lost} cargo units. Respawning at station…`, 'warn');
@@ -549,7 +549,7 @@ export class Game {
     this.smoke.burst(a.x, a.y, a.z, Math.ceil(3 + a.r), 3, 1.4, a.r * 0.8, a.r * 2.2, [0.2, 0.19, 0.2], 1.8, 0.3);
     if (a.r > 2.5 || a.rich) this.flashes.spawn(a.x, a.y, a.z, 25, col.getHex(), 0.3, 16);
     this.rings.spawn(a.x, a.y, a.z, a.r * 3, tint.map((v) => v * 0.5), 0.45);
-    this.audio.rockBreak(a.r > 3); this.addShake(0.05 + a.r * 0.03, a.x, a.z);
+    this.audio.rockBreak(a.r > 3, a.x, a.z); this.addShake(0.05 + a.r * 0.03, a.x, a.z);
     const sec = sectorAt(Math.hypot(a.x, a.z));
     const n = Math.max(1, Math.round(a.r * 1.5 * (a.rich ? 2.6 : 1) * st.mining * (1 + 0.2 * (sec.id - 1))));
     this.minerals.spawn(a.x, a.z, a.type, n, 5 + a.r);
@@ -619,7 +619,7 @@ export class Game {
         if (Math.random() < 0.15 * this.fx.budget && t.kind === 'rock') this.fx.emit(hit.x, hit.y, hit.z, rand(-3, 3), rand(0, 2), rand(-3, 3), 0.8, 0.4, 1.4, 0.25, 0.22, 0.22, 2);
         if (w.tick <= 0) {
           w.tick = 0.15; const crit = Math.random() < st.crit; const dmg = w.acc * (crit ? 2.5 : 1); w.acc = 0;
-          if (t.kind === 'rock') this.damageRock(o, dmg, crit); else this.damageEnemy(o, dmg, crit);
+          if (t.kind === 'rock') { this.damageRock(o, dmg, crit); this.audio.rockHit(hit.x, hit.z); } else { this.damageEnemy(o, dmg, crit); this.audio.hit(hit.x, hit.z); }
         }
       } else if (w.cd <= 0 && aimed) {
         if (w.key === 'cannon') {
@@ -629,7 +629,7 @@ export class Game {
           const sp = rand(-0.03, 0.03); const ux = (ax - muzzle.x) / ad, uz = (az - muzzle.z) / ad; const c = Math.cos(sp), s = Math.sin(sp);
           this.bolts.spawn({ x: muzzle.x, z: muzzle.z, y: muzzle.y, vx: (ux * c - uz * s) * speed, vz: (uz * c + ux * s) * speed, dmg: W.dmg * st.dmg, owner: 'p', kind: 'cannon', W, life: range * 1.3 / speed, len: 1.8, w: 1, color: [3.2, 2.4, 0.8] });
           this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.08, 1.8, 0.5, 3, 2.2, 0.8, 0); this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.05, 0.7, 0.2, 4, 4, 3, 0); w.recoil = 1;
-          this.audio.shoot();
+          this.audio.shoot(muzzle.x, muzzle.z, this.s.tier);
         } else if (w.key === 'missile') {
           w.cd = 1 / (W.rate * st.rate);
           for (const off of [-0.5, 0.5]) {
@@ -637,7 +637,7 @@ export class Game {
             this.bolts.spawn({ x: muzzle.x, z: muzzle.z, y: muzzle.y, vx: Math.sin(base) * speed * 0.5, vz: Math.cos(base) * speed * 0.5, speed, dmg: W.dmg * st.dmg, owner: 'p', kind: 'missile', W, target: t, life: 3.2, len: 1.2, w: 1.8, color: [3.4, 1.6, 0.5], splash: W.splash * (1 + 0.1 * (this.s.tier - 1)) });
           }
           w.recoil = 1; this.smoke.burst(muzzle.x, muzzle.y, muzzle.z, 3, 2, 0.8, 0.5, 1.6, [0.3, 0.3, 0.32], 2, 0.2);
-          this.audio.missile();
+          this.audio.missile(muzzle.x, muzzle.z);
         }
       }
     }
@@ -651,7 +651,7 @@ export class Game {
       pd.turret.rotation.y = pd.turret.rotation.y + clamp(angleDiff(pd.turret.rotation.y, wy), -8 * dt, 8 * dt);
       if (tgt && pd.cd <= 0 && !this.dead) { pd.cd = 0.45 / st.rate; pd.recoil = 1; const d = bd || 1, sp = 60;
         this.bolts.spawn({ x: mz.x, z: mz.z, y: mz.y, vx: (tgt.x - mz.x) / d * sp, vz: (tgt.z - mz.z) / d * sp, dmg: 4 * st.dmg, owner: 'p', kind: 'cannon', W: WEAPONS.cannon, life: 0.5, len: 0.9, w: 0.6, color: [0.8, 2.6, 3.4] });
-        this.fx.emit(mz.x, mz.y, mz.z, 0, 0, 0, 0.05, 0.8, 0.2, 1, 2.6, 3.2, 0); }
+        this.fx.emit(mz.x, mz.y, mz.z, 0, 0, 0, 0.05, 0.8, 0.2, 1, 2.6, 3.2, 0); this.audio.pdFire(mz.x, mz.z); }
     }
     // escort drones (T4/T5)
     for (const esc of p.escorts || []) {
@@ -662,7 +662,7 @@ export class Game {
       if (esc.cd <= 0 && !this.dead) {
         const t = this.findTarget(ex, ez, 20 * st.range, true);
         if (t) { esc.cd = 0.6 / st.rate; const o = t.o; const d = Math.hypot(o.x - ex, o.z - ez) || 1; const sp = 55 * st.proj;
-          this.bolts.spawn({ x: ex, z: ez, y: 1.2, vx: (o.x - ex) / d * sp, vz: (o.z - ez) / d * sp, dmg: 5 * st.dmg, owner: 'p', kind: 'cannon', W: WEAPONS.cannon, life: 0.6, len: 1.2, w: 0.8, color: [0.6, 2.6, 3.4] }); }
+          this.bolts.spawn({ x: ex, z: ez, y: 1.2, vx: (o.x - ex) / d * sp, vz: (o.z - ez) / d * sp, dmg: 5 * st.dmg, owner: 'p', kind: 'cannon', W: WEAPONS.cannon, life: 0.6, len: 1.2, w: 0.8, color: [0.6, 2.6, 3.4] }); this.audio.droneFire(ex, ez); }
         else esc.cd = 0.3;
       }
     }
@@ -671,13 +671,13 @@ export class Game {
     const p = this.player; const st = this.stats();
     this.rings.spawn(p.x, 0.3, p.z, radius, [1.8, 0.8, 3.2], 0.5); this.rings.spawn(p.x, 0.3, p.z, radius * 0.7, [1.2, 0.6, 2.4], 0.35);
     this.fx.burst(p.x, 0.4, p.z, 30, radius * 3, 0.35, 1.0, 0.2, [1.6, 0.8, 3], 3, 0.05);
-    this.audio.pulse(); this.addShake(0.08);
+    this.audio.pulse(p.x, p.z); this.addShake(0.08);
     for (const e of [...this.enemies]) if (!e.dead && Math.hypot(e.x - p.x, e.z - p.z) < radius + e.radius) { const c = Math.random() < st.crit; this.damageEnemy(e, dmg * W.vsShip * (c ? 2.5 : 1), c); }
     for (const a of [...this.field.list]) if (a.alive && Math.hypot(a.x - p.x, a.z - p.z) < radius + a.r * 0.5) { const c = Math.random() < st.crit; this.damageRock(a, dmg * W.vsRock * st.mining * (c ? 2.5 : 1), c); }
   }
   explodeMissile(b) {
     const st = this.stats();
-    this.boom(b.x, 0.5, b.z, 0.6, null, false); this.rings.spawn(b.x, 0.4, b.z, b.splash, [3, 1.4, 0.4], 0.35); this.audio.hit();
+    this.boom(b.x, 0.5, b.z, 0.6, null, false); this.rings.spawn(b.x, 0.4, b.z, b.splash, [3, 1.4, 0.4], 0.35); this.audio.missileBoom(b.x, b.z);
     for (const e of [...this.enemies]) { if (e.dead) continue; const d = Math.hypot(e.x - b.x, e.z - b.z); if (d < b.splash + e.radius) { const c = Math.random() < st.crit; this.damageEnemy(e, b.dmg * b.W.vsShip * (d < e.radius + 0.5 ? 1 : 0.6) * (c ? 2.5 : 1), c); } }
     for (const a of [...this.field.list]) { if (!a.alive) continue; const d = Math.hypot(a.x - b.x, a.z - b.z); if (d < b.splash + a.r * 0.7) { const c = Math.random() < st.crit; this.damageRock(a, b.dmg * b.W.vsRock * st.mining * (c ? 2.5 : 1), c); } }
   }
@@ -699,8 +699,8 @@ export class Game {
       b.x += b.vx * dt; b.z += b.vz * dt;
       if (b.owner === 'p') {
         let hit = false;
-        for (const e of this.enemies) { if (e.dead) continue; if (Math.hypot(e.x - b.x, e.z - b.z) < e.radius + 0.4) { hit = true; if (b.kind === 'missile') this.explodeMissile(b); else { const c = Math.random() < st.crit; this.damageEnemy(e, b.dmg * b.W.vsShip * (c ? 2.5 : 1), c); this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, [3, 2, 0.8], 3); this.audio.hit(); } break; } }
-        if (!hit) for (const a of this.field.list) { if (!a.alive) continue; if (Math.abs(a.x - b.x) < a.r && Math.abs(a.z - b.z) < a.r && Math.hypot(a.x - b.x, a.z - b.z) < a.r * 0.85) { hit = true; if (b.kind === 'missile') this.explodeMissile(b); else { const c = Math.random() < st.crit; this.damageRock(a, b.dmg * b.W.vsRock * st.mining * (c ? 2.5 : 1), c); this.fx.burst(b.x, a.y, b.z, 5, 9, 0.3, 0.45, 0.06, [3, 2, 0.8], 3, 0.7); this.smoke.emit(b.x, a.y + 0.3, b.z, 0, 0.6, 0, 0.9, 0.5, 1.4, 0.2, 0.18, 0.18, 1.5, 0.7); } break; } }
+        for (const e of this.enemies) { if (e.dead) continue; if (Math.hypot(e.x - b.x, e.z - b.z) < e.radius + 0.4) { hit = true; if (b.kind === 'missile') this.explodeMissile(b); else { const c = Math.random() < st.crit; this.damageEnemy(e, b.dmg * b.W.vsShip * (c ? 2.5 : 1), c); this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, [3, 2, 0.8], 3); this.audio.hit(b.x, b.z); } break; } }
+        if (!hit) for (const a of this.field.list) { if (!a.alive) continue; if (Math.abs(a.x - b.x) < a.r && Math.abs(a.z - b.z) < a.r && Math.hypot(a.x - b.x, a.z - b.z) < a.r * 0.85) { hit = true; if (b.kind === 'missile') this.explodeMissile(b); else { const c = Math.random() < st.crit; this.damageRock(a, b.dmg * b.W.vsRock * st.mining * (c ? 2.5 : 1), c); this.audio.rockHit(b.x, b.z); this.fx.burst(b.x, a.y, b.z, 5, 9, 0.3, 0.45, 0.06, [3, 2, 0.8], 3, 0.7); this.smoke.emit(b.x, a.y + 0.3, b.z, 0, 0.6, 0, 0.9, 0.5, 1.4, 0.2, 0.18, 0.18, 1.5, 0.7); } break; } }
         if (hit) { b.dead = true; continue; }
         if (b.life <= 0 && b.kind === 'missile') this.explodeMissile(b);
       } else if (!this.dead) {
@@ -788,7 +788,7 @@ export class Game {
       const r = this.sellCargo();
       if (r) { this.toast(`Sold cargo: +${r.credits} cr${r.vaulted ? ` · ${r.vaulted} rare units to vault` : ''}`, 'good'); this.ui && this.ui.float(p.x, 2, p.z, `+${r.credits} cr`, '#ffd166', true); }
     }
-    if (this.docked && !wasDocked) { this.autopilot = false; this.dockT = 0; p.vx *= 0.35; p.vz *= 0.35; this.rings.spawn(p.x, 0, p.z, 6 + p.radius * 2, [0.4, 1.8, 2.8], 0.7); this.ui && this.ui.onDock(); }
+    if (this.docked && !wasDocked) { this.audio.docked(); this.autopilot = false; this.dockT = 0; p.vx *= 0.35; p.vz *= 0.35; this.rings.spawn(p.x, 0, p.z, 6 + p.radius * 2, [0.4, 1.8, 2.8], 0.7); this.ui && this.ui.onDock(); }
     if (this.docked) {
       this.dockT += dt; if (this.dockT < 1.2) { const k = Math.exp(-2.5 * dt); p.vx *= k; p.vz *= k; }
       const port = this.stationRoot.userData.dockPort; const tb = this.tractor; const hit = this.tmpV2.set(p.x, 0.3, p.z);
@@ -799,7 +799,7 @@ export class Game {
     } else this.tractor.visible = false;
     // sector tracking
     const sec = sectorAt(dHome);
-    if (sec.id !== this.sectorId) { this.sectorId = sec.id; this.ui && this.ui.sectorBanner(sec); if (sec.id > this.s.maxSector) { this.s.maxSector = sec.id; this.save(); } }
+    if (sec.id !== this.sectorId) { if (this.time > 3) this.audio.warp(); this.sectorId = sec.id; this.ui && this.ui.sectorBanner(sec); if (sec.id > this.s.maxSector) { this.s.maxSector = sec.id; this.save(); } }
     // world streaming
     this.field.loadR = this.s.tier >= 4 ? 3 : 2;
     this.field.update(p.x, p.z, this.time, dt);

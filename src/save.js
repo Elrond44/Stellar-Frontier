@@ -1,5 +1,5 @@
 // Save system: versioned state, migration, validation, manual slots, export/import codes
-import { MINERAL_KEYS, UPGRADES, WEAPONS, TIERS } from './data.js';
+import { MINERAL_KEYS, UPGRADES, WEAPONS, TIERS } from './data.js?v=3';
 
 export const SAVE_VERSION = 2;
 export const AUTO_KEY = 'stellar-frontier-save-v1'; // kept so v1 autosaves keep loading
@@ -15,7 +15,7 @@ export function freshState() {
     weapons: { laser: true }, loadout: ['laser', 'cannon', 'laser', 'missile', 'cannon', 'pulse'],
     story: 0, storyProg: 0, contracts: [], maxSector: 1,
     stats: { mined: 0, rocks: 0, kills: 0, sold: 0, bosses: 0, deaths: 0, playTime: 0 },
-    settings: { music: true, sfx: true, shake: true, quality: 'auto', fps: false },
+    settings: { music: true, sfx: true, shake: true, quality: 'auto', fps: false, masterVol: 0.8, musicVol: 0.6, sfxVol: 0.85, mute: false },
     pos: { x: 0, z: 34 }, hp: null, tutorialDone: false, savedAt: Date.now(), created: Date.now(),
   };
 }
@@ -48,7 +48,10 @@ export function sanitize(raw) {
   s.contracts = Array.isArray(d.contracts) ? d.contracts.filter((c) => c && typeof c === 'object' && typeof c.kind === 'string' && num(c.need, 0) > 0 && c.reward && typeof c.title === 'string' && typeof c.desc === 'string')
     .slice(0, 3).map((c) => ({ id: String(c.id || Math.random()), title: c.title.slice(0, 60), desc: c.desc.slice(0, 120), kind: c.kind.slice(0, 30), need: num(c.need, 1, 1, 1e9), prog: num(c.prog, 0, 0, 1e12), reward: { credits: num(c.reward.credits, 0, 0, 1e12), xp: num(c.reward.xp, 0, 0, 1e12) } })) : [];
   for (const k in f.stats) s.stats[k] = num(d.stats && d.stats[k], 0, 0, 1e15);
-  const st = d.settings || {}; s.settings = { music: st.music !== false, sfx: st.sfx !== false, shake: st.shake !== false, quality: ['auto', 'low', 'medium', 'high'].includes(st.quality) ? st.quality : 'auto', fps: st.fps === true };
+  const st = d.settings || {}; s.settings = { music: st.music !== false, sfx: st.sfx !== false, shake: st.shake !== false, quality: ['auto', 'low', 'medium', 'high'].includes(st.quality) ? st.quality : 'auto', fps: st.fps === true,
+    // v3 audio mixer (older saves: the on/off toggles map onto the new sliders)
+    masterVol: num(st.masterVol, 0.8, 0, 1), musicVol: num(st.musicVol, st.music === false ? 0 : 0.6, 0, 1), sfxVol: num(st.sfxVol, st.sfx === false ? 0 : 0.85, 0, 1), mute: st.mute === true };
+  s.settings.music = s.settings.musicVol > 0; s.settings.sfx = s.settings.sfxVol > 0;
   s.pos = { x: num(d.pos && d.pos.x, 0, -1e5, 1e5), z: num(d.pos && d.pos.z, 34, -1e5, 1e5) };
   s.hp = d.hp == null ? null : num(d.hp, null, 0, 1e9);
   s.tutorialDone = !!d.tutorialDone; s.savedAt = num(d.savedAt, Date.now()); s.created = num(d.created, Date.now());
