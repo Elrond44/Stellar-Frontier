@@ -1,7 +1,11 @@
 // Save system: versioned state, migration, validation, manual slots, export/import codes
-import { MINERAL_KEYS, UPGRADES, WEAPONS, TIERS } from './data.js?v=3';
+import { MINERAL_KEYS, UPGRADES, TIERS } from './data.js?v=4';
+import { TEMPLATES, LEGACY, makeItem, RARITIES } from './items.js?v=4';
+import { SKILL_BY_ID } from './rpg.js?v=4';
+import { SECTOR_BY_ID, freshGalaxy } from './galaxy.js?v=4';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 4; // v3 builds still wrote v2 (audio settings were additive)
+export const INV_CAP = 48;
 export const AUTO_KEY = 'stellar-frontier-save-v1'; // kept so v1 autosaves keep loading
 export const SLOT_COUNT = 3;
 export const slotKey = (i) => 'stellar-frontier-slot-' + i;
@@ -12,12 +16,28 @@ export function freshState() {
   return {
     v: SAVE_VERSION, credits: 50, xp: 0, level: 1, cargo: { ...z }, vault: { ...z }, upgrades: up,
     tier: 1, stationLvl: 1, factory: { inc: 0, cap: 0, stored: 0, last: Date.now() },
-    weapons: { laser: true }, loadout: ['laser', 'cannon', 'laser', 'missile', 'cannon', 'pulse'],
+    // v4 item system: inventory of weapon items + equipped item ids per hardpoint
+    inv: [], equip: [], parts: 0, skills: {}, respecs: 0, galaxy: freshGalaxy(), abilityBar: [],
     story: 0, storyProg: 0, contracts: [], maxSector: 1,
-    stats: { mined: 0, rocks: 0, kills: 0, sold: 0, bosses: 0, deaths: 0, playTime: 0 },
-    settings: { music: true, sfx: true, shake: true, quality: 'auto', fps: false, masterVol: 0.8, musicVol: 0.6, sfxVol: 0.85, mute: false },
+    stats: { mined: 0, rocks: 0, kills: 0, sold: 0, bosses: 0, deaths: 0, playTime: 0, outposts: 0, liberated: 0, caches: 0, items: 0 },
+    settings: { music: true, sfx: true, shake: true, quality: 'auto', fps: false, masterVol: 0.8, musicVol: 0.6, sfxVol: 0.85, mute: false, musicMode: 'soundtrack', trackIdx: 0, trackPos: 0 },
     pos: { x: 0, z: 34 }, hp: null, tutorialDone: false, savedAt: Date.now(), created: Date.now(),
   };
+}
+export function starterKit(s) { const it = makeItem('mining_laser', 0, 1, 'Starter kit', { seed: 7 }); s.inv = [it]; s.equip = [it.id]; return s; }
+export function newGame() { return starterKit(freshState()); }
+// v2/v3 owned weapons + loadout -> v4 items. One item per owned weapon, extra copies for repeated loadout use.
+export function legacyItems(weapons, loadout, tier, level) {
+  const inv = [], equip = []; const owned = Object.keys(LEGACY).filter((k) => weapons && weapons[k] === true); if (!owned.includes('laser')) owned.unshift('laser');
+  const slots = (TIERS[tier - 1] || TIERS[0]).slots; const used = {};
+  const mk = (k) => { const [t, r] = LEGACY[k]; const it = makeItem(t, Math.min(r, 1), Math.max(TEMPLATES[t].lvl, Math.min(level, TEMPLATES[t].lvl + 4)), 'Migrated from v3', { seed: inv.length * 977 + 13 }); inv.push(it); return it; };
+  const byKey = {}; for (const k of owned) byKey[k] = [mk(k)];
+  for (let i = 0; i < slots; i++) {
+    let k = Array.isArray(loadout) ? loadout[i] : null; if (!owned.includes(k)) k = i === 0 ? 'laser' : (owned.includes('cannon') ? 'cannon' : 'laser');
+    used[k] = (used[k] || 0) + 1; if (used[k] > byKey[k].length) byKey[k].push(mk(k));
+    equip.push(byKey[k][used[k] - 1].id);
+  }
+  return { inv, equip };
 }
 
 const num = (v, d, lo = -Infinity, hi = Infinity) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
@@ -30,6 +50,8 @@ export function migrate(d) {
   if (v > SAVE_VERSION) throw new Error(`Save is from a newer version (v${v})`);
   d = { ...d };
   if (v < 2) { d.savedAt = d.savedAt || Date.now(); d.created = d.created || Date.now(); delete d.bossRespawnLocal; delete d.bossRespawn; v = 2; }
+  // v2/v3 -> v4: weapons/loadout become items; skills, galaxy, components added (skill points are derived from level, so old saves get them retroactively)
+  if (v < 4) { const lvl = int(d.level, 1, 1, 999), tier = int(d.tier, 1, 1, TIERS.length); const m = legacyItems(d.weapons || { laser: true }, d.loadout, tier, lvl); d.inv = m.inv; d.equip = m.equip; d.migratedFrom = v; delete d.weapons; delete d.loadout; d.skills = {}; d.parts = 0; v = 4; }
   d.v = v;
   return d;
 }
@@ -42,15 +64,29 @@ export function sanitize(raw) {
   for (const u of UPGRADES) s.upgrades[u.key] = int(d.upgrades && d.upgrades[u.key], 0, 0, u.max);
   s.tier = int(d.tier, 1, 1, TIERS.length); s.stationLvl = int(d.stationLvl, 1, 1, 6);
   const fa = d.factory || {}; s.factory = { inc: int(fa.inc, 0, 0, 200), cap: int(fa.cap, 0, 0, 200), stored: num(fa.stored, 0, 0, 1e15), last: num(fa.last, Date.now(), 0, Date.now() + 1) };
-  s.weapons = { laser: true }; for (const k in WEAPONS) if (d.weapons && d.weapons[k] === true) s.weapons[k] = true;
-  if (Array.isArray(d.loadout)) for (let i = 0; i < 6; i++) if (WEAPONS[d.loadout[i]]) s.loadout[i] = d.loadout[i];
+  // items
+  const seen = new Set();
+  s.inv = (Array.isArray(d.inv) ? d.inv : []).filter((it) => it && typeof it === 'object' && TEMPLATES[it.t] && typeof it.id === 'string' && !seen.has(it.id) && seen.add(it.id)).slice(0, INV_CAP + 8).map((it) => ({
+    id: it.id.slice(0, 40), t: it.t, r: int(it.r, 0, 0, RARITIES.length - 1), il: int(it.il, 1, 1, 999), up: Math.min(int(it.up, 0, 0, 20), RARITIES[int(it.r, 0, 0, RARITIES.length - 1)].maxUp),
+    sp: (Array.isArray(it.sp) ? it.sp : []).filter((x) => typeof x === 'string').slice(0, 3), seed: int(it.seed, 1, 0, 2 ** 31), src: String(it.src || 'Unknown').slice(0, 40), name: String(it.name || TEMPLATES[it.t].name).slice(0, 60), at: num(it.at, Date.now()), lock: it.lock === true }));
+  const ids = new Set(s.inv.map((it) => it.id)); const eq = new Set();
+  s.equip = (Array.isArray(d.equip) ? d.equip : []).slice(0, 8).map((id) => (typeof id === 'string' && ids.has(id) && !eq.has(id) && eq.add(id) ? id : null));
+  if (!s.inv.length || !s.equip.some(Boolean)) { if (!s.inv.length) starterKit(s); else s.equip = [s.inv[0].id]; }
+  s.parts = int(d.parts, 0, 0, 1e9); s.respecs = int(d.respecs, 0, 0, 1e6);
+  s.skills = {}; for (const k in (d.skills || {})) { const sk = SKILL_BY_ID[k]; if (sk) { const r = int(d.skills[k], 0, 0, sk.max); if (r) s.skills[k] = r; } }
+  const g = d.galaxy || {}; const fg = freshGalaxy(); const pick = (o, ok, val) => { const out = {}; if (o && typeof o === 'object') for (const k in o) if (ok(k)) out[k] = val(o[k]); return out; };
+  const isSec = (k) => !!SECTOR_BY_ID[k]; const isSub = (k) => typeof k === 'string' && k.length < 16 && !!SECTOR_BY_ID[k.split('-')[0]];
+  s.galaxy = { explored: { ...fg.explored, ...pick(g.explored, isSec, () => 1) }, liberated: pick(g.liberated, isSec, () => 1), kills: pick(g.kills, isSec, (v) => int(v, 0, 0, 1e6)), inst: pick(g.inst, isSub, () => 1), caches: pick(g.caches, isSub, () => 1),
+    wp: g.wp && typeof g.wp === 'object' && isFinite(g.wp.x) && isFinite(g.wp.z) ? { x: num(g.wp.x, 0, -5000, 5000), z: num(g.wp.z, 0, -5000, 5000), label: String(g.wp.label || 'Waypoint').slice(0, 40) } : null };
+  if (typeof d.migratedFrom === 'number') s.migratedFrom = d.migratedFrom;
   s.story = int(d.story, 0, 0, 100); s.storyProg = num(d.storyProg, 0, 0, 1e12); s.maxSector = int(d.maxSector, 1, 1, 4);
   s.contracts = Array.isArray(d.contracts) ? d.contracts.filter((c) => c && typeof c === 'object' && typeof c.kind === 'string' && num(c.need, 0) > 0 && c.reward && typeof c.title === 'string' && typeof c.desc === 'string')
     .slice(0, 3).map((c) => ({ id: String(c.id || Math.random()), title: c.title.slice(0, 60), desc: c.desc.slice(0, 120), kind: c.kind.slice(0, 30), need: num(c.need, 1, 1, 1e9), prog: num(c.prog, 0, 0, 1e12), reward: { credits: num(c.reward.credits, 0, 0, 1e12), xp: num(c.reward.xp, 0, 0, 1e12) } })) : [];
   for (const k in f.stats) s.stats[k] = num(d.stats && d.stats[k], 0, 0, 1e15);
   const st = d.settings || {}; s.settings = { music: st.music !== false, sfx: st.sfx !== false, shake: st.shake !== false, quality: ['auto', 'low', 'medium', 'high'].includes(st.quality) ? st.quality : 'auto', fps: st.fps === true,
     // v3 audio mixer (older saves: the on/off toggles map onto the new sliders)
-    masterVol: num(st.masterVol, 0.8, 0, 1), musicVol: num(st.musicVol, st.music === false ? 0 : 0.6, 0, 1), sfxVol: num(st.sfxVol, st.sfx === false ? 0 : 0.85, 0, 1), mute: st.mute === true };
+    masterVol: num(st.masterVol, 0.8, 0, 1), musicVol: num(st.musicVol, st.music === false ? 0 : 0.6, 0, 1), sfxVol: num(st.sfxVol, st.sfx === false ? 0 : 0.85, 0, 1), mute: st.mute === true,
+    musicMode: st.musicMode === 'generated' ? 'generated' : 'soundtrack', trackIdx: int(st.trackIdx, 0, 0, 99), trackPos: num(st.trackPos, 0, 0, 36000) };
   s.settings.music = s.settings.musicVol > 0; s.settings.sfx = s.settings.sfxVol > 0;
   s.pos = { x: num(d.pos && d.pos.x, 0, -1e5, 1e5), z: num(d.pos && d.pos.z, 34, -1e5, 1e5) };
   s.hp = d.hp == null ? null : num(d.hp, null, 0, 1e9);
@@ -68,7 +104,7 @@ export function writeKey(key, s) {
 export function deleteKey(key) { try { localStorage.removeItem(key); } catch (e) { /* ignore */ } }
 export function meta(s) {
   if (!s) return null;
-  return { tier: s.tier, tierName: TIERS[s.tier - 1].name, level: s.level, credits: s.credits, station: s.stationLvl, sector: s.maxSector, playTime: s.stats.playTime, savedAt: s.savedAt };
+  return { tier: s.tier, tierName: TIERS[s.tier - 1].name, level: s.level, credits: s.credits, station: s.stationLvl, sector: s.maxSector, playTime: s.stats.playTime, savedAt: s.savedAt, liberated: Object.keys(s.galaxy.liberated).length, items: s.inv.length };
 }
 
 // ---- export / import codes ----

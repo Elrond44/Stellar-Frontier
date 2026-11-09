@@ -1,7 +1,7 @@
 // Procedural models v2: detailed ships, turrets, pirates, station, asteroid geometry + materials.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
-import { mulberry, fbm3 } from './util.js?v=3';
+import { mulberry, fbm3 } from './util.js?v=4';
 
 // ================= Procedural textures =================
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -160,6 +160,7 @@ export class Kit {
     for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(k)) geo.deleteAttribute(k);
     if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
     if (!geo.attributes.normal) geo.computeVertexNormals();
+    if (typeof mat !== 'string') { (this.mo ||= {})[mat.uuid] = mat; mat = mat.uuid; }
     (this.parts[mat] ||= []).push(geo); return this;
   }
   box(mat, w, h, d, x, y, z, rx, ry, rz) { return this.add(mat, boxGeo(w, h, d), x, y, z, rx, ry, rz); }
@@ -228,7 +229,7 @@ export class Kit {
   }
   build() {
     const M = materials(); const g = new THREE.Group();
-    for (const [mat, geos] of Object.entries(this.parts)) { const merged = mergeGeometries(geos, false); g.add(new THREE.Mesh(merged, M[mat] || mat)); }
+    for (const [mat, geos] of Object.entries(this.parts)) { const merged = mergeGeometries(geos, false); g.add(new THREE.Mesh(merged, M[mat] || (this.mo && this.mo[mat]))); }
     for (const e of this.extras) g.add(e);
     if (this.lights.length) {
       const lg = new THREE.Group(); lg.name = 'navLights'; const T = textures();
@@ -774,4 +775,88 @@ export function animateStation(root, t, dt) {
     d.obj.rotation.y = d.a + (d.speed > 0 ? Math.PI / 2 : -Math.PI / 2);
     animateNavLights(d.obj, t);
   }
+}
+
+// ================= v4: factions, installations, loot =================
+const FMATS = {};
+// faction-tinted copies of the pirate materials
+export function factionMats(fid, rgb, hullHex) {
+  if (FMATS[fid]) return FMATS[fid];
+  const M = materials(); const c = new THREE.Color(rgb[0], rgb[1], rgb[2]); const base = c.clone().multiplyScalar(1 / Math.max(rgb[0], rgb[1], rgb[2]));
+  const accent = M.pirateAccent.clone(); accent.color = base.clone().multiplyScalar(0.85); accent.emissive = base.clone().multiplyScalar(0.25);
+  const hull = M.pirate.clone(); hull.color = new THREE.Color(hullHex); hull.emissive = base.clone();
+  const red = M.red.clone(); red.color = c.clone();
+  const redSoft = M.redSoft.clone(); redSoft.color = c.clone().multiplyScalar(0.4);
+  FMATS[fid] = { [M.pirateAccent.uuid]: accent, [M.pirate.uuid]: hull, [M.red.uuid]: red, [M.redSoft.uuid]: redSoft, accent, hull, red, redSoft };
+  return FMATS[fid];
+}
+// recolour a built pirate (in place) and bolt on a small faction-specific variant part
+export function tintPirate(group, fid, rgb, hullHex, radius) {
+  const F = factionMats(fid, rgb, hullHex);
+  group.traverse((o) => { if (o.isMesh && F[o.material.uuid]) o.material = F[o.material.uuid]; });
+  const k = new Kit(); const r = radius;
+  if (fid === 'crimson') { for (const sx of [-1, 1]) k.add(F.hull, new THREE.ConeGeometry(0.12 * r, 0.9 * r, 4), sx * 0.45 * r, 0.25 * r, 0.2 * r, -0.5, 0, sx * 0.4); }
+  else if (fid === 'void') { k.slab(F.accent, [[0, 0.5 * r], [0.12 * r, -0.6 * r], [-0.12 * r, -0.6 * r]], 0.06 * r, 0.35 * r); k.box(F.red, 0.05 * r, 0.5 * r, 0.6 * r, 0, 0.45 * r, -0.2 * r); }
+  else if (fid === 'iron') { for (const sx of [-1, 1]) k.plate(F.hull, 0.25 * r, 0.35 * r, 0.9 * r, sx * 0.7 * r, 0.05 * r, 0); k.box(F.accent, 0.5 * r, 0.12 * r, 0.3 * r, 0, 0.32 * r, -0.3 * r); }
+  else if (fid === 'eclipse') { const t = new THREE.TorusGeometry(0.75 * r, 0.035 * r, 4, 28); k.add(F.red, t, 0, 0.35 * r, 0, Math.PI / 2); }
+  else if (fid === 'ashen') { for (const sx of [-1, 1]) { k.zcyl(F.accent, 0.1 * r, 0.14 * r, 0.6 * r, 8, sx * 0.55 * r, 0, -0.45 * r); k.zcyl(F.red, 0.08 * r, 0.08 * r, 0.04 * r, 8, sx * 0.55 * r, 0, -0.77 * r); } }
+  const extra = k.build(); extra.name = 'variant'; group.add(extra);
+}
+// Pirate outpost parts. kind: core | gen | turret
+export function buildInstallation(kind) {
+  const k = new Kit(); const rng = mulberry(kind.length * 53 + 11); let radius = 2;
+  if (kind === 'core') {
+    const oct = []; for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 + Math.PI / 8; oct.push([Math.cos(a) * 6.2, Math.sin(a) * 6.2]); }
+    k.slab('pirateDark', oct, 0.9, -0.2);
+    const oct2 = oct.map(([x, z]) => [x * 0.7, z * 0.7]); k.slab('pirate', oct2, 0.6, 0.45);
+    k.cyl('pirateDark', 1.8, 2.4, 2.6, 10, 0, 1.9, 0); k.cyl('pirate', 1.2, 1.6, 1.6, 10, 0, 3.8, 0);
+    k.sphere('red', 1.0, 0, 4.9, 0, 1, 0.8, 1, 14, 8);
+    k.add('redSoft', new THREE.TorusGeometry(1.7, 0.12, 6, 28), 0, 3.4, 0, Math.PI / 2);
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; k.box('pirateAccent', 0.7, 0.5, 3.2, Math.sin(a) * 3.6, 0.55, Math.cos(a) * 3.6, 0, a, 0); k.add('pirateBone', new THREE.ConeGeometry(0.25, 1.6, 4), Math.sin(a + 0.78) * 5.2, 0.9, Math.cos(a + 0.78) * 5.2); }
+    k.dress(rng, -3.5, 3.5, -3.5, 3.5, 0.75, 26, 0.5); k.antenna(1.2, 4.4, 0.8, 2.6); k.antenna(-1.4, 4.0, -0.6, 2.0); k.dish(-3.6, 0.7, 2.6, 1.0, 0.7, 1.2);
+    k.lights.push({ x: 0, y: 6.2, z: 0, color: 0xff2020, mode: 'strobe', size: 2.6 }); radius = 5.6;
+  } else if (kind === 'gen') {
+    k.cyl('pirateDark', 1.3, 1.6, 0.6, 8, 0, 0, 0); k.cyl('pirate', 0.45, 0.7, 2.6, 8, 0, 1.5, 0);
+    for (let i = 0; i < 3; i++) { const a = i * Math.PI * 2 / 3; k.box('pirateBone', 0.2, 2.2, 0.4, Math.sin(a) * 0.9, 1.3, Math.cos(a) * 0.9, 0.2 * Math.cos(a), a, -0.2 * Math.sin(a)); }
+    k.sphere('glow', 0.75, 0, 3.3, 0); k.add('glowSoft', new THREE.TorusGeometry(1.1, 0.06, 6, 24), 0, 3.3, 0, Math.PI / 2);
+    radius = 2.2;
+  } else {
+    k.cyl('pirateDark', 1.2, 1.5, 0.9, 8, 0, 0.1, 0); k.hazard(2.2, 0.06, 0.4, 0, 0.58, 0.9); k.box('pirateAccent', 1.6, 0.25, 1.6, 0, 0.62, 0);
+    radius = 1.9;
+  }
+  const g = k.build();
+  if (kind === 'turret') { const tu = makeTurret('cannon', 1.7, 'pirate'); tu.position.y = 0.7; tu.name = 'eturret'; g.add(tu); }
+  return { group: g, hardpoints: [{ x: 0, y: 1, z: 0 }], engines: [], radius };
+}
+// energy dome shown over an outpost core while its generators live
+let DOME_GEO = null;
+export function makeDome(rgb) {
+  DOME_GEO ||= new THREE.SphereGeometry(1, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2); DOME_GEO.userData.shared = true;
+  const m = new THREE.ShaderMaterial({ uniforms: { uC: { value: new THREE.Color(rgb[0], rgb[1], rgb[2]).multiplyScalar(0.35) }, uT: { value: 0 }, uHit: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    vertexShader: 'varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ vP=position; vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.0); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }',
+    fragmentShader: 'uniform vec3 uC; uniform float uT; uniform float uHit; varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ float f=pow(1.0-abs(dot(vN,vV)),2.2); float hex=0.6+0.4*sin(vP.x*18.0+uT*2.0)*sin(vP.z*18.0)*sin(vP.y*18.0-uT); float band=0.5+0.5*sin(vP.y*30.0-uT*4.0); float a=(f*0.9+0.08*band)*hex*(1.0+uHit*2.0); gl_FragColor=vec4(uC*a,a); }' });
+  const mesh = new THREE.Mesh(DOME_GEO, m); mesh.renderOrder = 7; mesh.name = 'dome'; return mesh;
+}
+// rarity glow ring for a turret
+const RING_MATS = {};
+export function rarityRing(turret, rar, rgb) {
+  if (rar <= 0) return;
+  const s = turret.userData.size || 1; const m = RING_MATS[rar] ||= new THREE.MeshBasicMaterial({ color: new THREE.Color(rgb[0], rgb[1], rgb[2]), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  const r = new THREE.Mesh(new THREE.TorusGeometry(0.56 * s, 0.035 * s * (1 + rar * 0.2), 4, 24), m); r.rotation.x = Math.PI / 2; r.position.y = 0.05 * s; r.name = 'rarityRing'; turret.add(r);
+}
+// loot pod: small capsule + rarity light beam (pooled by the game)
+let POD_GEO = null, BEAM_GEO = null;
+export function buildLootPod() {
+  POD_GEO ||= (() => { const g = new THREE.OctahedronGeometry(0.55, 0); g.scale(1, 1.4, 1); g.userData.shared = true; return g; })();
+  BEAM_GEO ||= (() => { const g = new THREE.CylinderGeometry(0.22, 0.5, 9, 10, 1, true); g.translate(0, 4.5, 0); g.userData.shared = true; return g; })();
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(POD_GEO, new THREE.MeshBasicMaterial({ color: 0xffffff })); core.position.y = 0.8; g.add(core);
+  const shell = new THREE.Mesh(POD_GEO, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending })); shell.scale.setScalar(1.45); shell.position.y = 0.8; g.add(shell);
+  const beam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })); g.add(beam);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); sp.material.userData.own = true; sp.scale.setScalar(4); sp.position.y = 0.8; g.add(sp);
+  g.userData = { core, shell, beam, sp }; return g;
+}
+export function buildCacheCrate() {
+  const k = new Kit(); k.box('dark', 1.6, 1.0, 1.1, 0, 0.5, 0); k.box('orange', 1.7, 0.18, 1.2, 0, 0.2, 0); k.box('orange', 1.7, 0.18, 1.2, 0, 0.85, 0); k.hazard(1.0, 0.04, 0.3, 0, 1.03, 0); k.box('green', 0.3, 0.06, 0.06, 0.55, 1.03, 0.4);
+  const g = k.build(); const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0x5dff98, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); sp.material.userData.own = true; sp.scale.setScalar(5); sp.position.y = 0.8; g.add(sp); g.userData.sp = sp; return g;
 }

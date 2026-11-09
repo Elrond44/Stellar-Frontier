@@ -8,9 +8,20 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 - Mine glowing asteroids, haul ore back to your station, and sell it.
 - Upgrade your ship, run the station factory (Income / Capacity / CLAIM), and expand the station from a lone refinery to an industrial hub.
 - Evolve your ship through 5 tiers, from a tiny mining scout to a capital dreadnought.
-- Push into pirate sectors for rare ores, and take on the Warlord Dreadnought.
+- Push into pirate sectors for rare ores and loot, liberate them from five pirate factions, and take on the Warlord Dreadnought.
 
 Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). All models, effects, music and sound are generated procedurally in code. Progress autosaves to your browser's local storage.
+
+## v4: RPG expansion (Release A)
+- **Levels and skill points:** XP from mining, kills, outposts, discoveries and liberations. You get 1 SP per level plus a bonus SP every 5th level. Older saves are granted the SP for their current level.
+- **Skill tree** (Upgrades → Skills, or tap the SP chip / press K): 5 branches (Weapons, Defense, Engines, Tech, Tactical) with 42 nodes in 4 tiers. Nodes have prerequisites and level gates. Tap a node to inspect it, then tap again to confirm the purchase. A paid respec is available while docked. Passives change the real ship stats.
+- **Active abilities** (HUD buttons on the right, keys 1–6, Space = Dash): Quantum Dash, EMP Pulse, Shield Overload, Missile Barrage, Energy Surge and Drone Deployment. They use energy, have cooldown rings, and come with their own effects and sounds. The ship now has a shield layer and an energy bar.
+- **Weapons as loot:** 9 weapon models across 7 categories (laser, plasma, railgun, missile, ion, particle, experimental) and 6 colour-coded rarities (Common → Exotic). Rarity scales stats, beam and bolt colours, and the hardpoint ring. Each weapon has a full stat block (DPS, damage, fire rate, range, energy, heat, projectile speed, vs shields, armour penetration, crit) and special traits (burn, chain, stun, pierce, splash, leech, overclock, shred). Drops come from pirates, elites, outposts, hidden caches and bosses, and the best rarity you can get depends on sector threat.
+- **Armory** (Upgrades → Gear, press I): compare, equip, unequip, upgrade with components, and salvage. Your ship tier sets the hardpoint count. The station Armory sells basic weapons. v3 weapons are converted into items automatically.
+- **Galaxy:** 25 named sectors in 4 rings, held by 5 pirate factions: Crimson Marauders, Void Reavers, Iron Dominion, Eclipse Syndicate and Ashen Corsairs. Each faction has its own colours, insignia, ship tints and tactics (cloaks, energy drain, armour, shield-breakers, flanking swarms). A banner shows the sector, faction and threat when you enter.
+- **Galaxy map** (MAP button, radar tap, sector name, or G): a holographic map with ownership colours, threat pips, fog of war, outposts, found caches, your ship, pan and pinch zoom, and sector inspection. You can set a waypoint, which adds a HUD arrow and a radar marker.
+- **Liberation:** pirate sectors contain outposts with a core, shield generators and turrets. While the generators are up, the core takes only 10% damage. Destroying outposts and killing faction ships raises liberation progress. At 100% the sector is liberated: the map turns cyan, a sting plays, you get rewards (credits, XP, components and a guaranteed Rare+ weapon), and raids stop there.
+- **Music moods:** peaceful (home and liberated space), mysterious (newly charted or unclaimed space), tense (pirate territory), intense (outposts, bosses, big fights), and a liberation sting.
 
 ## v3: sound and music
 Everything you hear is synthesised in the browser with the Web Audio API. There are **no sample files**, so there is nothing to license (see `CREDITS.md`).

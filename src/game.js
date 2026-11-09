@@ -1,14 +1,20 @@
 // Core game: state, player ship, weapons, enemies, economy, quests, saving
 import * as THREE from 'three';
-import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=3';
-import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, WEAPONS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=3';
-import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture } from './models.js?v=3';
-import { freshState, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT } from './save.js?v=3';
-import { AsteroidField, Minerals } from './world.js?v=3';
-import { Particles, Debris, Rings, Bolts, Flashes } from './fx.js?v=3';
-import { STORY, makeContract } from './quests.js?v=3';
+import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=4';
+import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=4';
+import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate } from './models.js?v=4';
+import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=4';
+import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=4';
+import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=4';
+import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, outposts, caches, liberation, owner, dangerOf, isPirate, neighbours, killsNeeded } from './galaxy.js?v=4';
+import { AsteroidField, Minerals } from './world.js?v=4';
+import { Particles, Debris, Rings, Bolts, Flashes } from './fx.js?v=4';
+import { STORY, makeContract } from './quests.js?v=4';
 
 const DOCK_R = 28;
+const BEH_TURRET = { beam: 'laser', bolt: 'cannon', missile: 'missile', pulse: 'pulse' };
+const INST_XP = { inst_turret: 15, inst_gen: 40, inst_core: 120 };
+const ENERGY_DMG = { drone: 1, interceptor: 1, sentinel: 1, inst_turret: 0, gunship: 0, boss: 1 }; // 1 = energy (laser) shots, 0 = kinetic
 const DRONES = [0, 2, 3, 4, 6, 10];
 
 export class Game {
@@ -31,6 +37,10 @@ export class Game {
     this.autopilot = false; this.docked = false; this.dead = false;
     this.pickupCombo = 0; this.pickupT = 0; this.pickupAgg = {};
     this.boss = null; this.lastHurt = -10; this.sectorId = 1;
+    // v4 systems
+    this.abil = { cd: {}, last: {} }; this.overT = 0; this.surgeT = 0; this.dashT = 0; this.emergT = -99; this.emergThrustT = -99; this.lastShieldHit = -10;
+    this.loot = []; this.lootPool = []; this.liveOutposts = new Map(); this.instHp = new Map(); this.liveCaches = new Map(); this.cachePool = [];
+    this.allies = []; this.outpostScan = 0; this.gsec = GSECTORS[0]; this.secEnterT = -99; this.taken = new Set(); this.fxCache = null;
     this.tmpV = new THREE.Vector3(); this.tmpV2 = new THREE.Vector3(); this.droneOre = 0; this.dockT = 0;
     this.shieldMat = this.makeShieldMat(); this.tractor = this.makeBeam(new THREE.Color(0.3, 1.4, 2.2), new THREE.Color(0.05, 0.25, 0.5)); scene.add(this.tractor);
     // station
@@ -54,7 +64,7 @@ export class Game {
   toast(msg, kind) { this.ui && this.ui.toast(msg, kind); }
 
   // ---------- save/load ----------
-  load() { return readKey(AUTO_KEY) || freshState(); }
+  load() { return readKey(AUTO_KEY) || newGame(); }
   syncState() { this.s.pos = { x: this.player.x, z: this.player.z }; this.s.hp = this.player.hp; }
   save() {
     if (this.resetting) return false;
@@ -74,7 +84,9 @@ export class Game {
   applyState(st) {
     st.settings = { ...st.settings, ...this.s.settings }; // keep this device's audio/graphics settings
     st.factory.last = Date.now();
-    for (const e of this.enemies) this.removeEnemy(e); this.enemies.length = 0; this.boss = null;
+    for (const e of this.enemies) this.removeEnemy(e); this.enemies.length = 0; this.boss = null; this.liveOutposts.clear(); this.instHp.clear();
+    for (const l of this.loot) this.freeLoot(l); this.loot.length = 0; for (const [, c] of this.liveCaches) this.freeCache(c); this.liveCaches.clear(); this.clearAllies();
+    this.abil = { cd: {}, last: {} }; this.overT = this.surgeT = this.dashT = 0; this.fxCache = null;
     this.guards.clear(); if (this.pendingGuards) this.pendingGuards.clear();
     for (const b of this.bolts.list) b.dead = true; this.bolts.sync();
     for (const o of this.minerals.list) { this.minerals.setHidden(o.idx); this.minerals.free.push(o.idx); } this.minerals.list.length = 0; this.minerals.mesh.instanceMatrix.needsUpdate = true;
@@ -84,27 +96,35 @@ export class Game {
     this.buildStationModel(); this.buildPlayerShip(); p.group.visible = true;
     p.hp = st.hp != null ? Math.min(st.hp, p.maxHp) : p.maxHp;
     if (!this.s.contracts.length) for (let i = 0; i < 3; i++) this.s.contracts.push(this.newContract());
-    this.sectorId = sectorAt(Math.hypot(p.x, p.z)).id;
+    this.sectorId = sectorAt(Math.hypot(p.x, p.z)).id; this.gsec = gsectorAt(p.x, p.z); p.energy = this.stats().energyMax; p.sh = this.stats().shield;
     this.camPos.set(p.x, 40, p.z + 25); this.camLook.set(p.x, 0, p.z);
     this.save(); this.emit('loaded', {});
   }
 
   // ---------- derived stats ----------
+  skillFx() { return this.fxCache || (this.fxCache = skillFx(this.s.skills)); }
   stats() {
-    const u = this.s.upgrades, T = TIERS[this.s.tier - 1];
+    const u = this.s.upgrades, T = TIERS[this.s.tier - 1]; const fx = this.skillFx(); const surge = this.surgeT > 0;
+    const hp = Math.round(T.hp * (1 + 0.12 * u.hull));
     return {
-      dmg: T.dmg * (1 + 0.12 * u.damage) * (1 + 0.02 * (this.s.level - 1)),
-      rate: 1 + 0.06 * u.firerate,
-      proj: 1 + 0.08 * u.projspeed,
-      range: (1 + 0.04 * u.range) * (1 + 0.1 * (this.s.tier - 1)),
-      crit: Math.min(0.6, 0.05 + 0.015 * u.crit),
-      mining: 1 + 0.1 * u.mining,
-      speed: 15 * T.speed * (1 + 0.05 * u.engine),
-      accel: 38 * T.accel,
+      dmg: T.dmg * (1 + 0.12 * u.damage) * (1 + 0.02 * (this.s.level - 1)) * (surge ? 1.5 : 1),
+      rate: (1 + 0.06 * u.firerate) * (1 + (fx.fireRate || 0)) * (surge ? 1.3 : 1),
+      proj: (1 + 0.08 * u.projspeed) * (1 + (fx.projSpeed || 0)),
+      range: (1 + 0.04 * u.range) * (1 + 0.1 * (this.s.tier - 1)) * (1 + (fx.range || 0)),
+      crit: Math.min(0.75, 0.05 + 0.015 * u.crit + (fx.crit || 0)),
+      mining: (1 + 0.1 * u.mining) * (1 + (fx.ore || 0)),
+      speed: 15 * T.speed * (1 + 0.05 * u.engine) * (1 + (fx.speed || 0)),
+      accel: 38 * T.accel * (1 + (fx.accel || 0)),
+      turn: 4.2 * T.accel * (1 + (fx.turn || 0)),
       magnet: (10 + this.s.tier * 2) * (1 + 0.1 * u.magnet),
       cargo: Math.round(T.cargo * (1 + 0.15 * u.cargo)),
-      hp: Math.round(T.hp * (1 + 0.12 * u.hull)),
-      slots: T.slots,
+      hp,
+      shield: Math.round(hp * 0.35 * (1 + (fx.shieldCap || 0))),
+      shieldRegen: 0.12 * (1 + (fx.shieldRegen || 0)), shieldDelay: Math.max(0.8, 3 + (fx.shieldDelay || 0)),
+      energyMax: Math.round(100 * (1 + (fx.energyMax || 0))), energyRegen: 14 * (1 + (fx.energyRegen || 0)),
+      radar: 1 + (fx.radar || 0), luck: fx.luck || 0, pen: fx.pen || 0,
+      slots: Math.min(8, T.slots + (fx.slots || 0)),
+      fx,
     };
   }
   cargoTotal() { let n = 0; for (const k in this.s.cargo) n += this.s.cargo[k]; return n; }
@@ -179,10 +199,74 @@ export class Game {
   addCredits(n) { this.s.credits += n; }
   addXP(n) {
     this.s.xp += n; let leveled = false;
+    const sp0 = this.spAvail();
     while (this.s.xp >= xpForLevel(this.s.level)) { this.s.xp -= xpForLevel(this.s.level); this.s.level++; leveled = true;
-      for (const k in WEAPONS) if (WEAPONS[k].unlock === this.s.level) this.toast(`${WEAPONS[k].name} unlocked in Loadout!`, 'good');
+      for (const k in TEMPLATES) if (TEMPLATES[k].lvl === this.s.level && TEMPLATES[k].price) this.toast(`${TEMPLATES[k].name} now sold at the station Armory`, 'good');
+      for (const sk of SKILLS) if (sk.ability && sk.lvl === this.s.level) this.toast(`New ability available: ${sk.name} (Skill tree)`, 'good');
     }
-    if (leveled) { this.audio.levelUp(); this.toast(`LEVEL UP! Level ${this.s.level}`, 'level'); this.fx.burst(this.player.x, 1, this.player.z, 50, 18, 0.9, 1.2, 0.1, [2.5, 2.0, 0.6], 2); this.emit('level', {}); }
+    if (leveled) { const gained = this.spAvail() - sp0; this.audio.levelUp(); this.toast(`LEVEL UP! Level ${this.s.level} · +${gained} skill point${gained === 1 ? '' : 's'}`, 'level'); this.fx.burst(this.player.x, 1, this.player.z, 50, 18, 0.9, 1.2, 0.1, [2.5, 2.0, 0.6], 2); this.emit('level', {}); }
+  }
+  // ---------- skills (one level system: ship level -> skill points) ----------
+  spAvail() { return spEarned(this.s.level) - spSpent(this.s.skills); }
+  skillInfo(id) { return skillState(this.s.skills, id, this.s.level, this.spAvail()); }
+  buySkill(id) {
+    const sk = SKILL_BY_ID[id]; if (!sk) return false; const inf = this.skillInfo(id); if (!inf.canBuy) { this.audio.denied(); return false; }
+    this.s.skills[id] = (this.s.skills[id] || 0) + 1; this.fxCache = null;
+    const prevSlots = this.player.weapons.length; const st = this.stats();
+    if (st.slots !== prevSlots || sk.fx?.slots) { this.ensureEquipSlots(); this.buildPlayerShip(); }
+    this.player.maxHp = st.hp; this.audio.skill(); this.fx.burst(this.player.x, 1.2, this.player.z, 40, 14, 0.8, 1.0, 0.1, [2.6, 2.0, 0.6], 2);
+    this.toast(sk.ability ? `Ability unlocked: ${sk.name}!` : `${sk.name} → rank ${this.s.skills[id]}`, 'good'); this.emit('skill', { id }); this.save(); return true;
+  }
+  respecInfo() { return { cost: respecCost(this.s.level), spent: spSpent(this.s.skills), docked: this.docked }; }
+  respec() {
+    const inf = this.respecInfo(); if (!inf.spent || this.s.credits < inf.cost || !this.docked) { this.audio.denied(); return false; }
+    this.s.credits -= inf.cost; this.s.skills = {}; this.s.respecs++; this.fxCache = null; this.abil.cd = {};
+    this.ensureEquipSlots(); this.buildPlayerShip(); this.audio.upgrade(); this.toast(`Skills reset: ${inf.spent} SP refunded`, 'good'); this.save(); return true;
+  }
+  abilityUnlocked(id) { const sk = SKILLS.find((x) => x.ability === id); return !!(sk && this.s.skills[sk.id]); }
+  abilities() { return ABILITY_ORDER.filter((id) => this.abilityUnlocked(id)); }
+  abilityCd(id) { const fx = this.skillFx(); return ABILITIES[id].cd * (1 - (fx.cdr || 0)) * (id === 'dash' ? 1 + (fx.dashCd || 0) : 1); }
+  abilityCost(id) { const fx = this.skillFx(); return ABILITIES[id].energy * (id === 'dash' ? 1 + (fx.dashCost || 0) : 1); }
+  abilityState(id) { const rem = Math.max(0, (this.abil.cd[id] || 0) - this.time); const cd = this.abilityCd(id); return { rem, frac: cd ? rem / cd : 0, ready: rem <= 0 && this.player.energy >= this.abilityCost(id), cost: this.abilityCost(id), energyOk: this.player.energy >= this.abilityCost(id) }; }
+  // ---------- items / inventory ----------
+  item(id) { return id ? this.s.inv.find((it) => it.id === id) || null : null; }
+  equippedIds() { return new Set(this.s.equip.filter(Boolean)); }
+  ensureEquipSlots() { const n = this.stats().slots; while (this.s.equip.length < n) this.s.equip.push(null); if (this.s.equip.length > n) { this.s.equip.length = n; } if (!this.s.equip.some(Boolean) && this.s.inv.length) this.s.equip[0] = this.s.inv[0].id; }
+  equip(itemId, slot) {
+    const it = this.item(itemId); this.ensureEquipSlots(); if (!it || slot < 0 || slot >= this.s.equip.length) return false;
+    if (it.il > this.s.level) { this.toast(`Requires ship level ${it.il}`, 'warn'); this.audio.denied(); return false; }
+    const prev = this.s.equip.indexOf(itemId); if (prev >= 0) this.s.equip[prev] = this.s.equip[slot];
+    this.s.equip[slot] = itemId; this.buildPlayerShip(); this.audio.upgrade(); this.emit('equip', {}); this.save(); return true;
+  }
+  unequip(slot) {
+    if (this.s.equip.filter(Boolean).length <= 1 && this.s.equip[slot]) { this.toast('You need at least one weapon equipped', 'warn'); this.audio.denied(); return false; }
+    this.s.equip[slot] = null; this.buildPlayerShip(); this.audio.click(); this.save(); return true;
+  }
+  firstFreeSlot() { this.ensureEquipSlots(); return this.s.equip.findIndex((x) => !x); }
+  upgradeItem(id) {
+    const it = this.item(id); if (!it) return false; const R = RARITIES[it.r]; if (it.up >= R.maxUp) return false;
+    const c = itemUpCost(it); if (this.s.credits < c.credits || this.s.parts < c.parts) { this.audio.denied(); return false; }
+    this.s.credits -= c.credits; this.s.parts -= c.parts; it.up++;
+    if (this.equippedIds().has(id)) this.buildPlayerShip(); this.audio.upgrade(); this.toast(`${it.name} upgraded to +${it.up}`, 'good'); this.emit('upgrade', { key: 'item' }); this.save(); return true;
+  }
+  salvageItem(id) {
+    const it = this.item(id); if (!it) return false; if (this.equippedIds().has(id)) { this.toast('Unequip it before salvaging', 'warn'); return false; }
+    if (it.lock) { this.toast('Item is locked', 'warn'); return false; }
+    const v = salvageValue(it); this.s.inv = this.s.inv.filter((x) => x !== it); this.s.parts += v.parts; this.addCredits(v.credits);
+    this.audio.coins(); this.toast(`Salvaged ${it.name}: +${v.parts} components, +${v.credits} cr`, 'good'); this.save(); return v;
+  }
+  addItem(it, announce = true) {
+    if (this.s.inv.length >= INV_CAP) { const v = salvageValue(it); this.s.parts += v.parts; this.addCredits(v.credits); this.toast(`Inventory full: auto-salvaged ${it.name} (+${v.parts} components)`, 'warn'); return false; }
+    this.s.inv.push(it); this.s.stats.items++;
+    // auto-equip into an empty hardpoint
+    const free = this.firstFreeSlot(); if (free >= 0 && it.il <= this.s.level) { this.s.equip[free] = it.id; this.buildPlayerShip(); }
+    if (announce) { const R = RARITIES[it.r]; this.toast(`◆ ${R.name.toUpperCase()} · ${it.name}`, 'rar r' + it.r); }
+    this.emit('item', { r: it.r }); return true;
+  }
+  buyItem(t) {
+    const offer = merchantStock(this.s.level).find((o) => o.t === t); if (!offer || offer.locked || this.s.credits < offer.price) { this.audio.denied(); return false; }
+    if (this.s.inv.length >= INV_CAP) { this.toast('Inventory full: salvage something first', 'warn'); return false; }
+    this.s.credits -= offer.price; const it = makeItem(t, offer.r, offer.il, 'Station Armory'); this.addItem(it); this.audio.upgrade(); this.save(); return it;
   }
   buyUpgrade(key) {
     const u = UPGRADES.find((x) => x.key === key); const lvl = this.s.upgrades[key];
@@ -203,22 +287,18 @@ export class Game {
   buyTier(t) {
     const inf = this.tierInfo(t); if (!inf || !inf.ok || t !== this.s.tier + 1 || !this.docked) return false;
     this.s.credits -= inf.T.cost; for (const k in (inf.T.mats || {})) this.s.vault[k] -= inf.T.mats[k];
-    this.s.tier = t; this.buildPlayerShip(); this.player.hp = this.player.maxHp;
+    this.s.tier = t; this.ensureEquipSlots();
+    // new hulls ship with stock armament: fill empty hardpoints with spare inventory first, else a common stock weapon
+    const used = this.equippedIds(); const spare = this.s.inv.filter((it) => !used.has(it.id) && it.il <= this.s.level).sort((a, b) => itemPower(b) - itemPower(a));
+    for (let i = 0; i < this.s.equip.length; i++) if (!this.s.equip[i]) {
+      let it = spare.shift(); if (!it && this.s.inv.length < INV_CAP) { it = makeItem(i % 2 ? 'autocannon' : 'mining_laser', 0, Math.max(1, Math.min(this.s.level, 5)), 'Shipyard stock'); this.s.inv.push(it); }
+      if (it) this.s.equip[i] = it.id;
+    }
+    this.buildPlayerShip(); this.player.hp = this.player.maxHp;
     this.audio.tierUp(); this.rings.spawn(this.player.x, 0, this.player.z, 18 * inf.T.cam, [0.6, 2, 3], 1);
     this.fx.burst(this.player.x, 1, this.player.z, 90, 20, 1.2, 1.5, 0.1, [0.5, 2.2, 3.2], 1.5);
     this.toast(`New ship: ${inf.T.name} (${inf.T.cls})!`, 'level'); this.emit('tier', {}); this.save(); return true;
   }
-  buyWeapon(k) {
-    const W = WEAPONS[k]; if (this.s.weapons[k] || this.s.level < W.unlock || this.s.credits < W.price) return false;
-    this.s.credits -= W.price; this.s.weapons[k] = true;
-    // auto-equip to first slot still using a default/locked weapon
-    const slots = this.stats().slots;
-    for (let i = 0; i < slots; i++) if (!this.s.weapons[this.s.loadout[i]] || (i > 0 && this.s.loadout[i] === 'laser' && k !== 'laser')) { this.s.loadout[i] = k; break; }
-    this.buildPlayerShip(); this.audio.upgrade(); this.save(); return true;
-  }
-  setSlot(i, k) { if (!this.s.weapons[k]) return; this.s.loadout[i] = k; this.buildPlayerShip(); this.audio.click(); this.save(); }
-  slotWeapon(i) { const k = this.s.loadout[i]; return this.s.weapons[k] ? k : (i === 0 ? 'laser' : (this.s.weapons.cannon ? 'cannon' : 'laser')); }
-
   // ---------- quests ----------
   currentStory() { return STORY[this.s.story] || null; }
   newContract() { return { ...makeContract(this.s.level, this.s.maxSector), prog: 0 }; }
@@ -270,12 +350,18 @@ export class Game {
     const g = new THREE.Group(); g.add(built.group); g.rotation.order = 'YXZ'; built.group.scale.setScalar(1.25);
     const fl = makeFlames(built.engines); built.group.add(fl.group);
     p.flames = fl; p.weapons = [];
-    built.hardpoints.forEach((h, i) => {
+    this.ensureEquipSlots();
+    // hardpoints: hull mounts plus auxiliary mounts unlocked by the skill tree
+    const hps = [...built.hardpoints]; const h0 = hps[0] || { x: 0, y: 0.3, z: 1, size: 0.8 };
+    for (let k = 0; hps.length < st.slots; k++) hps.push({ x: (k % 2 ? 1 : -1) * (0.5 + 0.35 * this.s.tier) * (k >> 1 ? 0.6 : 0), y: h0.y + 0.12, z: -(built.length || 4) * (0.18 + 0.1 * k), size: (h0.size || 1) * 0.85, aux: true });
+    hps.forEach((h, i) => {
       if (i >= st.slots) return;
-      const key = this.slotWeapon(i); const tur = makeTurret(key, (h.size || 1) * 1.05);
-      tur.position.set(h.x, h.y, h.z); built.group.add(tur);
-      const w = { key, turret: tur, cd: rand(0, 0.3), target: null, retarget: 0, acc: 0, tick: 0, recoil: 0, bz0: tur.userData.barrel.position.z };
-      if (key === 'laser') { w.beam = this.makeBeam(); this.scene.add(w.beam); }
+      const it = this.item(this.s.equip[i]);
+      if (!it) { const mount = makeTurret('cannon', (h.size || 1) * 0.6); mount.remove(mount.userData.barrel); mount.position.set(h.x, h.y, h.z); built.group.add(mount); return; }
+      const S = itemStats(it); const key = BEH_TURRET[S.beh]; const tur = makeTurret(key, (h.size || 1) * 1.05 * (1 + it.r * 0.03));
+      tur.position.set(h.x, h.y, h.z); built.group.add(tur); rarityRing(tur, it.r, RARITIES[it.r].rgb);
+      const w = { key: S.beh, item: it, S, turret: tur, cd: rand(0, 0.3), target: null, retarget: 0, acc: 0, tick: 0, recoil: 0, heat: 0, over: 0, bz0: tur.userData.barrel.position.z, slot: i };
+      if (S.beh === 'beam') { const c = S.beamRgb; w.beam = this.makeBeam(new THREE.Color(c[0], c[1], c[2]), new THREE.Color(c[0] * 0.08, c[1] * 0.12, c[2] * 0.2)); this.scene.add(w.beam); }
       p.weapons.push(w);
     });
     // T5 point-defence turrets (track and plink nearby pirates)
@@ -297,6 +383,7 @@ export class Game {
     if (p.escortsOld) for (const e of p.escortsOld) { this.scene.remove(e.obj); disposeObject(e.obj); }
     p.escortsOld = p.escorts;
     p.group = g; p.length = built.length; p.radius = T.radius; p.maxHp = st.hp; p.hp = Math.min(p.hp ?? st.hp, st.hp);
+    p.energy = Math.min(p.energy ?? st.energyMax, st.energyMax); p.sh = Math.min(p.sh ?? st.shield, st.shield);
     this.scene.add(g);
   }
   makeBeam(coreCol = new THREE.Color(0.7, 1.9, 2.6), glowCol = new THREE.Color(0.05, 0.3, 0.6)) {
@@ -333,36 +420,65 @@ export class Game {
   }
 
   // ---------- enemies ----------
-  proto(type) {
-    if (!this.protos[type]) {
-      const b = buildPirate(type); const fl = makeFlames(b.engines, new THREE.Color(3.4, 0.8, 0.4)); b.group.add(fl.group);
-      this.protos[type] = { ...b, flameMat: fl.mat, flames: fl };
+  proto(type, fac) {
+    const key = type + ':' + (fac || '');
+    if (!this.protos[key]) {
+      const inst = ENEMIES[type].inst; const b = inst ? buildInstallation(type.slice(5)) : buildPirate(type);
+      const F = FACTIONS[fac]; if (F && type !== 'boss') tintPirate(b.group, fac, F.rgb, F.hull, b.radius);
+      const fl = makeFlames(b.engines, F ? new THREE.Color(F.rgb[0], F.rgb[1] * 0.8 + 0.3, F.rgb[2]) : new THREE.Color(3.4, 0.8, 0.4)); b.group.add(fl.group);
+      this.protos[key] = { ...b, flameMat: fl.mat, flames: fl };
     }
-    return this.protos[type];
+    return this.protos[key];
+  }
+  // faction tactical modifiers
+  facMods(fac) {
+    switch (fac) {
+      case 'crimson': return { hp: 1.2, dmg: 1.25, speed: 1, armor: 0, shield: 0 };
+      case 'void': return { hp: 1, dmg: 1, speed: 1.1, armor: 0, shield: 0, cloak: true, drain: 6 };
+      case 'iron': return { hp: 1.3, dmg: 1, speed: 0.8, armor: 0.2, shield: 0.3 };
+      case 'eclipse': return { hp: 1, dmg: 1, speed: 1, armor: 0, shield: 0.4, shieldBreak: 1.8 };
+      case 'ashen': return { hp: 0.85, dmg: 1, speed: 1.3, armor: 0, shield: 0, rate: 1.2 };
+      default: return { hp: 1, dmg: 1, speed: 1, armor: 0, shield: 0 };
+    }
   }
   spawnEnemy(type, x, z, opts = {}) {
-    const P = this.proto(type); const D = ENEMIES[type];
-    const sec = sectorAt(Math.hypot(x, z)); const sc = 1 + 0.85 * Math.max(0, sec.danger - 1); const easy = sec.danger <= 1 && this.s.tier === 1 ? 0.7 : 1;
-    const g = P.group.clone(); g.rotation.order = 'YXZ'; this.scene.add(g);
-    const e = { type, D, x, z, vx: 0, vz: 0, yaw: rand(0, TAU), bank: 0, hp: D.hp * sc * (opts.hpMul || 1), maxHp: D.hp * sc * (opts.hpMul || 1), dmgMul: (1 + 0.5 * Math.max(0, sec.danger - 1)) * easy,
-      group: g, turrets: g.children.filter((c) => c.name === 'eturret').map((t) => { t.userData = { barrel: t.getObjectByName('barrel'), rec: 0 }; return t; }), cd: rand(0.5, 2), state: 'attack', t: rand(0, 10), radius: P.radius, hard: P.hardpoints, hitT: 0, orbit: rand(0, TAU), ...opts };
+    const D = ENEMIES[type]; const gs = gsectorAt(x, z);
+    const fac = opts.faction !== undefined ? opts.faction : (FACTIONS[gs.faction] && type !== 'sentinel' && type !== 'boss' ? gs.faction : null);
+    const P = this.proto(type, fac); const M = this.facMods(fac);
+    const danger = Math.max(D.inst ? 1 : 0, Math.min(3, gs.ringI)); const sc = (1 + 0.85 * Math.max(0, danger - 1)) * (gs.threat >= 5 ? 1.3 : 1); const easy = danger <= 1 && this.s.tier === 1 ? 0.7 : 1;
+    const elite = !!opts.elite; const hp = D.hp * sc * (opts.hpMul || 1) * M.hp * (elite ? 2.6 : 1);
+    const g = P.group.clone(); g.rotation.order = 'YXZ'; this.scene.add(g); if (elite) g.scale.setScalar(1.25);
+    const e = { type, D, x, z, vx: 0, vz: 0, yaw: D.inst ? rand(0, TAU) : rand(0, TAU), bank: 0, hp, maxHp: hp, dmgMul: (1 + 0.5 * Math.max(0, danger - 1)) * easy * M.dmg * (elite ? 1.4 : 1),
+      group: g, turrets: g.children.filter((c) => c.name === 'eturret').map((t) => { t.userData = { barrel: t.getObjectByName('barrel'), rec: 0 }; return t; }), cd: rand(0.5, 2), state: 'attack', t: rand(0, 10), radius: P.radius * (elite ? 1.2 : 1), hard: P.hardpoints, hitT: 0, orbit: rand(0, TAU),
+      faction: fac, M, armor: Math.min(0.8, D.armor + M.armor), speedMul: M.speed, shield: hp * M.shield, maxShield: hp * M.shield, shieldT: 0, stunT: 0, burnT: 0, burnDps: 0, shredT: 0, elite, threat: gs.threat, sector: gs.id,
+      cloaked: !!M.cloak && !D.inst && type !== 'sentinel', aiAcc: 0, aiTick: 0, scale: elite ? 1.25 : 1, ...opts };
+    if (e.cloaked) g.visible = false;
     g.position.set(x, 0, z);
     this.enemies.push(e); return e;
   }
   removeEnemy(e) { this.scene.remove(e.group); e.dead = true; } // geometry is shared with the prototype; nothing to dispose
-  spawnWave(danger, big = false) {
-    const p = this.player; const a = rand(0, TAU); const d = rand(48, 60);
-    const cx = p.x + Math.cos(a) * d, cz = p.z + Math.sin(a) * d;
+  spawnWave(danger, big = false, near) {
+    const p = this.player; const a = rand(0, TAU); const fac = FACTIONS[this.gsec.faction] && !this.s.galaxy.liberated[this.gsec.id] ? this.gsec.faction : null;
+    const d = near ? rand(14, 22) : fac === 'void' ? rand(22, 28) : rand(48, 60);
+    const bx = near ? near.x : p.x, bz = near ? near.z : p.z;
+    const cx = bx + Math.cos(a) * d, cz = bz + Math.sin(a) * d;
     const list = [];
     if (danger <= 1) { const t1 = this.s.tier === 1; const n = (t1 ? randInt(2, 3) : randInt(2, 4)) + (big ? (t1 ? 1 : 2) : 0); for (let i = 0; i < n; i++) list.push('drone'); if (!t1 && (big || Math.random() < 0.35)) list.push('interceptor'); }
     else if (danger === 2) { for (let i = 0; i < randInt(2, 3); i++) list.push('interceptor'); for (let i = 0; i < randInt(1, 3); i++) list.push('drone'); if (big || Math.random() < 0.4) list.push('gunship'); }
     else { for (let i = 0; i < randInt(2, 4); i++) list.push('interceptor'); list.push('gunship'); if (big) list.push('gunship'); for (let i = 0; i < randInt(2, 4); i++) list.push('drone'); }
-    for (const t of list) this.spawnEnemy(t, cx + rand(-8, 8), cz + rand(-8, 8));
-    this.audio.alarm(); this.toast(big ? '⚠ PIRATE RAID INCOMING!' : '⚠ Pirates detected', 'warn');
+    if (fac === 'crimson' && danger >= 2) list.push('gunship');
+    const eliteI = danger >= 1 && this.gsec.threat >= 2 && Math.random() < 0.18 + (big ? 0.2 : 0) ? randInt(0, list.length - 1) : -1;
+    list.forEach((t, i) => {
+      let x = cx + rand(-8, 8), z = cz + rand(-8, 8);
+      if (fac === 'ashen' && i % 2) { x = bx - Math.cos(a) * d + rand(-8, 8); z = bz - Math.sin(a) * d + rand(-8, 8); } // pincer from the opposite side
+      this.spawnEnemy(t, x, z, { faction: fac, elite: i === eliteI });
+    });
+    const F = FACTIONS[fac];
+    this.audio.alarm(); this.toast(near ? '⚠ Outpost reinforcements launched!' : (big ? '⚠ PIRATE RAID INCOMING!' : '⚠ Pirates detected') + (F ? ` · ${F.name}` : '') + (eliteI >= 0 ? ' · ELITE spotted' : ''), 'warn');
   }
   director(dt) {
-    const p = this.player; const sec = sectorAt(Math.hypot(p.x, p.z));
-    const danger = sec.danger;
+    const p = this.player;
+    const danger = dangerOf(this.gsec, this.s.galaxy);
     if (danger === 0) { this.heat = Math.max(0, this.heat - dt * 6); this.spawnT = Math.max(this.spawnT, 25); }
     else {
       const prev = this.heat;
@@ -370,7 +486,7 @@ export class Game {
       for (const th of [40, 75]) if (prev < th && this.heat >= th) this.spawnWave(danger, false);
       if (this.heat >= 100) { this.spawnWave(danger, true); this.heat = 55; }
       this.spawnT -= dt;
-      const cap = 4 + danger * 4; const pirates = this.enemies.filter((e) => e.type !== 'sentinel' && e.type !== 'boss').length;
+      const cap = 4 + danger * 4; const pirates = this.enemies.filter((e) => e.type !== 'sentinel' && e.type !== 'boss' && !e.D.inst).length;
       if (this.spawnT <= 0) { this.spawnT = rand(28, 40) - danger * 5 + (danger === 1 && this.s.tier === 1 ? 14 : 0); if (pirates < cap) this.spawnWave(danger, false); }
     }
     // guards for rich asteroids
@@ -391,6 +507,7 @@ export class Game {
         this.guards.set(id, list); this.pendingGuards.delete(id);
       }
     }
+    this.updateOutposts(dt);
     // boss
     const bd = Math.hypot(p.x - BOSS_LAIR.x, p.z - BOSS_LAIR.z);
     if (!this.boss && bd < 150 && this.time > (this.s.bossRespawnLocal || 0)) {
@@ -403,94 +520,251 @@ export class Game {
     for (let i = E.length - 1; i >= 0; i--) {
       const e = E[i];
       if (e.dead) { E.splice(i, 1); continue; }
-      e.t += dt; e.cd -= dt; if (e.hitT > 0) e.hitT -= dt;
       const dx = p.x - e.x, dz = p.z - e.z, dist = Math.hypot(dx, dz) || 0.001;
+      if (e.D.inst) { this.updateInst(e, dt, dist, dx, dz); continue; }
       const far = e.type === 'boss' ? 400 : 170;
       if (dist > far && !e.guard) { this.removeEnemy(e); E.splice(i, 1); if (e === this.boss) this.boss = null; continue; }
       if (e.guard && e.state === 'idle' && Math.hypot(e.guard.x - p.x, e.guard.z - p.z) > 110) { this.removeEnemy(e); E.splice(i, 1); if (e.guardId && this.guards.has(e.guardId)) { this.guards.delete(e.guardId); this.pendingGuards.set(e.guardId, { id: e.guardId, x: e.guard.x, z: e.guard.z, count: 1 }); } continue; }
       if (e.guard && Math.hypot(e.guard.x - p.x, e.guard.z - p.z) > 220) { this.removeEnemy(e); E.splice(i, 1); if (e.guardId) this.guards.delete(e.guardId); continue; }
-      let tx = p.x, tz = p.z, spd = e.D.speed, wantFire = !this.dead && dist < e.D.range;
-      const D = e.D;
-      if (e.type === 'drone') {
-        e.orbit += dt * 0.9; tx = p.x + Math.cos(e.orbit) * 9; tz = p.z + Math.sin(e.orbit) * 9;
-      } else if (e.type === 'interceptor') {
-        if (e.state === 'attack') { if (dist < 7) { e.state = 'break'; e.bt = 1.4; const a = Math.atan2(dz, dx) + rand(-1, 1); e.bx = e.x + Math.cos(a) * 30; e.bz = e.z + Math.sin(a) * 30; } }
-        else { tx = e.bx; tz = e.bz; e.bt -= dt; wantFire = false; if (e.bt <= 0) e.state = 'attack'; }
-        spd *= e.state === 'break' ? 1.2 : 1;
-      } else if (e.type === 'gunship') {
-        e.orbit += dt * 0.25; const r = 17; tx = p.x + Math.cos(e.orbit) * r; tz = p.z + Math.sin(e.orbit) * r;
-      } else if (e.type === 'sentinel') {
-        const gd = Math.hypot(e.guard.x - p.x, e.guard.z - p.z);
-        if (e.state === 'idle' && gd < 24 && !this.dead) { e.state = 'attack'; this.toast('Mining sentinels activated!', 'warn'); }
-        if (e.state === 'attack' && (gd > 55 || this.dead)) e.state = 'idle';
-        if (e.state === 'idle') { e.orbit += dt * 0.5; tx = e.guard.x + Math.cos(e.orbit) * 7; tz = e.guard.z + Math.sin(e.orbit) * 7; wantFire = false; spd *= 0.4; }
-        else { e.orbit += dt * 0.8; tx = p.x + Math.cos(e.orbit) * 11; tz = p.z + Math.sin(e.orbit) * 11; }
-      } else if (e.type === 'boss') {
-        if (e.state === 'idle' && dist < 70) { e.state = 'attack'; }
-        if (e.state === 'attack') {
-          const keep = 24; const a = Math.atan2(-dz, -dx); tx = p.x + Math.cos(a) * keep; tz = p.z + Math.sin(a) * keep;
-          if (Math.hypot(e.x - BOSS_LAIR.x, e.z - BOSS_LAIR.z) > 120) { tx = BOSS_LAIR.x; tz = BOSS_LAIR.z; }
-          e.summonT -= dt; e.burstT -= dt;
-          if (e.hp < e.maxHp * 0.5 && e.phase === 1) { e.phase = 2; this.toast('The Warlord is enraged!', 'warn'); }
-          if (e.summonT <= 0) { e.summonT = e.phase === 2 ? 10 : 15; const n = E.filter((x) => x.type === 'drone').length; if (n < 8) for (let k = 0; k < 3; k++) this.spawnEnemy('drone', e.x + rand(-6, 6), e.z + rand(-6, 6)); }
-          if (e.burstT <= 0) { e.burstT = e.phase === 2 ? 3.5 : 5.5; const n = e.phase === 2 ? 24 : 16; for (let k = 0; k < n; k++) { const a2 = k / n * TAU + e.t; this.enemyShot(e.x, e.z, Math.cos(a2), Math.sin(a2), 16, D.dmg * 0.8 * e.dmgMul, [3.5, 0.6, 1.2]); } this.audio.enemyShoot('boss', e.x, e.z); }
-        } else { tx = e.x; tz = e.z; wantFire = false; }
-        const ring = e.group.getObjectByName('ring'); if (ring) ring.rotation.y += dt * (e.phase === 2 ? 2 : 0.8);
-      }
-      // steering
-      const sx = tx - e.x, sz = tz - e.z, sd = Math.hypot(sx, sz) || 0.001;
-      const accel = e.type === 'boss' ? 4 : e.type === 'gunship' ? 10 : 30;
-      const desiredV = Math.min(spd, sd * 2);
-      e.vx += ((sx / sd) * desiredV - e.vx) * Math.min(1, accel * dt / Math.max(spd, 1));
-      e.vz += ((sz / sd) * desiredV - e.vz) * Math.min(1, accel * dt / Math.max(spd, 1));
-      // separation
-      for (let j = 0; j < E.length; j++) { const o = E[j]; if (o === e) continue; const ox = e.x - o.x, oz = e.z - o.z; const od = Math.hypot(ox, oz); const min = e.radius + o.radius + 0.5; if (od < min && od > 0.001) { e.vx += (ox / od) * (min - od) * 6 * dt; e.vz += (oz / od) * (min - od) * 6 * dt; } }
-      e.x += e.vx * dt; e.z += e.vz * dt;
-      // face: toward player when firing (gunship/boss/drone/sentinel), else movement dir
-      const faceP = (e.type !== 'interceptor' || e.state === 'attack') && wantFire;
-      const desiredYaw = faceP ? Math.atan2(dx, dz) : Math.atan2(e.vx, e.vz);
-      const turn = e.type === 'boss' ? 0.6 : e.type === 'gunship' ? 1.5 : 5;
-      const dy = angleDiff(e.yaw, desiredYaw); const step = clamp(dy, -turn * dt, turn * dt); e.yaw += step;
-      e.bank = damp(e.bank, clamp(step / dt * 0.25, -0.7, 0.7), 5, dt);
-      e.group.position.set(e.x, Math.sin(e.t * 2) * 0.15, e.z); e.group.rotation.set(0, e.yaw, -e.bank);
-      const pulse = e.hitT > 0 ? 1 + e.hitT * 0.6 : 1; e.group.scale.setScalar(pulse);
-      for (const tu of e.turrets) { tu.rotation.y = damp(tu.rotation.y, angleDiff(0, Math.atan2(dx, dz) - e.yaw), 4, dt); if (tu.userData.rec > 0) { tu.userData.rec = Math.max(0, tu.userData.rec - dt * 4); } tu.userData.barrel.position.z = -(tu.userData.rec || 0) * 0.3; }
-      // fire
-      if (wantFire && e.cd <= 0 && Math.abs(angleDiff(e.yaw, Math.atan2(dx, dz))) < (e.type === 'interceptor' ? 0.5 : 1.2)) {
-        e.cd = 1 / D.fireRate * (e.type === 'boss' && e.phase === 2 ? 0.6 : 1) * rand(0.85, 1.15);
-        const dmg = D.dmg * e.dmgMul; const ux = dx / dist, uz = dz / dist;
-        if (e.type === 'gunship') { for (const off of [-0.18, 0, 0.18]) { const c = Math.cos(off), s = Math.sin(off); this.enemyShot(e.x + ux * 2.5, e.z + uz * 2.5, ux * c - uz * s, uz * c + ux * s, 22, dmg, [3.5, 1.2, 0.3]); } }
-        else if (e.type === 'boss') { for (const h of e.hard) { const wx = e.x + Math.cos(e.yaw) * h.x + Math.sin(e.yaw) * h.z, wz = e.z - Math.sin(e.yaw) * h.x + Math.cos(e.yaw) * h.z; const ddx = p.x - wx, ddz = p.z - wz, dd = Math.hypot(ddx, ddz); this.enemyShot(wx, wz, ddx / dd, ddz / dd, 26, dmg, [3.5, 0.5, 0.4]); } }
-        else this.enemyShot(e.x + ux * e.radius, e.z + uz * e.radius, ux, uz, e.type === 'drone' ? 20 : 30, dmg, e.type === 'sentinel' ? [3.2, 1.8, 0.3] : [3.5, 0.4, 0.4]);
-        for (const tu of e.turrets) tu.userData.rec = 1;
-        this.fx.emit(e.x + ux * e.radius, 0.6, e.z + uz * e.radius, 0, 0, 0, 0.08, 1.2 + e.radius * 0.3, 0.3, 3, 0.8, 0.4, 0);
-        this.audio.enemyShoot(e.type, e.x, e.z);
-      }
-      // engine trail
-      if (Math.random() < 0.3 * this.fx.budget) this.fx.emit(e.x - Math.sin(e.yaw) * e.radius, 0.2, e.z - Math.cos(e.yaw) * e.radius, -e.vx * 0.2, 0, -e.vz * 0.2, 0.4, 0.7 * (e.radius * 0.5 + 0.5), 0.1, 2.5, 0.6, 0.3, 2);
+      // AI budget: distant ships think at a third of the rate (with the elapsed time accumulated)
+      let edt = dt;
+      if (dist > 90 && e !== this.boss) { e.aiAcc += dt; e.aiTick = (e.aiTick + 1) % 3; if (e.aiTick) continue; edt = e.aiAcc; e.aiAcc = 0; }
+      this.enemyAI(e, edt, dist, dx, dz);
     }
   }
-  enemyShot(x, z, ux, uz, speed, dmg, color) {
-    this.bolts.spawn({ x, z, y: 0.6, vx: ux * speed, vz: uz * speed, dmg, owner: 'e', life: 2.2, len: 1.4, w: 1.3, color });
+  enemyStatus(e, dt) { // shared per-enemy timers: hit flash, stun, burn, shred, shield regen
+    e.t += dt; e.cd -= dt; if (e.hitT > 0) e.hitT -= dt; if (e.shredT > 0) e.shredT -= dt;
+    if (e.burnT > 0) { e.burnT -= dt; e.burnAcc = (e.burnAcc || 0) + e.burnDps * dt; if (e.burnAcc > 4 || e.burnT <= 0) { const d = e.burnAcc; e.burnAcc = 0; e.hp -= d; if (Math.random() < 0.5) this.ui && this.ui.float(e.x, 1.6, e.z, Math.round(d), '#ff9a3d'); if (e.hp <= 0) { this.killEnemy(e); return false; } }
+      if (Math.random() < 0.5 * this.fx.budget) this.fx.emit(e.x + rand(-1, 1) * e.radius * 0.5, 0.6, e.z + rand(-1, 1) * e.radius * 0.5, 0, 2, 0, 0.4, 0.9, 0.2, 3.2, 1.2, 0.3, 2); }
+    if (e.stunT > 0) { e.stunT -= dt; if (Math.random() < 0.6 * this.fx.budget) this.fx.emit(e.x + rand(-1, 1) * e.radius, 0.8 + rand(0, 1), e.z + rand(-1, 1) * e.radius, rand(-3, 3), rand(0, 2), rand(-3, 3), 0.2, 0.5, 0.1, 0.8, 2.6, 3.6, 3); }
+    if (e.maxShield > 0 && this.time - e.shieldT > 4 && e.shield < e.maxShield && e.stunT <= 0) e.shield = Math.min(e.maxShield, e.shield + e.maxShield * 0.12 * dt);
+    return true;
   }
-  damageEnemy(e, dmg, crit) {
+  enemyAI(e, dt, dist, dx, dz) {
+    const p = this.player; const E = this.enemies;
+    if (!this.enemyStatus(e, dt)) return;
+    // Void Reavers stay cloaked until close or hit
+    if (e.cloaked) { if (dist < 26 || e.hitT > 0) { e.cloaked = false; e.group.visible = true; this.fx.burst(e.x, 0.6, e.z, 18, 8, 0.4, 1.0, 0.1, [1.8, 0.6, 3.6], 3); }
+      else if (Math.random() < 0.25 * this.fx.budget) this.fx.emit(e.x + rand(-1, 1), 0.5, e.z + rand(-1, 1), 0, 0.3, 0, 0.5, 1.2, 0.3, 0.5, 0.2, 0.9, 1); }
+    let tx = p.x, tz = p.z, spd = e.D.speed * (e.speedMul || 1), wantFire = !this.dead && dist < e.D.range && !e.cloaked;
+    if (e.stunT > 0) { wantFire = false; spd *= 0.15; }
+    const D = e.D;
+    if (e.type === 'drone') {
+      e.orbit += dt * 0.9; tx = p.x + Math.cos(e.orbit) * 9; tz = p.z + Math.sin(e.orbit) * 9;
+    } else if (e.type === 'interceptor') {
+      if (e.state === 'attack') { if (dist < 7) { e.state = 'break'; e.bt = 1.4; const a = Math.atan2(dz, dx) + rand(-1, 1); e.bx = e.x + Math.cos(a) * 30; e.bz = e.z + Math.sin(a) * 30; } }
+      else { tx = e.bx; tz = e.bz; e.bt -= dt; wantFire = false; if (e.bt <= 0) e.state = 'attack'; }
+      spd *= e.state === 'break' ? 1.2 : 1;
+    } else if (e.type === 'gunship') {
+      e.orbit += dt * 0.25; const r = 17; tx = p.x + Math.cos(e.orbit) * r; tz = p.z + Math.sin(e.orbit) * r;
+    } else if (e.type === 'sentinel') {
+      const gd = Math.hypot(e.guard.x - p.x, e.guard.z - p.z);
+      if (e.state === 'idle' && gd < 24 && !this.dead) { e.state = 'attack'; this.toast('Mining sentinels activated!', 'warn'); }
+      if (e.state === 'attack' && (gd > 55 || this.dead)) e.state = 'idle';
+      if (e.state === 'idle') { e.orbit += dt * 0.5; tx = e.guard.x + Math.cos(e.orbit) * 7; tz = e.guard.z + Math.sin(e.orbit) * 7; wantFire = false; spd *= 0.4; }
+      else { e.orbit += dt * 0.8; tx = p.x + Math.cos(e.orbit) * 11; tz = p.z + Math.sin(e.orbit) * 11; }
+    } else if (e.type === 'boss') {
+      if (e.state === 'idle' && dist < 70) { e.state = 'attack'; }
+      if (e.state === 'attack') {
+        const keep = 24; const a = Math.atan2(-dz, -dx); tx = p.x + Math.cos(a) * keep; tz = p.z + Math.sin(a) * keep;
+        if (Math.hypot(e.x - BOSS_LAIR.x, e.z - BOSS_LAIR.z) > 120) { tx = BOSS_LAIR.x; tz = BOSS_LAIR.z; }
+        e.summonT -= dt; e.burstT -= dt;
+        if (e.hp < e.maxHp * 0.5 && e.phase === 1) { e.phase = 2; this.toast('The Warlord is enraged!', 'warn'); }
+        if (e.summonT <= 0) { e.summonT = e.phase === 2 ? 10 : 15; const n = E.filter((x) => x.type === 'drone').length; if (n < 8) for (let k = 0; k < 3; k++) this.spawnEnemy('drone', e.x + rand(-6, 6), e.z + rand(-6, 6)); }
+        if (e.burstT <= 0) { e.burstT = e.phase === 2 ? 3.5 : 5.5; const n = e.phase === 2 ? 24 : 16; for (let k = 0; k < n; k++) { const a2 = k / n * TAU + e.t; this.enemyShot(e.x, e.z, Math.cos(a2), Math.sin(a2), 16, D.dmg * 0.8 * e.dmgMul, [3.5, 0.6, 1.2]); } this.audio.enemyShoot('boss', e.x, e.z); }
+      } else { tx = e.x; tz = e.z; wantFire = false; }
+      const ring = e.group.getObjectByName('ring'); if (ring) ring.rotation.y += dt * (e.phase === 2 ? 2 : 0.8);
+    }
+    // steering
+    const sx = tx - e.x, sz = tz - e.z, sd = Math.hypot(sx, sz) || 0.001;
+    const accel = e.type === 'boss' ? 4 : e.type === 'gunship' ? 10 : 30;
+    const desiredV = Math.min(spd, sd * 2);
+    e.vx += ((sx / sd) * desiredV - e.vx) * Math.min(1, accel * dt / Math.max(spd, 1));
+    e.vz += ((sz / sd) * desiredV - e.vz) * Math.min(1, accel * dt / Math.max(spd, 1));
+    // separation
+    for (let j = 0; j < E.length; j++) { const o = E[j]; if (o === e) continue; const ox = e.x - o.x, oz = e.z - o.z; const od = Math.hypot(ox, oz); const min = e.radius + o.radius + 0.5; if (od < min && od > 0.001) { e.vx += (ox / od) * (min - od) * 6 * dt; e.vz += (oz / od) * (min - od) * 6 * dt; } }
+    e.x += e.vx * dt; e.z += e.vz * dt;
+    // face: toward player when firing (gunship/boss/drone/sentinel), else movement dir
+    const faceP = (e.type !== 'interceptor' || e.state === 'attack') && wantFire;
+    const desiredYaw = faceP ? Math.atan2(dx, dz) : Math.atan2(e.vx, e.vz);
+    const turn = e.type === 'boss' ? 0.6 : e.type === 'gunship' ? 1.5 : 5;
+    const dy = angleDiff(e.yaw, desiredYaw); const step = clamp(dy, -turn * dt, turn * dt); e.yaw += step;
+    e.bank = damp(e.bank, clamp(step / dt * 0.25, -0.7, 0.7), 5, dt);
+    e.group.position.set(e.x, Math.sin(e.t * 2) * 0.15, e.z); e.group.rotation.set(0, e.yaw, -e.bank);
+    const pulse = e.hitT > 0 ? 1 + e.hitT * 0.6 : 1; e.group.scale.setScalar(pulse * e.scale);
+    for (const tu of e.turrets) { tu.rotation.y = damp(tu.rotation.y, angleDiff(0, Math.atan2(dx, dz) - e.yaw), 4, dt); if (tu.userData.rec > 0) { tu.userData.rec = Math.max(0, tu.userData.rec - dt * 4); } tu.userData.barrel.position.z = -(tu.userData.rec || 0) * 0.3; }
+    // fire
+    if (wantFire && e.cd <= 0 && Math.abs(angleDiff(e.yaw, Math.atan2(dx, dz))) < (e.type === 'interceptor' ? 0.5 : 1.2)) {
+      e.cd = 1 / (D.fireRate * (e.M.rate || 1)) * (e.type === 'boss' && e.phase === 2 ? 0.6 : 1) * rand(0.85, 1.15); this.curShooter = e;
+      const dmg = D.dmg * e.dmgMul; const ux = dx / dist, uz = dz / dist;
+      if (e.type === 'gunship') { for (const off of [-0.18, 0, 0.18]) { const c = Math.cos(off), s = Math.sin(off); this.enemyShot(e.x + ux * 2.5, e.z + uz * 2.5, ux * c - uz * s, uz * c + ux * s, 22, dmg, [3.5, 1.2, 0.3]); } }
+      else if (e.type === 'boss') { for (const h of e.hard) { const wx = e.x + Math.cos(e.yaw) * h.x + Math.sin(e.yaw) * h.z, wz = e.z - Math.sin(e.yaw) * h.x + Math.cos(e.yaw) * h.z; const ddx = p.x - wx, ddz = p.z - wz, dd = Math.hypot(ddx, ddz); this.enemyShot(wx, wz, ddx / dd, ddz / dd, 26, dmg, [3.5, 0.5, 0.4]); } }
+      else this.enemyShot(e.x + ux * e.radius, e.z + uz * e.radius, ux, uz, e.type === 'drone' ? 20 : 30, dmg, e.type === 'sentinel' ? [3.2, 1.8, 0.3] : [3.5, 0.4, 0.4]);
+      for (const tu of e.turrets) tu.userData.rec = 1;
+      this.fx.emit(e.x + ux * e.radius, 0.6, e.z + uz * e.radius, 0, 0, 0, 0.08, 1.2 + e.radius * 0.3, 0.3, 3, 0.8, 0.4, 0);
+      this.audio.enemyShoot(e.type, e.x, e.z);
+    }
+    // engine trail
+    if (Math.random() < 0.3 * this.fx.budget) this.fx.emit(e.x - Math.sin(e.yaw) * e.radius, 0.2, e.z - Math.cos(e.yaw) * e.radius, -e.vx * 0.2, 0, -e.vz * 0.2, 0.4, 0.7 * (e.radius * 0.5 + 0.5), 0.1, 2.5, 0.6, 0.3, 2);
+  }
+  enemyShot(x, z, ux, uz, speed, dmg, color) {
+    const e = this.curShooter; const F = e && e.faction && e.type !== 'boss' ? FACTIONS[e.faction] : null;
+    this.bolts.spawn({ x, z, y: 0.6, vx: ux * speed, vz: uz * speed, dmg, owner: 'e', life: 2.2, len: 1.4, w: 1.3, color: F ? F.rgb : color, energy: e ? ENERGY_DMG[e.type] !== 0 : true, fac: e ? e.faction : null });
+  }
+  // ---------- pirate outposts (installations) ----------
+  updateOutposts(dt) {
+    this.outpostScan -= dt; if (this.outpostScan > 0) return; this.outpostScan = 0.5;
+    const p = this.player; const g = this.s.galaxy;
+    for (const sec of [this.gsec, ...neighbours(this.gsec)]) {
+      for (const c of caches(sec)) if (!g.caches[c.id] && !this.liveCaches.has(c.id) && Math.hypot(c.x - p.x, c.z - p.z) < 120) this.spawnCache(c, sec); // hidden caches
+      if (!isPirate(sec) || g.liberated[sec.id]) continue;
+      for (const o of outposts(sec)) {
+        if (g.inst[o.id] || this.liveOutposts.has(o.id)) continue;
+        if (Math.hypot(o.x - p.x, o.z - p.z) < 165) this.spawnOutpost(o, sec);
+      }
+    }
+    for (const [id, L] of this.liveOutposts) {
+      if (Math.hypot(L.o.x - p.x, L.o.z - p.z) > 240) { // despawn, remembering damage for this session
+        for (const part of L.parts) if (!part.dead) { this.instHp.set(part.partId, part.hp); this.removeEnemy(part); } else this.instHp.set(part.partId, 0);
+        this.liveOutposts.delete(id);
+      }
+    }
+    for (const [id, c] of this.liveCaches) if (Math.hypot(c.c.x - p.x, c.c.z - p.z) > 160) { this.freeCache(c); this.liveCaches.delete(id); }
+  }
+  spawnOutpost(o, sec) {
+    const fac = sec.faction; const L = { o, sec, parts: [], gens: [], core: null, reinf: false, summonT: 6 }; const parts = [];
+    const add = (type, x, z, partId, extra = {}) => { const hp0 = this.instHp.get(partId); if (hp0 === 0) return null; const e = this.spawnEnemy(type, x, z, { faction: fac, inst: o.id, partId, state: 'attack', ...extra }); e.yaw = 0; if (hp0 > 0) e.hp = Math.min(e.maxHp, hp0); e.vx = e.vz = 0; L.parts.push(e); return e; };
+    L.core = add('inst_core', o.x, o.z, o.id + ':core');
+    for (let k = 0; k < o.gens; k++) { const a = k / o.gens * TAU + 0.4; const ge = add('inst_gen', o.x + Math.cos(a) * 11, o.z + Math.sin(a) * 11, o.id + ':g' + k); if (ge) L.gens.push(ge); }
+    for (let k = 0; k < o.turrets; k++) { const a = k / o.turrets * TAU; add('inst_turret', o.x + Math.cos(a) * 18, o.z + Math.sin(a) * 18, o.id + ':t' + k); }
+    if (!L.core) { this.s.galaxy.inst[o.id] = 1; return; } // already destroyed this session
+    const F = FACTIONS[fac]; L.dome = makeDome(F ? F.rgb : [3, 0.4, 0.4]); L.dome.scale.set(9.5, 7, 9.5); L.core.group.add(L.dome);
+    L.core.outpost = L; this.liveOutposts.set(o.id, L);
+    if (!this.s.galaxy.seen) this.s.galaxy.seen = {};
+    if (!L.announced && this.time > 2) { L.announced = true; this.toast(`☠ ${o.name} detected: destroy its shield generators, then the core`, 'warn'); }
+  }
+  updateInst(e, dt, dist, dx, dz) {
+    if (!this.enemyStatus(e, dt)) return;
+    const p = this.player; const L = this.liveOutposts.get(e.inst);
+    e.group.position.set(e.x, 0, e.z); const pulse = e.hitT > 0 ? 1 + e.hitT * 0.25 : 1; e.group.scale.setScalar(pulse);
+    if (e.type === 'inst_gen') { e.group.rotation.y += dt * 0.6; return; }
+    if (e.type === 'inst_core') {
+      if (L && L.dome) { const on = L.gens.some((g) => !g.dead); L.dome.visible = on; L.dome.material.uniforms.uT.value = this.time; const u = L.dome.material.uniforms.uHit; u.value = Math.max(0, u.value - dt * 3); }
+      if (L && !this.dead && dist < 70 && e.stunT <= 0) { // launches drones while the player is near
+        L.summonT -= dt; if (L.summonT <= 0) { L.summonT = 16; const n = this.enemies.filter((x) => x.type === 'drone' && !x.dead).length; if (n < 6) for (let k = 0; k < 2; k++) this.spawnEnemy('drone', e.x + rand(-6, 6), e.z + rand(-6, 6), { faction: e.faction }); }
+        if (!L.reinf && e.hp < e.maxHp * 0.5) { L.reinf = true; this.spawnWave(Math.max(1, dangerOf(L.sec, this.s.galaxy)), false, { x: e.x, z: e.z }); }
+      }
+      return;
+    }
+    // turret
+    const yaw = Math.atan2(dx, dz);
+    for (const tu of e.turrets) { tu.rotation.y = damp(tu.rotation.y, angleDiff(0, yaw - e.yaw), e.stunT > 0 ? 0 : 3, dt); if (tu.userData.rec > 0) tu.userData.rec = Math.max(0, tu.userData.rec - dt * 4); tu.userData.barrel.position.z = -(tu.userData.rec || 0) * 0.3; }
+    if (!this.dead && dist < e.D.range && e.cd <= 0 && e.stunT <= 0) {
+      e.cd = 1 / e.D.fireRate * rand(0.8, 1.2); this.curShooter = e; const ux = dx / dist, uz = dz / dist;
+      for (const off of [-0.06, 0.06]) { const c = Math.cos(off), s2 = Math.sin(off); this.enemyShot(e.x + ux * 2.2, e.z + uz * 2.2, ux * c - uz * s2, uz * c + ux * s2, 26, e.D.dmg * e.dmgMul, [3.5, 1.2, 0.3]); }
+      for (const tu of e.turrets) tu.userData.rec = 1; this.audio.enemyShoot('gunship', e.x, e.z);
+      this.fx.emit(e.x + ux * 2.2, 1.6, e.z + uz * 2.2, 0, 0, 0, 0.08, 2, 0.4, 3, 1.4, 0.4, 0);
+    }
+  }
+  // ---------- hidden caches ----------
+  spawnCache(c, sec) {
+    const obj = this.cachePool.pop() || buildCacheCrate(); obj.visible = true; obj.position.set(c.x, 0.3, c.z); this.scene.add(obj);
+    this.liveCaches.set(c.id, { c, sec, obj });
+  }
+  freeCache(L) { this.scene.remove(L.obj); this.cachePool.push(L.obj); }
+  updateCaches(dt) {
+    const p = this.player; const fx = this.skillFx();
+    for (const [id, L] of this.liveCaches) {
+      const d = Math.hypot(L.c.x - p.x, L.c.z - p.z); L.obj.rotation.y += dt * 0.8; L.obj.position.y = 0.3 + Math.sin(this.time * 2 + L.c.x) * 0.25;
+      L.obj.visible = d < 30 || !!fx.anomaly; L.obj.userData.sp.material.opacity = 0.5 + 0.5 * Math.sin(this.time * 4);
+      if (d < 30 && !L.found) { L.found = true; this.toast('Hidden cargo cache detected nearby', 'good'); }
+      if (d < 4 + p.radius && !this.dead) {
+        this.s.galaxy.caches[id] = 1; this.freeCache(L); this.liveCaches.delete(id); this.s.stats.caches++;
+        const th = Math.max(1, L.sec.threat); const cr = 150 * th; this.addCredits(cr); const parts = 4 * th; this.s.parts += parts; this.addXP(40 * th);
+        this.dropLoot(L.c.x, L.c.z, 'cache', th);
+        this.fx.burst(L.c.x, 1, L.c.z, 40, 12, 0.7, 1.0, 0.1, [0.6, 3, 1.2], 2); this.rings.spawn(L.c.x, 0.3, L.c.z, 8, [0.5, 2.6, 1.2], 0.6); this.audio.coins();
+        this.toast(`Cache opened: +${cr} cr, +${parts} components`, 'good'); this.ui && this.ui.float(L.c.x, 2, L.c.z, `+${cr} cr`, '#ffd166', true); this.emit('cache', {}); this.save();
+      }
+    }
+  }
+  // ---------- loot pods ----------
+  dropLoot(x, z, src, threat, minR = 0) {
+    const it = rollLoot(this.s.level, threat, src, this.stats().luck, minR);
+    const obj = this.lootPool.pop() || buildLootPod(); const R = RARITIES[it.r]; const col = new THREE.Color(R.rgb[0], R.rgb[1], R.rgb[2]);
+    const u = obj.userData; u.core.material.color.copy(col).multiplyScalar(0.8); u.shell.material.color.copy(col); u.beam.material.color.copy(col).multiplyScalar(0.5); u.sp.material.color.copy(col).multiplyScalar(0.7);
+    u.beam.scale.set(1 + it.r * 0.15, 0.6 + it.r * 0.25, 1 + it.r * 0.15); obj.visible = true; this.scene.add(obj);
+    const a = rand(0, TAU), sp = rand(3, 7); const l = { it, obj, x, z, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, t: 0 }; obj.position.set(x, 0, z); this.loot.push(l);
+    this.audio.lootDrop(it.r, x, z); this.rings.spawn(x, 0.3, z, 3 + it.r, R.rgb.map((v) => v * 0.6), 0.5);
+    return l;
+  }
+  freeLoot(l) { this.scene.remove(l.obj); l.obj.visible = false; this.lootPool.push(l.obj); }
+  updateLoot(dt) {
+    const p = this.player; const st = this.stats();
+    for (let i = this.loot.length - 1; i >= 0; i--) {
+      const l = this.loot[i]; l.t += dt; const dx = p.x - l.x, dz = p.z - l.z, d = Math.hypot(dx, dz) || 0.001;
+      if (d < st.magnet * 0.8 && l.t > 0.6 && !this.dead) { const pull = 18 + 40 * (1 - d / (st.magnet * 0.8)); l.vx += dx / d * pull * dt * 3; l.vz += dz / d * pull * dt * 3; }
+      const k = Math.exp(-2.5 * dt); l.vx *= k; l.vz *= k; l.x += l.vx * dt; l.z += l.vz * dt;
+      l.obj.position.set(l.x, Math.sin(l.t * 3) * 0.2, l.z); l.obj.userData.core.rotation.y += dt * 2; l.obj.userData.shell.rotation.y -= dt * 1.2;
+      if (d < p.radius + 1.6 && l.t > 0.6 && !this.dead) {
+        this.loot.splice(i, 1); this.freeLoot(l); this.audio.loot(l.it.r); const R = RARITIES[l.it.r];
+        this.fx.burst(p.x, 1, p.z, 16 + l.it.r * 6, 8, 0.5, 0.8, 0.1, R.rgb, 2); this.ui && this.ui.float(p.x, 2.6, p.z, R.name.toUpperCase(), R.color, true);
+        this.addItem(l.it); this.save(); continue;
+      }
+      if (l.t > 150) { this.loot.splice(i, 1); this.freeLoot(l); }
+    }
+  }
+  // damage pipeline: bonuses -> shields (x shieldMul) -> armor (minus penetration) -> hull. S = weapon stat block (optional)
+  damageEnemy(e, dmg, crit, S, noChain) {
     if (e.dead) return;
-    const d = dmg * (1 - e.D.armor); e.hp -= d; e.hitT = 0.15;
+    const fx = this.skillFx(); const st = this.stats();
+    if ((e.elite || e.D.inst || e.type === 'boss') && fx.eliteDmg) dmg *= 1 + fx.eliteDmg;
+    if (e.shredT > 0) dmg *= 1.15;
+    if (fx.overcharge && this.player.energy > st.energyMax * 0.7) dmg *= 1 + fx.overcharge;
+    let shielded = false;
+    if (e.type === 'inst_core' && e.outpost && e.outpost.gens.some((g) => !g.dead)) { dmg *= 0.1; shielded = true; if (e.outpost.dome) e.outpost.dome.material.uniforms.uHit.value = 1; }
+    if (e.shield > 0) { const sm = (S && S.shieldMul) || 1; const sd = dmg * sm; const ab = Math.min(e.shield, sd); e.shield -= ab; dmg = (sd - ab) / sm; e.shieldT = this.time;
+      if (e.shield <= 0) { this.rings.spawn(e.x, 0.6, e.z, e.radius * 2.5, [0.5, 2, 3.4], 0.4); } else if (Math.random() < 0.3) this.fx.emit(e.x, 0.8, e.z, 0, 0, 0, 0.15, e.radius * 2.2, 0.4, 0.4, 1.6, 3, 0); }
+    const armor = Math.max(0, (e.armor ?? e.D.armor) - ((S && S.pen) || 0) - (st.pen || 0));
+    const d = dmg * (1 - armor); e.hp -= d; e.hitT = 0.15;
+    if (S) {
+      if (S.burn) { e.burnT = 3; e.burnDps = Math.max(e.burnDps || 0, d * S.burn / 3 * (S.beh === 'beam' ? 0.4 : 1)); }
+      if (S.shred) e.shredT = 4;
+      if (S.stun && Math.random() < S.stun && !e.D.inst && e.type !== 'boss') e.stunT = Math.max(e.stunT, 0.8);
+      if (S.leech) { const p = this.player; p.hp = Math.min(p.maxHp, p.hp + d * S.leech); }
+      if (S.chain && !noChain) { let best = null, bd = 10; for (const o of this.enemies) { if (o === e || o.dead) continue; const dd = Math.hypot(o.x - e.x, o.z - e.z); if (dd < bd) { bd = dd; best = o; } }
+        if (best) { this.arc(e.x, e.z, best.x, best.z); this.damageEnemy(best, d * S.chain, false, S, true); } }
+    }
     if (e.type === 'sentinel' && e.state === 'idle') e.state = 'attack';
     if (e.type === 'boss' && e.state === 'idle') e.state = 'attack';
-    if (this.ui && (crit || Math.random() < 0.35)) this.ui.float(e.x, 1.5, e.z, (crit ? 'CRIT ' : '') + Math.round(d), crit ? '#ffd166' : '#ff8a8a', crit);
+    if (this.ui && (crit || shielded || Math.random() < 0.35)) this.ui.float(e.x, 1.5, e.z, shielded ? 'SHIELDED ' + Math.round(d) : (crit ? 'CRIT ' : '') + Math.round(d), shielded ? '#6fd8ff' : crit ? '#ffd166' : '#ff8a8a', crit);
     if (e.hp <= 0) this.killEnemy(e);
   }
+  arc(x0, z0, x1, z1) { // lightning arc between two points
+    const n = 8; for (let i = 0; i <= n; i++) { const t = i / n; const j = i === 0 || i === n ? 0 : 0.8; this.fx.emit(lerp(x0, x1, t) + rand(-j, j), 0.8 + rand(-0.3, 0.3), lerp(z0, z1, t) + rand(-j, j), 0, 0, 0, 0.18, 0.7, 0.2, 1.6, 2.2, 3.6, 0); }
+  }
   killEnemy(e) {
+    if (e.dead) return;
     this.removeEnemy(e);
-    const big = e.type === 'boss' ? 4 : e.type === 'gunship' ? 1.8 : 1;
-    this.boom(e.x, 0.5, e.z, big, [3.2, 0.5, 0.4]);
+    const big = e.type === 'boss' ? 4 : e.type === 'inst_core' ? 3.2 : e.type === 'gunship' || e.type === 'inst_gen' ? 1.8 : e.D.inst ? 1.4 : 1;
+    const F = FACTIONS[e.faction]; const tint = F ? F.rgb.map((v) => v * 0.9) : [3.2, 0.5, 0.4];
+    this.boom(e.x, 0.5, e.z, big, tint);
     this.debris.spawn(e.x, 0.3, e.z, Math.round(6 * big), 10, 0.6, 0x2a1416);
-    this.audio.explode(big > 1, e.x, e.z, e.type === 'boss'); this.addShake(0.25 * big, e.x, e.z);
-    const credits = Math.round(e.D.credits * e.dmgMul); this.addCredits(credits); this.addXP(Math.round(e.D.xp * e.dmgMul));
-    this.ui && this.ui.float(e.x, 2, e.z, `+${credits} cr`, '#ffd166', true);
+    this.audio.explode(big > 1, e.x, e.z, e.type === 'boss' || e.type === 'inst_core'); this.addShake(0.25 * big, e.x, e.z);
+    const th = Math.max(1, e.threat || 1);
+    const xp = e.D.inst ? INST_XP[e.type] * th : Math.round(e.D.xp * e.dmgMul * (e.elite ? 3 : 1));
+    const credits = Math.round(e.D.credits * (e.D.inst ? th : e.dmgMul) * (e.elite ? 3 : 1)); this.addCredits(credits); this.addXP(xp);
+    this.ui && this.ui.float(e.x, 2, e.z, `+${credits} cr · +${xp} XP`, '#ffd166', true);
     const sec = sectorAt(Math.hypot(e.x, e.z)); const keys = Object.keys(sec.minerals);
-    this.minerals.spawn(e.x, e.z, pick(keys), randInt(1, 3) * (e.type === 'gunship' ? 3 : 1));
+    if (!e.D.inst || e.type === 'inst_core') this.minerals.spawn(e.x, e.z, pick(keys), randInt(1, 3) * (e.type === 'gunship' ? 3 : e.type === 'inst_core' ? 8 : 1));
+    // loot
+    const luck = this.stats().luck;
+    if (e.type === 'boss') { for (let k = 0; k < 3; k++) this.dropLoot(e.x + rand(-3, 3), e.z + rand(-3, 3), 'boss', 5, 2); }
+    else if (e.type === 'inst_core') { this.dropLoot(e.x, e.z, 'installation', th, 1); if (th >= 4) this.dropLoot(e.x, e.z, 'installation', th); }
+    else if (!e.D.inst && Math.random() < lootChance(e.elite ? 'elite' : 'pirate', luck)) this.dropLoot(e.x, e.z, e.elite ? 'elite' : 'pirate', th);
+    if (e.D.inst) this.instDestroyed(e);
+    // liberation progress: pirate kills inside a faction sector
+    const gs = gsectorAt(e.x, e.z); const g = this.s.galaxy;
+    if (isPirate(gs) && !g.liberated[gs.id] && (e.faction === gs.faction || e.D.inst)) { if (!e.D.inst) g.kills[gs.id] = (g.kills[gs.id] || 0) + 1; this.checkLiberation(gs); }
     this.s.stats.kills++; this.emit('kill', { type: e.type });
     if (e.guardId) this.field.depleted.set(e.guardId, this.time + 180);
     if (e.type === 'boss') {
@@ -501,15 +775,103 @@ export class Game {
     }
   }
 
+  instDestroyed(e) {
+    const L = this.liveOutposts.get(e.inst); this.instHp.set(e.partId, 0); if (!L) return;
+    if (e.type === 'inst_gen') { const left = L.gens.filter((g) => !g.dead).length; this.toast(left ? `Shield generator destroyed (${left} left)` : 'All generators down: the outpost core is exposed!', 'good'); if (!left) { this.audio.shieldDown(); this.rings.spawn(L.o.x, 1, L.o.z, 16, [0.6, 2, 3.4], 0.8); } }
+    if (e.type === 'inst_core') {
+      const g = this.s.galaxy; g.inst[L.o.id] = 1; this.s.stats.outposts++;
+      for (const part of L.parts) if (!part.dead && part !== e) { part.hp = 0; this.killEnemy(part); }
+      this.liveOutposts.delete(L.o.id);
+      for (let k = 0; k < 5; k++) setTimeout(() => this.boom(e.x + rand(-9, 9), 0.5, e.z + rand(-9, 9), 1.8, FACTIONS[e.faction] ? FACTIONS[e.faction].rgb : [3.2, 0.6, 0.4], k % 2 === 0), 120 + k * 160);
+      this.flashes.spawn(e.x, 3, e.z, 120, 0xffb070, 0.6, 50);
+      const done = outposts(L.sec).filter((o) => g.inst[o.id]).length; const tot = outposts(L.sec).length;
+      this.toast(`${L.o.name} destroyed! (${done}/${tot} in ${L.sec.name})`, 'level'); this.emit('outpost', {}); this.checkLiberation(L.sec); this.save();
+    }
+  }
+  checkLiberation(sec) {
+    const g = this.s.galaxy; if (g.liberated[sec.id] || !isPirate(sec)) return;
+    const prog = liberation(sec, g); this.libProg = { id: sec.id, v: prog, t: this.time };
+    if (prog >= 1) this.liberate(sec);
+  }
+  liberate(sec) {
+    const g = this.s.galaxy; g.liberated[sec.id] = 1; this.s.stats.liberated++;
+    const th = sec.threat; const cr = 1200 * th, xp = 400 * th, parts = 25 * th; this.addCredits(cr); this.s.parts += parts;
+    const p = this.player; const l = this.dropLoot(p.x + rand(-3, 3), p.z + rand(-3, 3), 'liberation', th, 2);
+    // the faction withdraws: its ships in this sector warp out
+    for (const e of this.enemies) if (!e.dead && e.faction === sec.faction && gsectorAt(e.x, e.z).id === sec.id && !e.D.inst && e.type !== 'boss') { this.fx.burst(e.x, 0.6, e.z, 14, 10, 0.4, 0.8, 0.1, [0.6, 2.2, 3.4], 3); this.removeEnemy(e); }
+    for (const [, L] of this.liveOutposts) if (L.sec === sec) { for (const part of L.parts) if (!part.dead) this.removeEnemy(part); this.liveOutposts.delete(L.o.id); }
+    this.heat = 0; this.audio.liberate();
+    this.rings.spawn(p.x, 0.3, p.z, 60, [0.5, 2.4, 3.6], 1.6); this.fx.burst(p.x, 2, p.z, 120, 30, 1.6, 1.6, 0.2, [0.6, 2.4, 3.6], 1.5);
+    const F = FACTIONS[sec.faction];
+    this.ui && this.ui.liberationNotice({ sec, faction: F, credits: cr, xp, parts, item: l.it });
+    this.addXP(xp); this.emit('liberate', { id: sec.id }); this.save();
+  }
+  setWaypoint(x, z, label) { this.s.galaxy.wp = { x: Math.round(x), z: Math.round(z), label: String(label || 'Waypoint').slice(0, 40) }; this.audio.click(); this.save(); }
+  clearWaypoint() { this.s.galaxy.wp = null; this.save(); }
+  // ---------- active abilities ----------
+  useAbility(id) {
+    if (this.dead || !this.abilityUnlocked(id)) return false;
+    const st = this.abilityState(id); const p = this.player;
+    if (st.rem > 0 || !st.energyOk) { this.audio.denied(); if (!st.energyOk && st.rem <= 0) this.ui && this.ui.float(p.x, 2.5, p.z, 'LOW ENERGY', '#6fd8ff'); return false; }
+    p.energy -= st.cost; this.abil.cd[id] = this.time + this.abilityCd(id); this.abil.last[id] = this.time;
+    const fx = this.skillFx(); const pst = this.stats();
+    if (id === 'dash') {
+      let dx = this.input.x, dz = this.input.z; let m = Math.hypot(dx, dz); if (m < 0.2) { dx = Math.sin(p.yaw); dz = Math.cos(p.yaw); m = 1; }
+      const dist = 26 * (1 + (fx.dashLen || 0)); this.dashT = 0.22; this.dashV = { x: dx / m * dist / 0.22, z: dz / m * dist / 0.22 }; p.yaw = Math.atan2(dx, dz);
+      this.rings.spawn(p.x, 0.3, p.z, 6 + p.radius * 2, [0.5, 3, 1.4], 0.4); this.fx.burst(p.x, 0.6, p.z, 24, 10, 0.4, 1.1, 0.1, [0.5, 3, 1.4], 3);
+    } else if (id === 'emp') {
+      const R = 24 + p.radius; let n = 0;
+      for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.z - p.z); if (d < R + e.radius) { n++; e.shield = 0; e.shieldT = this.time; if (e.type !== 'inst_core' && e.type !== 'inst_gen') e.stunT = e.type === 'boss' ? 1.2 : 3.5; if (e.cloaked) { e.cloaked = false; e.group.visible = true; } this.arc(p.x, p.z, e.x, e.z); this.damageEnemy(e, 10 * pst.dmg, false); } }
+      for (const b of this.bolts.list) if (!b.dead && b.owner === 'e' && Math.hypot(b.x - p.x, b.z - p.z) < R) { b.dead = true; this.fx.emit(b.x, 0.6, b.z, 0, 1, 0, 0.3, 0.8, 0.2, 0.8, 2.4, 3.6, 3); }
+      this.rings.spawn(p.x, 0.4, p.z, R, [0.6, 2.4, 3.6], 0.7); this.rings.spawn(p.x, 0.4, p.z, R * 0.6, [1.2, 2.8, 3.6], 0.5); this.flashes.spawn(p.x, 2, p.z, 40, 0x66ddff, 0.3, 34);
+      this.fx.burst(p.x, 0.6, p.z, 46, R * 2.2, 0.3, 0.7, 0.1, [0.5, 1.8, 2.8], 3, 0.05); this.addShake(0.3);
+      this.ui && this.ui.float(p.x, 3, p.z, n ? `EMP · ${n} disabled` : 'EMP', '#6fd8ff', true);
+    } else if (id === 'overload') {
+      p.sh = pst.shield; this.overT = 5 + (fx.barrier || 0); this.shieldMat.uniforms.uT.value = 1;
+      this.rings.spawn(p.x, 0.5, p.z, p.radius * 4, [0.5, 1.8, 3.6], 0.6); this.fx.burst(p.x, 1, p.z, 40, 8, 0.6, 1, 0.1, [0.5, 1.8, 3.6], 2);
+    } else if (id === 'barrage') {
+      const tg = this.enemies.filter((e) => !e.dead && !e.cloaked && Math.hypot(e.x - p.x, e.z - p.z) < 42).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+      const n = 12 + (fx.multi ? 4 : 0); const S = { vsShip: 1.3, vsRock: 1, shieldMul: 1, pen: 0.3, beh: 'missile' };
+      for (let k = 0; k < n; k++) { const t = tg.length ? { kind: 'ship', o: tg[k % tg.length] } : this.findTarget(p.x, p.z, 40, true); const a = p.yaw + (k / n - 0.5) * 2.6 + Math.PI; const sp = 34 * pst.proj;
+        setTimeout(() => { if (this.dead) return; this.bolts.spawn({ x: p.x, z: p.z, y: 1.2, vx: Math.sin(a) * sp * 0.6, vz: Math.cos(a) * sp * 0.6, speed: sp, dmg: 16 * pst.dmg, owner: 'p', kind: 'missile', S, target: t, life: 3.4, len: 1.1, w: 1.6, color: [3.4, 1.4, 0.4], splash: 3.5, turn: 7 }); }, k * 45); }
+    } else if (id === 'surge') {
+      this.surgeT = 6; this.rings.spawn(p.x, 0.5, p.z, p.radius * 5, [3.4, 2.6, 0.5], 0.7); this.fx.burst(p.x, 1, p.z, 50, 10, 0.6, 1.2, 0.1, [3.4, 2.6, 0.5], 2);
+    } else if (id === 'drones') {
+      this.clearAllies(); for (let k = 0; k < 3; k++) { const o = buildShip(1).group; o.scale.setScalar(0.42); o.traverse((m) => { if (m.isMesh && m.material && m.material.emissive) { /* keep */ } }); this.scene.add(o); this.allies.push({ obj: o, a: k / 3 * TAU, cd: rand(0, 0.5), t: 20, x: p.x, z: p.z }); }
+      this.fx.burst(p.x, 1, p.z, 30, 10, 0.5, 1, 0.1, [2.2, 0.8, 3.4], 2);
+    }
+    this.audio.ability(id, p.x, p.z); this.emit('ability', { id }); return true;
+  }
+  clearAllies() { for (const a of this.allies) { this.scene.remove(a.obj); disposeObject(a.obj); } this.allies.length = 0; }
+  updateAllies(dt) {
+    const p = this.player; const st = this.stats();
+    for (let i = this.allies.length - 1; i >= 0; i--) {
+      const a = this.allies[i]; a.t -= dt; if (a.t <= 0 || this.dead) { this.fx.burst(a.x, 1, a.z, 10, 6, 0.4, 0.6, 0.1, [2.2, 0.8, 3.4], 3); this.scene.remove(a.obj); disposeObject(a.obj); this.allies.splice(i, 1); continue; }
+      a.a += dt * 1.6; const t = this.findTarget(a.x, a.z, 26, true); const tgt = t && t.kind === 'ship' ? t.o : null;
+      const gx = tgt ? tgt.x + Math.cos(a.a) * 8 : p.x + Math.cos(a.a) * (p.radius + 6), gz = tgt ? tgt.z + Math.sin(a.a) * 8 : p.z + Math.sin(a.a) * (p.radius + 6);
+      a.x = damp(a.x, gx, 3, dt); a.z = damp(a.z, gz, 3, dt); a.obj.position.set(a.x, 1.6, a.z); a.obj.rotation.y = tgt ? Math.atan2(tgt.x - a.x, tgt.z - a.z) : -a.a;
+      a.cd -= dt; if (tgt && a.cd <= 0) { a.cd = 0.45; const d = Math.hypot(tgt.x - a.x, tgt.z - a.z) || 1, sp = 60;
+        this.bolts.spawn({ x: a.x, z: a.z, y: 1.4, vx: (tgt.x - a.x) / d * sp, vz: (tgt.z - a.z) / d * sp, dmg: 7 * st.dmg, owner: 'p', kind: 'cannon', S: { vsShip: 1.1, vsRock: 0.5, shieldMul: 1, pen: 0.1 }, life: 0.6, len: 1.2, w: 0.9, color: [2.4, 0.9, 3.6] }); this.audio.droneFire(a.x, a.z); }
+    }
+  }
   // ---------- player damage ----------
-  hurtPlayer(dmg, fx, fz) {
-    if (this.dead) return;
-    const p = this.player; p.hp -= dmg; this.lastHurt = this.time;
+  hurtPlayer(dmg, fx, fz, o = {}) {
+    if (this.dead || this.dashT > 0) return;
+    const p = this.player; const sk = this.skillFx(); const st = this.stats();
+    if (sk.evade && p.thrust > 0.3 && Math.random() < sk.evade) { this.ui && this.ui.float(p.x, 2.2, p.z, 'EVADED', '#5dff98'); return; }
+    dmg *= 1 - (o.energy ? (sk.resEnergy || 0) : (sk.resKinetic || 0));
+    if (this.overT > 0) dmg *= 0.25;
+    if (o.drain) p.energy = Math.max(0, p.energy - o.drain);
+    // shield layer
+    if (p.sh > 0) { const k = o.shieldBreak || 1; const sd = dmg * k; const ab = Math.min(p.sh, sd); p.sh -= ab; dmg = (sd - ab) / k; this.lastShieldHit = this.time; if (p.sh <= 0) { this.audio.shieldDown(); this.ui && this.ui.float(p.x, 2.4, p.z, 'SHIELDS DOWN', '#6fd8ff'); } }
+    p.hp -= dmg; this.lastHurt = this.time;
+    if (sk.emergencyShield && p.hp > 0 && p.hp < p.maxHp * 0.3 && this.time - this.emergT > 60) { this.emergT = this.time; p.sh = st.shield; this.audio.ability('overload', p.x, p.z); this.toast('Emergency shield restore!', 'good'); this.rings.spawn(p.x, 0.5, p.z, p.radius * 4, [0.5, 1.8, 3.6], 0.6); }
+    if (sk.emergencyThrust && p.hp > 0 && p.hp < p.maxHp * 0.25 && this.time - this.emergThrustT > 45) { this.emergThrustT = this.time; const a = fx !== undefined ? Math.atan2(p.x - fx, p.z - fz) : p.yaw; this.dashT = 0.25; this.dashV = { x: Math.sin(a) * 120, z: Math.cos(a) * 120 }; this.audio.ability('dash', p.x, p.z); this.toast('Emergency thrust engaged!', 'good'); }
     if (fx !== undefined && p.shield && this.shieldOn !== false) {
       const lx = fx - p.x, lz = fz - p.z, c = Math.cos(-p.yaw), s = Math.sin(-p.yaw);
       this.shieldMat.uniforms.uHit.value.set(lx * c + lz * s, 0.2, -lx * s + lz * c).normalize(); this.shieldMat.uniforms.uT.value = 1;
     }
-    this.addShake(0.18); this.audio.hurt(fx !== undefined && this.shieldOn !== false && !!p.shield, fx === undefined ? p.x : fx, fz === undefined ? p.z : fz); this.ui && this.ui.hurtFlash();
+    this.addShake(0.18); this.audio.hurt(fx !== undefined && p.sh > 0, fx === undefined ? p.x : fx, fz === undefined ? p.z : fz); if (dmg > 0.5) this.ui && this.ui.hurtFlash();
     if (p.hp <= 0) this.playerDie();
   }
   playerDie() {
@@ -520,8 +882,8 @@ export class Game {
     this.s.stats.deaths++;
     this.toast(`Hull breached! Lost ${lost} cargo units. Respawning at station…`, 'warn');
     setTimeout(() => {
-      p.x = 0; p.z = 34; p.vx = p.vz = 0; p.hp = p.maxHp; p.group.visible = true; this.dead = false; this.heat = 0;
-      for (const e of this.enemies) if (e.type !== 'sentinel' && e.type !== 'boss') this.removeEnemy(e);
+      p.x = 0; p.z = 34; p.vx = p.vz = 0; p.hp = p.maxHp; p.sh = this.stats().shield; p.energy = this.stats().energyMax; p.group.visible = true; this.dead = false; this.heat = 0; this.clearAllies();
+      for (const e of this.enemies) if (e.type !== 'sentinel' && e.type !== 'boss' && !e.D.inst) this.removeEnemy(e);
       this.camPos.set(p.x, 40, p.z + 25);
     }, 2600);
   }
@@ -560,9 +922,9 @@ export class Game {
   }
 
   // ---------- targeting ----------
-  findTarget(x, z, range, preferShips) {
+  findTarget(x, z, range, preferShips, avoid) {
     let best = null, bd = Infinity, bestS = null, bsd = Infinity;
-    for (const e of this.enemies) { if (e.dead || (e.type === 'sentinel' && e.state === 'idle' && !preferShips)) continue; const d = Math.hypot(e.x - x, e.z - z) - e.radius; if (d < range && d < bsd) { bsd = d; bestS = e; } }
+    for (const e of this.enemies) { if (e.dead || e.cloaked || (e.type === 'sentinel' && e.state === 'idle' && !preferShips) || (avoid && avoid.has(e))) continue; const d = Math.hypot(e.x - x, e.z - z) - e.radius; if (d < range && d < bsd) { bsd = d; bestS = e; } }
     if (preferShips && bestS) return { kind: 'ship', o: bestS };
     for (const a of this.field.list) { if (!a.alive) continue; const d = Math.hypot(a.x - x, a.z - z) - a.r * 0.8; if (d < range && d < bd) { bd = d; best = a; } }
     if (best) return { kind: 'rock', o: best };
@@ -577,22 +939,29 @@ export class Game {
   }
 
   updateWeapons(dt) {
-    const p = this.player; const st = this.stats();
-    const hasCombat = p.weapons.some((w) => w.key !== 'laser');
-    let laserOn = 0;
+    const p = this.player; const st = this.stats(); const fx = st.fx;
+    const hasCombat = p.weapons.some((w) => w.key !== 'beam' || w.S.vsShip >= 1);
+    let laserOn = 0; this.taken.clear();
+    const cool = 12 * Math.pow(st.rate, 0.8); const eMul = 1 + (fx.weaponEnergy || 0); const heatMul = 1 + (fx.heat || 0);
     p.group.updateMatrixWorld(true);
     for (const w of p.weapons) {
-      const W = WEAPONS[w.key]; const range = W.range * st.range;
-      w.retarget -= dt; w.cd -= dt;
+      const S = w.S; const range = S.range * st.range;
+      w.retarget -= dt; w.cd -= dt; w.heat = Math.max(0, w.heat - cool * dt);
+      if (w.over > 0) { w.over -= dt; if (w.over <= 0) w.heat = 30; }
       if (w.recoil > 0) { w.recoil = Math.max(0, w.recoil - dt * 5); w.turret.userData.barrel.position.z = w.bz0 - w.recoil * 0.35 * w.turret.userData.size; }
-      if (this.dead) { if (w.beam) { w.beam.visible = false; w.beam.userData.impact.visible = false; } continue; }
-      const preferShips = w.key !== 'laser' || !hasCombat;
+      const off = this.dead || w.over > 0;
+      if (off) { if (w.beam) { w.beam.visible = false; w.beam.userData.impact.visible = false; } continue; }
+      const preferShips = S.vsShip >= 1 || !hasCombat;
       if (w.retarget <= 0 || !this.targetValid(w.target, p.x, p.z, range)) {
-        w.target = this.findTarget(p.x, p.z, range, preferShips); w.retarget = 0.3;
+        w.target = this.findTarget(p.x, p.z, range, preferShips, fx.multi ? this.taken : null) || (fx.multi ? this.findTarget(p.x, p.z, range, preferShips) : null); w.retarget = 0.3;
       }
+      if (w.target && w.target.kind === 'ship') this.taken.add(w.target.o);
+      const heatUp = (h) => { w.heat += h * heatMul; if (w.heat >= 100) { w.over = 2.5; w.heat = 100; this.audio.overheat(); this.ui && this.ui.float(p.x, 2.8, p.z, 'OVERHEAT', '#ff7a45'); } };
+      const pay = (e) => { e *= eMul; if (p.energy < e) return false; p.energy -= e; return true; };
+      const critC = st.crit + S.crit;
       // pulse is omni
-      if (w.key === 'pulse') {
-        if (w.target && w.cd <= 0) { w.cd = 1 / (W.rate * st.rate); this.firePulse(range * 0.9, W.dmg * st.dmg, W); }
+      if (S.beh === 'pulse') {
+        if (w.target && w.cd <= 0 && pay(S.energy)) { w.cd = 1 / (S.rate * st.rate); heatUp(S.heat); this.firePulse(range * 0.9, S.dmg * st.dmg, S, critC); }
         continue;
       }
       const t = w.target;
@@ -604,37 +973,42 @@ export class Game {
       const cur = w.turret.rotation.y; const dd = angleDiff(cur, wantYaw);
       w.turret.rotation.y = cur + clamp(dd, -10 * dt, 10 * dt);
       const aimed = Math.abs(dd) < 0.5;
-      if (w.key === 'laser') {
-        laserOn++;
+      if (S.beh === 'beam') {
+        const powered = pay(S.energy * dt);
         const tgt = this.tmpV2.set(o.x, ty, o.z); const dir = tgt.clone().sub(muzzle); const len = dir.length();
         const rad = t.kind === 'rock' ? o.r * 0.75 : o.radius * 0.6; const hitLen = Math.max(0.5, len - rad);
         dir.normalize(); const hit = muzzle.clone().addScaledVector(dir, hitLen);
-        w.beam.visible = aimed; w.beam.position.copy(muzzle); w.beam.lookAt(hit); w.beam.scale.z = hitLen;
-        const flick = 0.85 + Math.random() * 0.3; w.beam.scale.x = w.beam.scale.y = 0.06 * flick * (1 + this.s.tier * 0.12);
-        const imp = w.beam.userData.impact; imp.visible = aimed; imp.position.copy(hit); imp.scale.setScalar((1.6 + this.s.tier * 0.25) * flick);
-        if (!aimed) continue;
-        const mult = t.kind === 'rock' ? W.vsRock * st.mining : W.vsShip;
-        w.acc += W.dps * st.dmg * mult * st.rate * dt; w.tick -= dt;
-        if (Math.random() < 0.7 * this.fx.budget) this.fx.emit(hit.x, hit.y, hit.z, rand(-6, 6), rand(0, 4), rand(-6, 6), 0.35, 0.7, 0.1, 1.2, 2.8, 3.4, 3);
+        const on = aimed && powered; if (on) laserOn++;
+        w.beam.visible = on; w.beam.position.copy(muzzle); w.beam.lookAt(hit); w.beam.scale.z = hitLen;
+        const flick = 0.85 + Math.random() * 0.3; w.beam.scale.x = w.beam.scale.y = 0.06 * flick * (1 + this.s.tier * 0.12) * (1 + w.item.r * 0.12);
+        const imp = w.beam.userData.impact; imp.visible = on; imp.position.copy(hit); imp.scale.setScalar((1.6 + this.s.tier * 0.25) * flick * (1 + w.item.r * 0.1));
+        if (!on) continue;
+        heatUp(S.heat * dt);
+        const mult = t.kind === 'rock' ? S.vsRock * st.mining : S.vsShip * (1 + (fx.beamDmg || 0));
+        w.acc += S.dmg * st.dmg * mult * st.rate * dt; w.tick -= dt;
+        const bc = S.beamRgb;
+        if (Math.random() < 0.7 * this.fx.budget) this.fx.emit(hit.x, hit.y, hit.z, rand(-6, 6), rand(0, 4), rand(-6, 6), 0.35, 0.7, 0.1, bc[0] * 0.6, bc[1] * 0.9, bc[2], 3);
         if (Math.random() < 0.15 * this.fx.budget && t.kind === 'rock') this.fx.emit(hit.x, hit.y, hit.z, rand(-3, 3), rand(0, 2), rand(-3, 3), 0.8, 0.4, 1.4, 0.25, 0.22, 0.22, 2);
         if (w.tick <= 0) {
-          w.tick = 0.15; const crit = Math.random() < st.crit; const dmg = w.acc * (crit ? 2.5 : 1); w.acc = 0;
-          if (t.kind === 'rock') { this.damageRock(o, dmg, crit); this.audio.rockHit(hit.x, hit.z); } else { this.damageEnemy(o, dmg, crit); this.audio.hit(hit.x, hit.z); }
+          w.tick = 0.15; const crit = Math.random() < critC; const dmg = w.acc * (crit ? 2.5 : 1); w.acc = 0;
+          if (t.kind === 'rock') { this.damageRock(o, dmg, crit); this.audio.rockHit(hit.x, hit.z); } else { this.damageEnemy(o, dmg, crit, S); this.audio.hit(hit.x, hit.z); }
         }
       } else if (w.cd <= 0 && aimed) {
-        if (w.key === 'cannon') {
-          w.cd = 1 / (W.rate * st.rate);
-          const speed = W.speed * st.proj; const d = Math.hypot(o.x - muzzle.x, o.z - muzzle.z); const lead = d / speed;
+        if (!pay(S.energy)) { w.cd = 0.15; continue; }
+        w.cd = 1 / (S.rate * st.rate); heatUp(S.heat);
+        if (S.beh === 'bolt') {
+          const speed = S.speed * st.proj; const d = Math.hypot(o.x - muzzle.x, o.z - muzzle.z); const lead = d / speed;
           const ax = o.x + (o.vx || 0) * lead, az = o.z + (o.vz || 0) * lead; const ad = Math.hypot(ax - muzzle.x, az - muzzle.z) || 1;
           const sp = rand(-0.03, 0.03); const ux = (ax - muzzle.x) / ad, uz = (az - muzzle.z) / ad; const c = Math.cos(sp), s = Math.sin(sp);
-          this.bolts.spawn({ x: muzzle.x, z: muzzle.z, y: muzzle.y, vx: (ux * c - uz * s) * speed, vz: (uz * c + ux * s) * speed, dmg: W.dmg * st.dmg, owner: 'p', kind: 'cannon', W, life: range * 1.3 / speed, len: 1.8, w: 1, color: [3.2, 2.4, 0.8] });
-          this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.08, 1.8, 0.5, 3, 2.2, 0.8, 0); this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.05, 0.7, 0.2, 4, 4, 3, 0); w.recoil = 1;
-          this.audio.shoot(muzzle.x, muzzle.z, this.s.tier);
-        } else if (w.key === 'missile') {
-          w.cd = 1 / (W.rate * st.rate);
-          for (const off of [-0.5, 0.5]) {
-            const base = p.yaw + w.turret.rotation.y + off; const speed = W.speed * st.proj;
-            this.bolts.spawn({ x: muzzle.x, z: muzzle.z, y: muzzle.y, vx: Math.sin(base) * speed * 0.5, vz: Math.cos(base) * speed * 0.5, speed, dmg: W.dmg * st.dmg, owner: 'p', kind: 'missile', W, target: t, life: 3.2, len: 1.2, w: 1.8, color: [3.4, 1.6, 0.5], splash: W.splash * (1 + 0.1 * (this.s.tier - 1)) });
+          const crit = Math.random() < critC;
+          this.bolts.spawn({ x: muzzle.x, z: muzzle.z, y: muzzle.y, vx: (ux * c - uz * s) * speed, vz: (uz * c + ux * s) * speed, dmg: S.dmg * st.dmg, crit, owner: 'p', kind: 'cannon', S, pierce: S.pierce, life: range * 1.3 / speed, len: S.len, w: S.w, color: S.rgb });
+          const mc = S.rgb; this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.08, 1.8 * S.w, 0.5, mc[0], mc[1], mc[2], 0); this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.05, 0.7, 0.2, 4, 4, 3, 0); w.recoil = 1;
+          this.audio.shoot(muzzle.x, muzzle.z, this.s.tier + (S.cat === 'plasma' ? -1.5 : S.cat === 'railgun' && S.speed > 100 ? -2 : S.cat === 'ion' ? 2 : 0));
+        } else if (S.beh === 'missile') {
+          const n = 2 + (fx.multi ? 1 : 0);
+          for (let k = 0; k < n; k++) {
+            const off = (k / (n - 1) - 0.5) * 1.0; const base = p.yaw + w.turret.rotation.y + off; const speed = S.speed * st.proj;
+            this.bolts.spawn({ x: muzzle.x, z: muzzle.z, y: muzzle.y, vx: Math.sin(base) * speed * 0.5, vz: Math.cos(base) * speed * 0.5, speed, dmg: S.dmg * st.dmg * (1 + (fx.missileDmg || 0)), crit: Math.random() < critC, owner: 'p', kind: 'missile', S, target: t, life: 3.2, len: 1.2, w: 1.8, color: [3.4, 1.6, 0.5], splash: S.splash * (1 + 0.1 * (this.s.tier - 1)), turn: 6 * (1 + (fx.missileTurn || 0)) });
           }
           w.recoil = 1; this.smoke.burst(muzzle.x, muzzle.y, muzzle.z, 3, 2, 0.8, 0.5, 1.6, [0.3, 0.3, 0.32], 2, 0.2);
           this.audio.missile(muzzle.x, muzzle.z);
@@ -643,14 +1017,15 @@ export class Game {
     }
     this.audio.laser(laserOn > 0 && !this.dead, Math.min(2, laserOn));
     // point defence (T5)
+    const pdS = { vsShip: 1.2, vsRock: 0.8, shieldMul: 1, pen: 0.1 };
     for (const pd of p.pd || []) {
       pd.cd -= dt; if (pd.recoil > 0) { pd.recoil = Math.max(0, pd.recoil - dt * 6); pd.turret.userData.barrel.position.z = pd.bz0 - pd.recoil * 0.25; }
       const mz = this.tmpV.copy(pd.turret.userData.muzzle); pd.turret.localToWorld(mz);
-      let tgt = null, bd = 22; for (const e of this.enemies) { if (e.dead || (e.type === 'sentinel' && e.state === 'idle')) continue; const d = Math.hypot(e.x - mz.x, e.z - mz.z); if (d < bd) { bd = d; tgt = e; } }
+      let tgt = null, bd = 22; for (const e of this.enemies) { if (e.dead || e.cloaked || (e.type === 'sentinel' && e.state === 'idle')) continue; const d = Math.hypot(e.x - mz.x, e.z - mz.z); if (d < bd) { bd = d; tgt = e; } }
       const wy = tgt ? angleDiff(0, Math.atan2(tgt.x - mz.x, tgt.z - mz.z) - p.yaw) : Math.sin(this.time * 0.5 + pd.bz0 * 10) * 0.8;
       pd.turret.rotation.y = pd.turret.rotation.y + clamp(angleDiff(pd.turret.rotation.y, wy), -8 * dt, 8 * dt);
       if (tgt && pd.cd <= 0 && !this.dead) { pd.cd = 0.45 / st.rate; pd.recoil = 1; const d = bd || 1, sp = 60;
-        this.bolts.spawn({ x: mz.x, z: mz.z, y: mz.y, vx: (tgt.x - mz.x) / d * sp, vz: (tgt.z - mz.z) / d * sp, dmg: 4 * st.dmg, owner: 'p', kind: 'cannon', W: WEAPONS.cannon, life: 0.5, len: 0.9, w: 0.6, color: [0.8, 2.6, 3.4] });
+        this.bolts.spawn({ x: mz.x, z: mz.z, y: mz.y, vx: (tgt.x - mz.x) / d * sp, vz: (tgt.z - mz.z) / d * sp, dmg: 4 * st.dmg, owner: 'p', kind: 'cannon', S: pdS, life: 0.5, len: 0.9, w: 0.6, color: [0.8, 2.6, 3.4] });
         this.fx.emit(mz.x, mz.y, mz.z, 0, 0, 0, 0.05, 0.8, 0.2, 1, 2.6, 3.2, 0); this.audio.pdFire(mz.x, mz.z); }
     }
     // escort drones (T4/T5)
@@ -662,24 +1037,29 @@ export class Game {
       if (esc.cd <= 0 && !this.dead) {
         const t = this.findTarget(ex, ez, 20 * st.range, true);
         if (t) { esc.cd = 0.6 / st.rate; const o = t.o; const d = Math.hypot(o.x - ex, o.z - ez) || 1; const sp = 55 * st.proj;
-          this.bolts.spawn({ x: ex, z: ez, y: 1.2, vx: (o.x - ex) / d * sp, vz: (o.z - ez) / d * sp, dmg: 5 * st.dmg, owner: 'p', kind: 'cannon', W: WEAPONS.cannon, life: 0.6, len: 1.2, w: 0.8, color: [0.6, 2.6, 3.4] }); this.audio.droneFire(ex, ez); }
+          this.bolts.spawn({ x: ex, z: ez, y: 1.2, vx: (o.x - ex) / d * sp, vz: (o.z - ez) / d * sp, dmg: 5 * st.dmg, owner: 'p', kind: 'cannon', S: pdS, life: 0.6, len: 1.2, w: 0.8, color: [0.6, 2.6, 3.4] }); this.audio.droneFire(ex, ez); }
         else esc.cd = 0.3;
       }
     }
   }
-  firePulse(radius, dmg, W) {
-    const p = this.player; const st = this.stats();
+  firePulse(radius, dmg, S, critC) {
+    const p = this.player;
+    const c0 = RARITIES[0].rgb; const tint = S.rgb || [1.8, 0.8, 3.2];
     this.rings.spawn(p.x, 0.3, p.z, radius, [1.8, 0.8, 3.2], 0.5); this.rings.spawn(p.x, 0.3, p.z, radius * 0.7, [1.2, 0.6, 2.4], 0.35);
     this.fx.burst(p.x, 0.4, p.z, 30, radius * 3, 0.35, 1.0, 0.2, [1.6, 0.8, 3], 3, 0.05);
     this.audio.pulse(p.x, p.z); this.addShake(0.08);
-    for (const e of [...this.enemies]) if (!e.dead && Math.hypot(e.x - p.x, e.z - p.z) < radius + e.radius) { const c = Math.random() < st.crit; this.damageEnemy(e, dmg * W.vsShip * (c ? 2.5 : 1), c); }
-    for (const a of [...this.field.list]) if (a.alive && Math.hypot(a.x - p.x, a.z - p.z) < radius + a.r * 0.5) { const c = Math.random() < st.crit; this.damageRock(a, dmg * W.vsRock * st.mining * (c ? 2.5 : 1), c); }
+    for (const e of [...this.enemies]) if (!e.dead && !e.cloaked && Math.hypot(e.x - p.x, e.z - p.z) < radius + e.radius) { const c = Math.random() < critC; this.damageEnemy(e, dmg * S.vsShip * (c ? 2.5 : 1), c, S); }
+    for (const a of [...this.field.list]) if (a.alive && Math.hypot(a.x - p.x, a.z - p.z) < radius + a.r * 0.5) { const c = Math.random() < critC; this.damageRock(a, dmg * S.vsRock * this.stats().mining * (c ? 2.5 : 1), c); }
   }
   explodeMissile(b) {
-    const st = this.stats();
+    const st = this.stats(); const S = b.S;
     this.boom(b.x, 0.5, b.z, 0.6, null, false); this.rings.spawn(b.x, 0.4, b.z, b.splash, [3, 1.4, 0.4], 0.35); this.audio.missileBoom(b.x, b.z);
-    for (const e of [...this.enemies]) { if (e.dead) continue; const d = Math.hypot(e.x - b.x, e.z - b.z); if (d < b.splash + e.radius) { const c = Math.random() < st.crit; this.damageEnemy(e, b.dmg * b.W.vsShip * (d < e.radius + 0.5 ? 1 : 0.6) * (c ? 2.5 : 1), c); } }
-    for (const a of [...this.field.list]) { if (!a.alive) continue; const d = Math.hypot(a.x - b.x, a.z - b.z); if (d < b.splash + a.r * 0.7) { const c = Math.random() < st.crit; this.damageRock(a, b.dmg * b.W.vsRock * st.mining * (c ? 2.5 : 1), c); } }
+    for (const e of [...this.enemies]) { if (e.dead) continue; const d = Math.hypot(e.x - b.x, e.z - b.z); if (d < b.splash + e.radius) { const c = b.crit && d < e.radius + 0.5; this.damageEnemy(e, b.dmg * S.vsShip * (d < e.radius + 0.5 ? 1 : 0.6) * (c ? 2.5 : 1), c, S); } }
+    for (const a of [...this.field.list]) { if (!a.alive) continue; const d = Math.hypot(a.x - b.x, a.z - b.z); if (d < b.splash + a.r * 0.7) { const c = !!b.crit; this.damageRock(a, b.dmg * S.vsRock * st.mining * (c ? 2.5 : 1), c); } }
+  }
+  boltSplash(b, hitE) { // plasma / volatile splash
+    const S = b.S; const R = S.splash; this.rings.spawn(b.x, 0.4, b.z, R, S.rgb ? S.rgb.map((v) => v * 0.7) : [3, 1.2, 0.5], 0.3);
+    for (const e of [...this.enemies]) { if (e.dead || e === hitE) continue; if (Math.hypot(e.x - b.x, e.z - b.z) < R + e.radius) this.damageEnemy(e, b.dmg * S.vsShip * 0.5 * S.splashK, false, S, true); }
   }
   updateBolts(dt) {
     const p = this.player; const st = this.stats();
@@ -691,20 +1071,30 @@ export class Game {
         if (t && (t.kind === 'rock' ? t.o.alive : !t.o.dead)) { tx = t.o.x; tz = t.o.z; }
         else { const nt = this.findTarget(b.x, b.z, 30, true); if (nt) { b.target = nt; tx = nt.o.x; tz = nt.o.z; } }
         const cur = Math.atan2(b.vx, b.vz); let sp = Math.hypot(b.vx, b.vz); sp = Math.min(b.speed, sp + b.speed * 2 * dt);
-        let ang = cur; if (tx !== undefined) ang = cur + clamp(angleDiff(cur, Math.atan2(tx - b.x, tz - b.z)), -6 * dt, 6 * dt);
+        const tr = b.turn || 6; let ang = cur; if (tx !== undefined) ang = cur + clamp(angleDiff(cur, Math.atan2(tx - b.x, tz - b.z)), -tr * dt, tr * dt);
         b.vx = Math.sin(ang) * sp; b.vz = Math.cos(ang) * sp;
         if (Math.random() < 0.8 * this.fx.budget) this.fx.emit(b.x, b.y, b.z, rand(-1, 1), rand(0, 1), rand(-1, 1), 0.3, 0.8, 0.3, 2.4, 1.1, 0.4, 2);
         if (Math.random() < 0.9 * this.smoke.budget) this.smoke.emit(b.x, b.y, b.z, rand(-0.6, 0.6), rand(0, 0.8), rand(-0.6, 0.6), 1.1, 0.4, 1.8, 0.32, 0.31, 0.33, 1.5, 0.8);
       }
       b.x += b.vx * dt; b.z += b.vz * dt;
       if (b.owner === 'p') {
-        let hit = false;
-        for (const e of this.enemies) { if (e.dead) continue; if (Math.hypot(e.x - b.x, e.z - b.z) < e.radius + 0.4) { hit = true; if (b.kind === 'missile') this.explodeMissile(b); else { const c = Math.random() < st.crit; this.damageEnemy(e, b.dmg * b.W.vsShip * (c ? 2.5 : 1), c); this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, [3, 2, 0.8], 3); this.audio.hit(b.x, b.z); } break; } }
-        if (!hit) for (const a of this.field.list) { if (!a.alive) continue; if (Math.abs(a.x - b.x) < a.r && Math.abs(a.z - b.z) < a.r && Math.hypot(a.x - b.x, a.z - b.z) < a.r * 0.85) { hit = true; if (b.kind === 'missile') this.explodeMissile(b); else { const c = Math.random() < st.crit; this.damageRock(a, b.dmg * b.W.vsRock * st.mining * (c ? 2.5 : 1), c); this.audio.rockHit(b.x, b.z); this.fx.burst(b.x, a.y, b.z, 5, 9, 0.3, 0.45, 0.06, [3, 2, 0.8], 3, 0.7); this.smoke.emit(b.x, a.y + 0.3, b.z, 0, 0.6, 0, 0.9, 0.5, 1.4, 0.2, 0.18, 0.18, 1.5, 0.7); } break; } }
+        let hit = false; const S = b.S;
+        for (const e of this.enemies) {
+          if (e.dead || e.cloaked || (b.hitSet && b.hitSet.has(e))) continue;
+          if (Math.hypot(e.x - b.x, e.z - b.z) < e.radius + 0.4) {
+            if (b.kind === 'missile') { hit = true; this.explodeMissile(b); break; }
+            const c = !!b.crit; this.damageEnemy(e, b.dmg * S.vsShip * (c ? 2.5 : 1), c, S);
+            if (S.splash) this.boltSplash(b, e);
+            const col = b.color || [3, 2, 0.8]; this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, col, 3); this.audio.hit(b.x, b.z);
+            if (b.pierce > 0) { b.pierce--; (b.hitSet ||= new Set()).add(e); b.dmg *= 0.8; continue; }
+            hit = true; break;
+          }
+        }
+        if (!hit) for (const a of this.field.list) { if (!a.alive) continue; if (Math.abs(a.x - b.x) < a.r && Math.abs(a.z - b.z) < a.r && Math.hypot(a.x - b.x, a.z - b.z) < a.r * 0.85) { hit = true; if (b.kind === 'missile') this.explodeMissile(b); else { const c = !!b.crit; this.damageRock(a, b.dmg * S.vsRock * st.mining * (c ? 2.5 : 1), c); this.audio.rockHit(b.x, b.z); this.fx.burst(b.x, a.y, b.z, 5, 9, 0.3, 0.45, 0.06, b.color || [3, 2, 0.8], 3, 0.7); this.smoke.emit(b.x, a.y + 0.3, b.z, 0, 0.6, 0, 0.9, 0.5, 1.4, 0.2, 0.18, 0.18, 1.5, 0.7); } break; } }
         if (hit) { b.dead = true; continue; }
         if (b.life <= 0 && b.kind === 'missile') this.explodeMissile(b);
       } else if (!this.dead) {
-        if (Math.hypot(p.x - b.x, p.z - b.z) < p.radius) { this.hurtPlayer(b.dmg, b.x - b.vx * 0.05, b.z - b.vz * 0.05); this.fx.burst(b.x, 0.5, b.z, 6, 8, 0.3, 0.8, 0.1, [3, 0.6, 0.4], 3); b.dead = true; continue; }
+        if (Math.hypot(p.x - b.x, p.z - b.z) < p.radius) { const M = b.fac ? this.facMods(b.fac) : null; this.hurtPlayer(b.dmg, b.x - b.vx * 0.05, b.z - b.vz * 0.05, { energy: b.energy, drain: M && M.drain, shieldBreak: M && M.shieldBreak }); this.fx.burst(b.x, 0.5, b.z, 6, 8, 0.3, 0.8, 0.1, [3, 0.6, 0.4], 3); b.dead = true; continue; }
       }
       if (b.life <= 0) b.dead = true;
     }
@@ -715,7 +1105,7 @@ export class Game {
   initBars() {
     const bg = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthTest: false });
     const geo = new THREE.PlaneGeometry(1, 1); geo.translate(0.5, 0, 0);
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 56; i++) {
       const g = new THREE.Group(); const b = new THREE.Mesh(geo, bg); const f = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xff4455, depthTest: false }));
       b.renderOrder = 20; f.renderOrder = 21; f.position.z = 0.01; g.add(b, f); g.visible = false; this.scene.add(g); this.bars.push({ g, f });
     }
@@ -723,7 +1113,9 @@ export class Game {
   updateBars() {
     let i = 0; const q = this.camera.quaternion;
     const show = (x, y, z, w, frac, col) => { if (i >= this.bars.length) return; const B = this.bars[i++]; B.g.visible = true; B.g.position.set(x - w / 2, y, z); B.g.quaternion.copy(q); B.g.scale.set(w, Math.max(0.22, w * 0.07), 1); B.f.scale.x = clamp(frac, 0, 1); B.f.material.color.set(col); };
-    for (const e of this.enemies) if (!e.dead && e.hp < e.maxHp && e.type !== 'boss') show(e.x, 2 + e.radius, e.z - e.radius, Math.max(2, e.radius * 1.6), e.hp / e.maxHp, '#ff4d5e');
+    for (const e of this.enemies) { if (e.dead || e.type === 'boss' || e.cloaked) continue; const w = Math.max(2, e.radius * 1.6); const yb = 2 + e.radius * (e.D.inst ? 1.3 : 1);
+      if (e.hp < e.maxHp || e.elite || (e.D.inst && Math.hypot(e.x - this.player.x, e.z - this.player.z) < 50)) show(e.x, yb, e.z - e.radius, w, e.hp / e.maxHp, e.elite ? '#ffb238' : '#ff4d5e');
+      if (e.maxShield > 0 && (e.shield < e.maxShield || e.hp < e.maxHp)) show(e.x, yb + 0.45, e.z - e.radius, w, e.shield / e.maxShield, '#4fd2ff'); }
     for (const a of this.field.list) if (a.alive && a.hp < a.maxHp && Math.hypot(a.x - this.player.x, a.z - this.player.z) < 50) show(a.x, a.y + a.r + 1, a.z - a.r, Math.max(1.8, a.r * 1.1), a.hp / a.maxHp, MINERALS[a.type].css);
     for (; i < this.bars.length; i++) this.bars[i].g.visible = false;
   }
@@ -738,26 +1130,42 @@ export class Game {
     if (mag > 0.08 && this.autopilot) { this.autopilot = false; this.toast('Autopilot off'); }
     if (this.autopilot && !this.dead) { const d = Math.hypot(p.x, p.z) || 1; ix = -p.x / d; iz = -p.z / d; if (d < DOCK_R - 6) { this.autopilot = false; } }
     const im = Math.min(1, Math.hypot(ix, iz));
+    // timers: abilities, energy, shields
+    if (this.overT > 0) this.overT -= dt; if (this.surgeT > 0) { this.surgeT -= dt; if (Math.random() < 0.5 * this.fx.budget) this.fx.emit(p.x + rand(-1, 1) * p.radius, 0.8, p.z + rand(-1, 1) * p.radius, 0, 2, 0, 0.5, 0.8, 0.2, 3.4, 2.6, 0.5, 2); }
     if (!this.dead) {
+      p.energy = Math.min(st.energyMax, p.energy + st.energyRegen * dt);
+      if (this.docked) p.sh = Math.min(st.shield, p.sh + st.shield * 0.5 * dt);
+      else if (this.time - this.lastShieldHit > st.shieldDelay && this.time - this.lastHurt > st.shieldDelay) p.sh = Math.min(st.shield, p.sh + st.shield * st.shieldRegen * dt);
+      if (this.skillFx().autoRepair && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * this.skillFx().autoRepair * dt);
+    }
+    if (this.overT > 0) { this.shieldMat.uniforms.uT.value = Math.max(this.shieldMat.uniforms.uT.value, 0.55 + 0.15 * Math.sin(this.time * 12)); }
+    if (!this.dead) {
+      if (this.dashT > 0) { // quantum dash: fixed-velocity blink, then carry top speed
+        const ddt = Math.min(dt, this.dashT); this.dashT -= dt; p.x += this.dashV.x * ddt; p.z += this.dashV.z * ddt;
+        if (Math.random() < 0.9) this.fx.emit(p.x, 0.6, p.z, 0, 0, 0, 0.35, p.radius * 1.4, 0.4, 0.4, 2.6, 1.4, 0);
+        if (this.dashT <= 0) { const m = Math.hypot(this.dashV.x, this.dashV.z) || 1; p.vx = this.dashV.x / m * st.speed; p.vz = this.dashV.z / m * st.speed; this.rings.spawn(p.x, 0.3, p.z, 4 + p.radius, [0.5, 3, 1.4], 0.3); }
+      } else {
       p.vx += ix * st.accel * dt; p.vz += iz * st.accel * dt;
       const drag = im > 0.05 ? 0.6 : 1.8; const k = Math.exp(-drag * dt); p.vx *= k; p.vz *= k;
-      const sp = Math.hypot(p.vx, p.vz); const max = st.speed * (this.autopilot ? 1.15 : 1);
+      const sp = Math.hypot(p.vx, p.vz); const max = st.speed * (this.autopilot ? 1.15 * (1 + (st.fx.hyper || 0)) : 1) * (this.time - this.emergThrustT < 4 ? 1.5 : 1);
       if (sp > max) { p.vx *= max / sp; p.vz *= max / sp; }
       p.x += p.vx * dt; p.z += p.vz * dt;
+      }
     }
     p.thrust = damp(p.thrust, im, 6, dt);
     // collisions with rocks & station core
     for (const a of this.field.list) {
       if (!a.alive) continue; const dx = p.x - a.x, dz = p.z - a.z; const min = a.r * 0.85 + p.radius * 0.7;
       if (Math.abs(dx) > min || Math.abs(dz) > min) continue;
-      const d = Math.hypot(dx, dz); if (d < min && d > 0.001) { const nx = dx / d, nz = dz / d; p.x = a.x + nx * min; p.z = a.z + nz * min; const vn = p.vx * nx + p.vz * nz; if (vn < 0) { p.vx -= vn * 1.4 * nx; p.vz -= vn * 1.4 * nz; } }
+      const d = Math.hypot(dx, dz); if (d < min && d > 0.001) { const nx = dx / d, nz = dz / d; p.x = a.x + nx * min; p.z = a.z + nz * min; const vn = p.vx * nx + p.vz * nz; if (vn < 0) { p.vx -= vn * 1.4 * nx; p.vz -= vn * 1.4 * nz;
+        if (vn < -11 && !st.fx.collision && !this.docked && this.dashT <= 0) this.hurtPlayer((-vn - 11) * 0.6 * this.s.tier, a.x, a.z, { energy: false }); } } // high-speed impacts hurt (Impact Dampers negate)
     }
     { const d = Math.hypot(p.x, p.z); const min = 8 + p.radius * 0.5; if (d < min && d > 0.001) { p.x = p.x / d * min; p.z = p.z / d * min; } }
     // heading & banking
     const sp = Math.hypot(p.vx, p.vz);
     if (sp > 0.8 || im > 0.1) {
       const want = im > 0.1 ? Math.atan2(ix, iz) : Math.atan2(p.vx, p.vz);
-      const turnRate = 4.2 * T.accel; const dy = angleDiff(p.yaw, want); const step = clamp(dy, -turnRate * dt, turnRate * dt);
+      const turnRate = st.turn; const dy = angleDiff(p.yaw, want); const step = clamp(dy, -turnRate * dt, turnRate * dt);
       p.yaw += step; p.yawVel = step / Math.max(dt, 1e-4);
     } else p.yawVel = 0;
     p.bank = damp(p.bank, clamp(p.yawVel * 0.22, -0.65, 0.65), 6, dt);
@@ -797,9 +1205,18 @@ export class Game {
       tb.scale.x = tb.scale.y = w; tb.material.opacity = a; tb.children[0].material.opacity = 0.25 * a;
       if (Math.random() < 0.35 * this.fx.budget) { const t = Math.random(); this.fx.emit(lerp(port.x, p.x, t), 0.5, lerp(port.z, p.z, t), 0, 0.3, 0, 0.5, 0.6, 0.1, 0.4, 1.8, 2.6, 1); }
     } else this.tractor.visible = false;
-    // sector tracking
+    // sector tracking: distance rings (minerals/quests) + named galaxy sectors (factions, threat, discovery)
     const sec = sectorAt(dHome);
-    if (sec.id !== this.sectorId) { if (this.time > 3) this.audio.warp(); this.sectorId = sec.id; this.ui && this.ui.sectorBanner(sec); if (sec.id > this.s.maxSector) { this.s.maxSector = sec.id; this.save(); } }
+    if (sec.id !== this.sectorId) { this.sectorId = sec.id; if (sec.id > this.s.maxSector) { this.s.maxSector = sec.id; this.save(); } }
+    const gs = gsectorAt(p.x, p.z);
+    if (gs !== this.gsec) {
+      this.gsec = gs; const g = this.s.galaxy; const fresh = !g.explored[gs.id]; let xp = 0;
+      if (fresh) { g.explored[gs.id] = 1; xp = 60 * Math.max(1, gs.ringI); this.addXP(xp); this.secEnterT = this.time; this.emit('discover', { id: gs.id }); this.save(); }
+      if (this.time > 3) { this.audio.warp(); this.audio.sector(); }
+      this.ui && this.ui.sectorBanner(gs, { fresh, xp });
+    }
+    // waypoint arrival
+    { const wp = this.s.galaxy.wp; if (wp && Math.hypot(wp.x - p.x, wp.z - p.z) < 12 + p.radius) { this.toast(`Waypoint reached: ${wp.label}`, 'good'); this.audio.click(); this.s.galaxy.wp = null; this.save(); } }
     // world streaming
     this.field.loadR = this.s.tier >= 4 ? 3 : 2;
     this.field.update(p.x, p.z, this.time, dt);
@@ -807,6 +1224,7 @@ export class Game {
     this.updateEnemies(dt);
     this.updateWeapons(dt);
     this.updateBolts(dt);
+    this.updateLoot(dt); this.updateCaches(dt); this.updateAllies(dt);
     // minerals
     const cap = st.cargo;
     this.minerals.update(dt, p.x, p.z, st.magnet, p.radius + 1.0, () => !this.dead && this.cargoTotal() < cap, (o) => {

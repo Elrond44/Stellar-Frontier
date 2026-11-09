@@ -161,6 +161,33 @@ const RECIPES = {
   boost: [1.3, 1, (s) => { s.nz({ kind: 'pink', a: 0.25, d: 0.8, v: 0.6, type: 'bandpass', f: 300, f1: 2500, q: 1.2 }); s.osc({ type: 'sawtooth', f: 50, f1: 120, a: 0.3, d: 0.8, v: 0.25, to: s.filt('lowpass', 500, 1.5) }); s.nz({ d: 0.04, v: 0.4, type: 'highpass', f: 2000 }); }],
   dock: [1.3, 1, (s) => { s.partials(180, [1, 2.76, 5.4], [0.4, 0.2, 0.1], [0.35, 0.2, 0.12], 0); s.nz({ kind: 'pink', d: 0.08, v: 0.6, type: 'lowpass', f: 1200 }); s.osc({ f: 90, f1: 45, d: 0.2, v: 0.6 });
     s.nz({ t: 0.15, a: 0.05, d: 0.6, v: 0.25, type: 'bandpass', f: 5000, q: 1 }); s.partials(240, [1, 2.76, 5.4], [0.3, 0.15, 0.07], [0.25, 0.15, 0.1], 0.38); s.osc({ f: 110, f1: 50, t: 0.38, d: 0.15, v: 0.5 }); }],
+  // --- v4: abilities, loot, galaxy ---
+  dash: [0.9, 2, (s) => { s.nz({ kind: 'pink', a: 0.01, d: 0.45, v: 0.9, type: 'bandpass', f: 600, f1: 5000, q: 1.6 }); s.osc({ f: 220, f1: 1400, a: 0.005, d: 0.25, v: 0.35 });
+    s.osc({ type: 'sawtooth', f: 80, f1: 40, d: 0.4, v: 0.3, to: s.filt('lowpass', 400) }); s.nz({ t: 0.18, d: 0.5, v: 0.25, type: 'highpass', f: 4000, f1: 1500 }); s.osc({ f: 1760, t: 0.2, d: 0.3, v: 0.08 }); }],
+  emp: [2.4, 1, (s) => { const d = s.shaper(2.2); s.osc({ f: 90, f1: 30, a: 0.003, d: 1.2, v: 1, to: d }); s.osc({ type: 'square', f: 2400, f1: 120, d: 0.7, v: 0.12, to: s.filt('bandpass', 1500, 2) });
+    for (let i = 0; i < 18; i++) s.osc({ type: 'square', f: rv(2000, 6000), t: 0.05 + rv(0, 1.4), a: 0.001, d: 0.02, v: 0.06, to: s.filt('highpass', 2000) });
+    s.nz({ kind: 'pink', a: 0.005, d: 1.6, v: 0.7, type: 'lowpass', f: 6000, f1: 150, q: 3 }); s.partials(110, [1, 3.01, 5.03], [0.2, 0.08, 0.04], [1.6, 1.0, 0.6], 0.02); }],
+  overload: [2.0, 1, (s) => { s.osc({ f: 180, f1: 720, a: 0.2, d: 0.5, v: 0.25 }); s.osc({ type: 'sawtooth', f: 90, f1: 360, a: 0.2, d: 0.6, v: 0.18, to: s.filt('lowpass', 900, 4, s.out, 3000, 0, 0.6) });
+    s.partials(523.3, [1, 1.5, 2, 3], [0.2, 0.12, 0.08, 0.04], [1.4, 1.1, 0.9, 0.6], 0.35); s.nz({ t: 0.3, a: 0.02, d: 1.2, v: 0.2, type: 'bandpass', f: 3000, q: 2 }); s.osc({ f: 70, f1: 40, t: 0.32, d: 0.8, v: 0.6 }); }],
+  surge: [1.8, 1, (s) => { const d = s.shaper(3); s.osc({ type: 'sawtooth', f: 55, f1: 220, a: 0.4, d: 0.9, v: 0.35, to: s.filt('lowpass', 300, 6, d, 4000, 0, 0.5) });
+    s.osc({ type: 'square', f: 440, f1: 880, a: 0.3, d: 0.5, v: 0.08, to: s.filt('bandpass', 2000, 3) }); s.osc({ f: 60, f1: 30, t: 0.45, d: 0.8, v: 0.8 }); s.nz({ kind: 'pink', t: 0.45, d: 0.9, v: 0.5, type: 'lowpass', f: 3000, f1: 200 }); }],
+  deploy: [1.2, 1, (s) => { for (let i = 0; i < 3; i++) { s.osc({ type: 'triangle', f: 600 + i * 200, f1: 1600 + i * 300, t: i * 0.14, d: 0.18, v: 0.25 }); s.nz({ t: i * 0.14, d: 0.12, v: 0.3, type: 'bandpass', f: 2500, q: 2 }); } s.osc({ f: 120, f1: 60, d: 0.3, v: 0.5 }); }],
+  lootDrop: [1.2, 2, (s) => { s.partials(1318.5, [1, 2.4, 3.9], [0.18, 0.08, 0.04], [0.9, 0.5, 0.3], 0); s.partials(1975.5, [1, 2.4], [0.12, 0.05], [0.8, 0.4], 0.09); s.nz({ d: 0.3, v: 0.1, type: 'highpass', f: 6000 }); s.osc({ f: 90, f1: 50, d: 0.2, v: 0.3 }); }],
+  loot: [1.4, 1, (s) => { [0, 4, 7, 12].forEach((n, i) => s.partials(mtof(76 + n), [1, 2, 3.01], [0.18, 0.06, 0.03], [0.6, 0.35, 0.2], i * 0.07)); s.nz({ t: 0.05, d: 0.4, v: 0.12, type: 'highpass', f: 7000 }); }],
+  lootRare: [2.4, 1, (s) => { [0, 7, 12, 16, 19, 24].forEach((n, i) => s.partials(mtof(72 + n), [1, 2, 3.01, 4.2], [0.16, 0.07, 0.03, 0.02], [1.6, 1.0, 0.5, 0.3], i * 0.08));
+    s.nz({ kind: 'pink', a: 0.3, d: 1.5, v: 0.15, type: 'bandpass', f: 4000, q: 1 }); s.osc({ f: 65, f1: 40, d: 1.0, v: 0.5 }); }],
+  sector: [2.6, 1, (s) => { s.osc({ f: 55, f1: 50, a: 0.5, d: 1.8, v: 0.4 }); s.partials(587.3, [1, 1.5, 2.01], [0.12, 0.06, 0.04], [2.2, 1.6, 1.0], 0.1, s.out, 0.2); s.partials(880, [1, 2.01], [0.08, 0.03], [1.8, 1.0], 0.5, s.out, 0.15);
+    s.nz({ kind: 'pink', a: 0.6, d: 1.4, v: 0.18, type: 'bandpass', f: 400, f1: 2400, q: 2 }); }],
+  skill: [1.4, 1, (s) => { s.osc({ type: 'triangle', f: 440, f1: 880, a: 0.005, d: 0.25, v: 0.3 }); [0, 7, 12, 19].forEach((n, i) => s.partials(mtof(69 + n), [1, 2, 3], [0.14, 0.05, 0.02], [0.9, 0.5, 0.3], 0.05 + i * 0.06)); s.nz({ t: 0.05, d: 0.5, v: 0.12, type: 'highpass', f: 5000 }); }],
+  overheat: [0.9, 1, (s) => { s.nz({ a: 0.01, d: 0.7, v: 0.5, type: 'highpass', f: 2500, f1: 6000 }); s.osc({ type: 'square', f: 300, f1: 180, d: 0.25, v: 0.15, to: s.filt('lowpass', 1500) }); s.osc({ type: 'square', f: 300, f1: 180, t: 0.28, d: 0.25, v: 0.15, to: s.filt('lowpass', 1500) }); }],
+  denied: [0.35, 1, (s) => { s.osc({ type: 'square', f: 180, d: 0.12, v: 0.2, to: s.filt('lowpass', 1200) }); s.osc({ type: 'square', f: 140, t: 0.13, d: 0.15, v: 0.2, to: s.filt('lowpass', 1200) }); }],
+  shieldDown: [1.2, 1, (s) => { s.osc({ type: 'sawtooth', f: 900, f1: 120, d: 0.7, v: 0.2, to: s.filt('lowpass', 3000, 3) }); s.nz({ d: 0.5, v: 0.4, type: 'bandpass', f: 2000, f1: 300, q: 2 }); s.osc({ f: 80, f1: 40, d: 0.5, v: 0.5 }); }],
+  liberate: [5.0, 1, (s) => { // triumphant liberation sting: brass fanfare over a timpani roll, bright major resolve
+    for (let i = 0; i < 10; i++) s.osc({ f: 73.4, f1: 70, t: i * 0.06, a: 0.002, d: 0.25, v: 0.25 + i * 0.03 });
+    s.brass(293.7, 0, 0.18, 0.22); s.brass(392, 0.2, 0.18, 0.22); s.brass(440, 0.4, 0.5, 0.26);
+    for (const f of [293.7, 370, 440, 587.3, 740]) s.brass(f, 0.95, 3.4, 0.13); s.osc({ f: 73.4, f1: 36, t: 0.95, d: 2.0, v: 1 });
+    s.partials(1174.7, [1, 2.01, 3], [0.1, 0.05, 0.02], [3.0, 2.0, 1.0], 1.0); s.partials(1480, [1, 2.01], [0.08, 0.03], [3.0, 1.6], 1.2); s.partials(1760, [1, 2.01], [0.06, 0.02], [2.6, 1.4], 1.4);
+    s.nz({ t: 0.9, a: 0.4, d: 3.4, v: 0.16, type: 'highpass', f: 5000 }); s.nz({ kind: 'pink', t: 0.95, d: 1.2, v: 0.45, type: 'lowpass', f: 3000, f1: 200 }); }],
   // --- music drums (rendered once, played by the music engine) ---
   kick: [0.5, 1, (s) => { s.osc({ f: 150, f1: 45, a: 0.002, d: 0.35, v: 1, glide: 0.12 }); s.nz({ d: 0.005, v: 0.4, type: 'highpass', f: 3000 }); }],
   snare: [0.4, 2, (s) => { s.nz({ a: 0.001, d: 0.18, v: 0.7, type: 'bandpass', f: 1800, q: 0.7 }); s.osc({ type: 'triangle', f: 190, f1: 160, d: 0.1, v: 0.5 }); s.nz({ d: 0.1, v: 0.3, type: 'highpass', f: 6000 }); }],
@@ -181,8 +208,11 @@ const MIX = {
   alarmLow: [0.3, 0.8, 1, 4, 0.05, 0, 0], pirate: [0.45, 2, 1, 4, 0.2, 0, 0],
   tap: [0.3, 0.03, 2, 5, 0, 0.04, 0.1], open: [0.28, 0.08, 1, 5, 0.1, 0.02, 0], close: [0.26, 0.08, 1, 5, 0.1, 0.02, 0], save: [0.45, 0.3, 1, 5, 0.2, 0, 0],
   warp: [0.6, 1.5, 1, 4, 0.35, 0, 0], boost: [0.5, 0.5, 1, 3, 0.2, 0.03, 0], dock: [0.5, 1, 1, 3, 0.25, 0, 0],
+  dash: [0.55, 0.2, 2, 4, 0.25, 0.04, 0], emp: [0.85, 0.5, 1, 5, 0.4, 0, 0], overload: [0.6, 0.5, 1, 5, 0.35, 0, 0], surge: [0.65, 0.5, 1, 5, 0.3, 0, 0], deploy: [0.5, 0.5, 1, 4, 0.25, 0, 0],
+  lootDrop: [0.35, 0.15, 2, 3, 0.3, 0.05, 0], loot: [0.45, 0.1, 2, 4, 0.3, 0, 0], lootRare: [0.55, 0.3, 1, 5, 0.4, 0, 0], sector: [0.5, 2, 1, 4, 0.4, 0, 0], skill: [0.5, 0.2, 1, 5, 0.3, 0, 0],
+  overheat: [0.35, 1, 1, 3, 0.1, 0, 0], denied: [0.3, 0.2, 1, 5, 0, 0, 0], shieldDown: [0.45, 1, 1, 4, 0.2, 0, 0], liberate: [0.8, 3, 1, 6, 0.45, 0, 0],
 };
-const LOWRATE = new Set(['boomL', 'rockL', 'impact', 'kick', 'pulse', 'warp', 'fanfare', 'boomS', 'quest', 'levelUp', 'boost', 'hullCrunch']); // long, mostly low-frequency sounds
+const LOWRATE = new Set(['liberate', 'emp', 'sector', 'surge', 'overload', 'boomL', 'rockL', 'impact', 'kick', 'pulse', 'warp', 'fanfare', 'boomS', 'quest', 'levelUp', 'boost', 'hullCrunch']); // long, mostly low-frequency sounds
 const PENT = [0, 3, 5, 7, 10]; // minor pentatonic steps for pickup combo chimes
 
 // ---------- continuous loops (built on demand, torn down when silent) ----------
@@ -205,6 +235,7 @@ const CHORDS = [ // [bass, ...pad] midi notes, D minor / dorian colours
 ];
 const NEXT = [[1, 2, 3, 5], [2, 0, 5], [0, 3, 4], [0, 4, 6, 1], [0, 5, 3], [2, 3, 0], [4, 0, 5]];
 const BELL = [62, 65, 67, 69, 72, 74, 77, 79, 81, 84];
+const MYST = [[38, 62, 65, 68, 73], [37, 61, 64, 68, 71], [34, 58, 62, 65, 70], [39, 63, 66, 69, 74], [36, 60, 63, 66, 71], [41, 65, 68, 72, 75], [33, 57, 61, 64, 68]]; // whole-tone / diminished colours for unexplored space
 const KICKS = [[1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0], [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1], [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]];
 const BASS = [[1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1], [1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0], [1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1]];
 
@@ -225,10 +256,15 @@ class Music {
     this.kick = KICKS[0]; this.bass = BASS[0];
     this.timer = setInterval(() => this.schedule(), 120);
   }
-  setMix(mode, combat) {
+  // moods (v4): peaceful (safe/liberated), mysterious (unexplored), tense (pirate territory), intense (boss / big battle)
+  setMix(mode, combat, mood = 'peaceful') {
     const c = this.c, now = c.currentTime; let amb = 1, cbt = 0, dock = 0;
-    if (combat > 0.02) { amb = 0.45; cbt = 0.55 + 0.45 * combat; }
+    if (mood === 'intense' && mode !== 'dock') combat = Math.max(combat, 1);
+    this.mood = mode === 'dock' ? 'peaceful' : mood; this.lite = combat <= 0.02 && this.mood === 'tense';
+    if (this.song) { amb = 0; dock = 0; cbt = combat > 0.02 ? 0.32 + 0.18 * combat : 0; } // soundtrack playing: drums-only overlay in fights
+    else if (combat > 0.02) { amb = this.mood === 'intense' ? 0.3 : 0.45; cbt = 0.55 + 0.45 * combat; }
     else if (mode === 'dock') { amb = 0.5; dock = 1; }
+    else if (this.lite) { amb = 0.85; cbt = 0.3; }
     const set = (k, v, up, down) => { if (Math.abs(this.target[k] - v) < 0.02) return; this[k].gain.setTargetAtTime(v, now, v > this.target[k] ? up : down); this.target[k] = v; };
     set('amb', amb, 2, 1.5); set('cbt', cbt, 0.6, 2.5); set('dock', dock, 1.2, 1.5);
   }
@@ -236,7 +272,7 @@ class Music {
     const n = fn(); n.src.onended = () => { for (const x of n.all) x.disconnect(); this.a.stats.musicFreed++; }; this.a.stats.music++;
   }
   playChord(t) {
-    const c = this.c; const cands = NEXT[this.ci]; this.ci = pick(cands); this.chord = CHORDS[this.ci];
+    const c = this.c; const cands = NEXT[this.ci]; this.ci = pick(cands); this.chord = this.mood === 'mysterious' ? MYST[this.ci % MYST.length] : CHORDS[this.ci];
     const dur = pick([8, 10, 12, 12, 14, 16]); const rel = 4; this.cut = clamp(this.cut + rv(-350, 350), 450, 1700);
     const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8; lp.frequency.setValueAtTime(this.cut, t); lp.frequency.linearRampToValueAtTime(clamp(this.cut + rv(-400, 600), 400, 2200), t + dur); lp.connect(this.amb);
     const all = [lp]; let last = null; const per = this.a.low ? 1 : 2;
@@ -268,10 +304,18 @@ class Music {
   drum(name, t, v) { const a = this.a; const bs = a.buf[name]; if (!bs) return; const c = this.c; const s = c.createBufferSource(); s.buffer = pick(bs); s.playbackRate.value = rv(0.98, 1.02); const g = c.createGain(); g.gain.value = v; s.connect(g); g.connect(this.cbt); s.onended = () => { s.disconnect(); g.disconnect(); a.stats.musicFreed++; }; a.stats.music++; s.start(t); }
   combatStep(t, i) {
     const c = this.c, s = i % 16, dur = this.stepDur;
+    if (this.lite) { // tense pirate-space pulse: sparse kick + ticking hats + low bass, no lead
+      if (s === 0 || s === 10) this.drum('kick', t, 0.45); if (s % 4 === 2) this.drum('hat', t, 0.12); if (s === 0 && (i / 16) % 4 === 0 && Math.random() < 0.5) this.drum('impact', t, 0.18);
+      if (!this.song && (s === 0 || s === 3 || s === 8)) { const root = 26 + (this.chord[0] % 12);
+        this.voice(this.cbt, () => { const o = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain(); o.type = 'sawtooth'; o.frequency.value = mtof(root); lp.type = 'lowpass'; lp.Q.value = 4; lp.frequency.value = 420;
+          g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.12, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur * 3); o.connect(lp); lp.connect(g); g.connect(this.cbt); o.start(t); o.stop(t + dur * 3.1); return { src: o, all: [o, lp, g] }; }); }
+      return;
+    }
     if (s === 0 && (i / 16) % 2 === 0) { this.kick = Math.random() < 0.6 ? this.kick : pick(KICKS); this.bass = Math.random() < 0.6 ? this.bass : pick(BASS); if (Math.random() < 0.35) this.drum('impact', t, 0.35); }
     if (this.kick[s]) this.drum('kick', t, 0.75);
     if (s === 4 || s === 12) this.drum('snare', t, 0.42); else if (Math.random() < 0.06) this.drum('snare', t, 0.12);
     if (s % 2 === 0) this.drum('hat', t, s % 4 === 2 ? 0.22 : 0.14); else if (Math.random() < 0.5) this.drum('hat', t, 0.07);
+    if (this.song) return; // over a song: drums only, so nothing clashes with its key
     if (this.bass[s]) { const root = 26 + (this.chord[0] % 12) + (s % 8 === 6 ? 12 : 0);
       this.voice(this.cbt, () => { const o = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain(); o.type = 'sawtooth'; o.frequency.value = mtof(root);
         lp.type = 'lowpass'; lp.Q.value = 7; lp.frequency.setValueAtTime(1600, t); lp.frequency.exponentialRampToValueAtTime(220, t + dur * 1.4);
@@ -290,20 +334,82 @@ class Music {
   }
   schedule() {
     const c = this.c; if (c.state !== 'running') return; const now = c.currentTime, ahead = now + 0.5;
+    const ambOn = this.target.amb > 0.01 || this.amb.gain.value > 0.003;
+    if (!ambOn) { this.nextChord = Math.max(this.nextChord, now); this.nextBell = now + 1; this.nextWind = now + 10; } // soundtrack mode: no pads/bells
+    else {
     if (this.nextChord < now) this.nextChord = now + 0.05;
     while (this.nextChord < ahead) this.playChord(this.nextChord);
     if (this.nextBell < now) this.nextBell = now + 0.1;
     while (this.nextBell < ahead) { const t = this.nextBell; this.density = clamp(this.density + rv(-0.15, 0.15), 0.15, 1);
       if (Math.random() < 0.3) { let m = pick(BELL); for (let k = 0; k < ri(2, 4); k++) { this.bell(t + k * rv(0.3, 0.5), m, 0.028); m = BELL[clamp(BELL.indexOf(m) + pick([-2, -1, 1, 2]), 0, BELL.length - 1)]; } }
       else this.bell(t, Math.random() < 0.5 ? pick(this.chord.slice(1)) + 24 : pick(BELL), 0.03);
-      this.nextBell = t + rv(1.2, 4.5) / this.density * (this.a.low ? 1.6 : 1); }
-    if (this.nextWind < now) { this.wind(now + 0.1); this.nextWind = now + rv(18, 40); }
+      this.nextBell = t + rv(1.2, 4.5) / this.density * (this.a.low ? 1.6 : 1) * (this.mood === 'mysterious' ? 1.8 : 1); }
+    if (this.nextWind < now) { this.wind(now + 0.1); this.nextWind = now + (this.mood === 'mysterious' ? rv(7, 14) : rv(18, 40)); }
+    }
     const cOn = this.target.cbt > 0.01 || this.cbt.gain.value > 0.003; this.stepDur = 60 / 126 / 4;
     if (!cOn) { this.nextStep = now + 0.05; this.step = 0; } else while (this.nextStep < ahead) { this.combatStep(this.nextStep, this.step); this.nextStep += this.stepDur; this.step++; }
     const dOn = this.target.dock > 0.01 || this.dock.gain.value > 0.003;
     if (!dOn) this.nextDock = now + 0.05;
     else while (this.nextDock < ahead) { const t = this.nextDock; if (Math.random() < 0.6) { const n = this.chord.slice(1); this.epiano(t, pick(n) + 12, 0.07); if (Math.random() < 0.3) this.epiano(t + 0.02, pick(n), 0.05); } this.nextDock = t + pick([0.5, 0.75, 1, 1, 1.5]); }
   }
+}
+
+// ---------- streamed soundtrack (HTMLAudioElement -> MediaElementSource -> music bus) ----------
+const SILENT_WAV = (() => { const n = 400, b = new Uint8Array(44 + n), v = new DataView(b.buffer); const w = (o, s) => { for (let i = 0; i < s.length; i++) b[o + i] = s.charCodeAt(i); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44);
+  let s = ''; for (const x of b) s += String.fromCharCode(x); return 'data:audio/wav;base64,' + btoa(s); })();
+const XFADE = 6; // seconds of crossfade between tracks
+class Soundtrack {
+  constructor(a, tracks, idx = 0, pos = 0) {
+    this.a = a; this.tracks = tracks; this.idx = clamp(idx | 0, 0, tracks.length - 1); this.startPos = pos; const c = a.ctx;
+    this.out = c.createGain(); this.out.gain.value = 1; this.out.connect(a.music.out); // a.music.out carries the fanfare duck
+    this.level = 1; this.fails = 0; this.dead = false; this.started = false; this.xfading = false; this.single = false;
+    this.decks = [0, 1].map(() => { const el = new window.Audio(); el.preload = 'none'; el.crossOrigin = 'anonymous'; el.setAttribute('playsinline', ''); el.loop = false;
+      const g = c.createGain(); g.gain.value = 0; let src = null; try { src = c.createMediaElementSource(el); src.connect(g); } catch (e) { /* */ } g.connect(this.out);
+      const d = { el, g, src, idx: -1 }; el.addEventListener('error', () => this.onError(d)); el.addEventListener('ended', () => this.onEnded(d)); return d; });
+    this.cur = this.decks[0];
+  }
+  url(i) { return this.tracks[i].src; }
+  title(i = this.cur.idx) { const t = this.tracks[i]; return t ? t.title || `Track ${i + 1}` : ''; }
+  load(d, i, pos = 0) { d.idx = i; d.el.preload = 'auto'; d.el.src = this.url(i); d.startAt = pos; d.el.load(); if (pos > 0) { const seek = () => { try { if (pos < (d.el.duration || 1e9) - XFADE - 2) d.el.currentTime = pos; } catch (e) { /* */ } }; d.el.addEventListener('loadedmetadata', seek, { once: true }); } }
+  // first call must happen inside a user gesture (iOS); primes the second deck too
+  start() {
+    if (this.started || this.dead) return; this.started = true;
+    this.load(this.cur, this.idx, this.startPos); this.fadeTo(this.cur, 1, 0.8); this.play(this.cur, true);
+    const o = this.other(); o.el.src = SILENT_WAV; const p = o.el.play(); // unlock the 2nd element inside the gesture (iOS) with a tiny silent clip
+    if (p && p.catch) p.then(() => o.el.pause()).catch(() => { /* if it stays locked, next() falls back to one deck */ });
+  }
+  other(d = this.cur) { return d === this.decks[0] ? this.decks[1] : this.decks[0]; }
+  play(d, announce, onBlocked) {
+    const ok = () => { this.fails = 0; if (announce && this.a.onTrack) this.a.onTrack(d.idx, this.title(d.idx)); };
+    const p = d.el.play(); if (!p || !p.catch) { ok(); return; }
+    p.then(ok).catch((e) => { if (e && e.name === 'AbortError') return; if (e && e.name === 'NotAllowedError') { if (onBlocked) onBlocked(); else this.blocked = true; } else this.onError(d); });
+  }
+  fadeTo(d, v, tc) { const t = this.a.ctx.currentTime; d.g.gain.cancelScheduledValues(t); d.g.gain.setValueAtTime(d.g.gain.value, t); d.g.gain.setTargetAtTime(v, t, tc); }
+  next(step = 1, hard) { // crossfade to the next (or previous) track
+    if (this.dead || !this.started) return; const n = (this.cur.idx + step + this.tracks.length) % this.tracks.length; const old = this.cur;
+    const nd = this.single ? old : this.other(old);
+    if (nd === old) { this.fadeTo(old, 0, 0.4); setTimeout(() => { this.load(old, n); this.fadeTo(old, 1, 0.6); this.play(old, true); }, hard ? 50 : 1500); return; }
+    this.load(nd, n); nd.g.gain.value = 0; this.cur = nd; this.idx = n;
+    this.play(nd, true, () => { this.single = true; clearTimeout(this.xfT); this.xfading = false; nd.idx = -1; this.cur = old; old.g.gain.cancelScheduledValues(0); this.next(step, hard); });
+    this.fadeTo(nd, 1, hard ? 0.4 : XFADE / 4); this.fadeTo(old, 0, hard ? 0.3 : XFADE / 4); this.xfading = true;
+    clearTimeout(this.xfT); this.xfT = setTimeout(() => { old.el.pause(); old.el.removeAttribute('src'); old.el.load(); old.idx = -1; this.xfading = false; }, (hard ? 1.5 : XFADE + 1) * 1000);
+  }
+  onEnded(d) { if (d === this.cur && !this.xfading) this.next(1, true); }
+  onError(d) {
+    if (this.dead || d.idx < 0 || d !== this.cur) return; this.fails++; console.info('soundtrack: track failed, skipping', d.idx + 1);
+    if (this.fails >= this.tracks.length) { this.stop(); this.dead = true; this.a.music.song = false; if (this.a.onSongFail) this.a.onSongFail(); return; }
+    this.next(1, true);
+  }
+  tick() { // starts the crossfade a few seconds before the end
+    if (!this.started || this.dead || this.xfading) return; const el = this.cur.el;
+    if (el.duration && isFinite(el.duration) && !el.paused && el.currentTime > el.duration - XFADE) this.next(1);
+  }
+  setLevel(v) { if (Math.abs(v - this.level) < 0.01) return; this.level = v; this.out.gain.setTargetAtTime(v, this.a.ctx.currentTime, 1.2); }
+  pause() { for (const d of this.decks) if (!d.el.paused) { d.el.pause(); d.wasPlaying = true; } }
+  resume() { if (!this.started || this.dead) return; for (const d of this.decks) if (d.wasPlaying || (d === this.cur && d.el.paused && d.idx >= 0)) { d.wasPlaying = false; this.play(d); } }
+  stop() { if (this.cur.idx >= 0) { this.idx = this.cur.idx; this.startPos = this.cur.el.currentTime || 0; } clearTimeout(this.xfT); for (const d of this.decks) { d.el.pause(); d.g.gain.value = 0; } this.started = false; }
+  state() { const d = this.cur; return { idx: d.idx >= 0 ? d.idx : this.idx, pos: d.el.currentTime || 0, title: this.title(d.idx >= 0 ? d.idx : this.idx), dur: d.el.duration || 0, playing: !d.el.paused }; }
 }
 
 // ---------- the public engine ----------
@@ -317,13 +423,13 @@ export class Audio {
     this.onGesture = () => this.init();
     for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) addEventListener(ev, this.onGesture, { capture: true, passive: true });
     document.addEventListener('visibilitychange', () => this.onVisibility());
-    addEventListener('pagehide', () => { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); });
+    addEventListener('pagehide', () => { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); if (this.st) this.st.pause(); });
     addEventListener('pageshow', () => this.onVisibility());
   }
   // Called from any user gesture: creates the context the first time, and resumes it afterwards (mobile autoplay rules)
   init() {
     if (document.hidden) return;
-    if (this.ctx) { if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {}); return; }
+    if (this.ctx) { if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {}); if (this.st) { if (!this.st.started) this.syncSong(true); else if (this.st.blocked) { this.st.blocked = false; this.st.resume(); this.st.play(this.st.cur); } } return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* iOS 17+: play even with the silent switch on */ }
     let c; try { c = this.ctx = new AC({ latencyHint: 'interactive' }); } catch (e) { try { c = this.ctx = new AC(); } catch (e2) { return; } }
@@ -343,13 +449,32 @@ export class Audio {
     this.noiseBuf = makeNoise(c, 'white', 2); this.brownBuf = makeNoise(c, 'brown', 3);
     this.applyVolumes(true); this.setLow(this.low, true);
     this.buildLoops(); this.music = new Music(this);
+    this.initSoundtrack();
     this.render();
   }
   onVisibility() {
     if (!this.ctx) return;
-    if (document.hidden) { if (this.ctx.state === 'running') this.ctx.suspend(); }
-    else if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {}); // may need the next tap on iOS (gesture listener handles it)
+    if (document.hidden) { if (this.ctx.state === 'running') this.ctx.suspend(); if (this.st) this.st.pause(); }
+    else { if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {}); if (this.st && this.wantSong()) this.st.resume(); } // iOS may need the next tap (gesture listener retries)
   }
+  // ---------- soundtrack ----------
+  wantSong() { return this.musicMode !== 'generated' && this.musicOn && !this.vol.mute; }
+  initSoundtrack() {
+    if (this.stInit || !this.tracks || !this.tracks.length || !this.ctx) return; this.stInit = true;
+    this.st = new Soundtrack(this, this.tracks, this.trackIdx || 0, this.trackPos || 0);
+    this.syncSong(true);
+  }
+  setTracks(list, idx, pos) { this.tracks = list; this.trackIdx = idx; this.trackPos = pos; if (this.ctx) this.initSoundtrack(); }
+  setMusicMode(mode) { this.musicMode = mode === 'generated' ? 'generated' : 'soundtrack'; this.syncSong(); }
+  syncSong(inGesture) {
+    if (!this.music) return; const st = this.st; const want = st && !st.dead && this.musicMode !== 'generated';
+    this.music.song = !!want;
+    if (!st) return;
+    if (want && !st.started) { if (inGesture || this.ctx.state === 'running') st.start(); }
+    else if (!want && st.started) st.stop();
+  }
+  nextTrack(step = 1) { if (this.st && this.st.started) this.st.next(step, true); }
+  trackState() { return this.st && !this.st.dead ? this.st.state() : null; }
   async render() { // synthesise every SFX once; frequent sounds first
     const order = ['tap', 'open', 'close', 'cannon', 'rockHit', 'pickup', 'rockS', 'hitHull', 'boomS', 'enemyLaser', 'kick', 'snare', 'hat', ...Object.keys(RECIPES)];
     const done = new Set(); const t0 = performance.now(); let bytes = 0;
@@ -458,7 +583,9 @@ export class Audio {
     // combat state with a hold so the music doesn't flap
     if (st.combat > 0) { this.lastCombat = t; this.combat = Math.max(st.combat, this.combat * 0.98); } else if (t - this.lastCombat > 5) this.combat = 0;
     const mode = st.docked || st.paused || !st.playing ? 'dock' : 'explore';
-    if (this.music) this.music.setMix(mode, st.playing ? this.combat : 0);
+    this.mood = st.mood || 'peaceful';
+    if (this.music) this.music.setMix(mode, st.playing ? this.combat : 0, st.playing ? this.mood : 'peaceful');
+    if (this.st && this.music.song) { this.st.tick(); this.st.setLevel(this.combat > 0.02 ? 0.85 : mode === 'dock' ? 0.78 : 1); }
     if (!this.sfxAudible) { this.engine.set(0); this.laserLoop.set(0); this.tractorLoop.set(0); return; }
     // engine: idles quietly, swells with joystick thrust; deeper, bigger and louder per ship tier
     const k = (st.tier - 1) / 4, th = st.thrust;
@@ -509,6 +636,16 @@ export class Audio {
   warp() { this.play('warp'); }
   boost() { this.play('boost'); }
   docked() { this.play('dock'); }
+  // v4
+  ability(id, x, z) { const m = { dash: 'dash', emp: 'emp', overload: 'overload', surge: 'surge', barrage: 'missile', drones: 'deploy' }; this.play(m[id] || 'tap', { x, z, vol: id === 'barrage' ? 1.4 : 1 }); if (id === 'emp') this.duck(0.5, 0.6); if (id === 'barrage') this.play('missile', { x, z, delay: 0.12, rate: 1.1 }); }
+  lootDrop(r, x, z) { this.play('lootDrop', { x, z, rate: 1 + r * 0.06 }); }
+  loot(r) { this.play(r >= 3 ? 'lootRare' : 'loot', { rate: r >= 3 ? 1 + (r - 3) * 0.06 : 1 + r * 0.06 }); }
+  sector() { this.play('sector'); }
+  skill() { this.play('skill'); }
+  overheat() { this.play('overheat'); }
+  denied() { this.play('denied'); }
+  shieldDown() { this.play('shieldDown'); }
+  liberate() { this.play('liberate'); this.duck(0.15, 4.5); }
   // ---------- diagnostics (used by the headless tests) ----------
   debug() {
     const c = this.ctx; if (!c) return { ctx: false };
@@ -518,7 +655,8 @@ export class Audio {
       voices: this.voices.length, maxVoices: this.maxVoices, low: this.low, stats: { ...this.stats, played: { ...this.stats.played } },
       loops: { engine: !!this.engine.g, laser: !!this.laserLoop.g, tractor: !!this.tractorLoop.g },
       bus: { master: this.master.gain.value, sfx: this.sfxBus.gain.value, music: this.musicBus.gain.value },
-      layers: m ? { amb: m.amb.gain.value, cbt: m.cbt.gain.value, dock: m.dock.gain.value, target: { ...m.target } } : null, combat: this.combat };
+      song: this.st ? { ...this.st.state(), started: this.st.started, dead: this.st.dead, level: this.st.out.gain.value, decks: this.st.decks.map((d) => ({ idx: d.idx, gain: +d.g.gain.value.toFixed(3), paused: d.el.paused, t: +d.el.currentTime.toFixed(2), src: d.el.currentSrc })) } : null, musicMode: this.musicMode || 'soundtrack',
+      layers: m ? { amb: m.amb.gain.value, cbt: m.cbt.gain.value, dock: m.dock.gain.value, target: { ...m.target }, mood: m.mood, lite: !!m.lite } : null, combat: this.combat, mood: this.mood };
   }
   // Offline render of a heavy combat burst through the same master chain, to check for clipping.
   async renderTestMix(sec = 4) {

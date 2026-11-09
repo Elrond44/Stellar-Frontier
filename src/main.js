@@ -3,11 +3,12 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
-import { Game } from './game.js?v=3';
-import { UI } from './ui.js?v=3';
-import { Audio } from './audio.js?v=3';
-import { makeSky, makeStarLayer, makeDust } from './world.js?v=3';
-import { SECTORS, sectorAt } from './data.js?v=3';
+import { Game } from './game.js?v=4';
+import { UI } from './ui.js?v=4';
+import { Audio } from './audio.js?v=4';
+import { makeSky, makeStarLayer, makeDust } from './world.js?v=4';
+import { SECTORS, sectorAt } from './data.js?v=4';
+import { owner } from './galaxy.js?v=4';
 
 const canvas = document.getElementById('c');
 let renderer;
@@ -73,7 +74,7 @@ function setupQuality() {
   resize();
 }
 function applySettings(audioOnly) {
-  const s = game.s.settings; audio.setVolumes({ master: s.masterVol, music: s.musicVol, sfx: s.sfxVol, mute: s.mute });
+  const s = game.s.settings; audio.setVolumes({ master: s.masterVol, music: s.musicVol, sfx: s.sfxVol, mute: s.mute }); audio.setMusicMode(s.musicMode);
   if (audioOnly === true) return;
   opts.showFps = s.fps; document.getElementById('fps').style.display = s.fps ? '' : 'none';
   setupQuality();
@@ -106,7 +107,8 @@ function startGame() {
   if (playing) return;
   audio.init(); applySettings(true);
   title.classList.add('gone'); playing = true; setTimeout(() => title.remove(), 700);
-  const sec = sectorAt(Math.hypot(game.player.x, game.player.z)); ui.sectorBanner(sec);
+  ui.sectorBanner(game.gsec);
+  if (game.s.migratedFrom) { delete game.s.migratedFrom; game.save(); setTimeout(() => ui.toast(`Save upgraded to v4: your weapons are now items and you have ${game.spAvail()} skill points to spend`, 'level'), 2500); }
   if (game.offlineGain > 1) ui.toast(`Your factory produced ${Math.floor(game.offlineGain)} credits while you were away`, 'good');
   if (!game.s.tutorialDone) { game.s.tutorialDone = true; setTimeout(() => ui.toast('Mine asteroids, fill your cargo, then return to the station to sell.'), 1500); }
   else document.getElementById('hint').classList.add('gone');
@@ -126,7 +128,7 @@ addEventListener('visibilitychange', () => { if (document.hidden && playing) gam
 addEventListener('pagehide', () => { if (playing) game.save(); });
 
 // sky tint per sector
-const tint = new THREE.Vector3(...SECTORS[0].tint);
+const tint = new THREE.Vector3(...SECTORS[0].tint); const ownCol = {};
 const clock = new THREE.Clock();
 function frame() {
   requestAnimationFrame(frame);
@@ -148,8 +150,9 @@ function frame() {
   game.updateCamera(dt, innerWidth / innerHeight);
   // background follow
   sky.position.copy(camera.position);
-  const sec = sectorAt(Math.hypot(game.player.x, game.player.z));
-  tint.x += (sec.tint[0] - tint.x) * dt * 0.8; tint.y += (sec.tint[1] - tint.y) * dt * 0.8; tint.z += (sec.tint[2] - tint.z) * dt * 0.8;
+  const sec = sectorAt(Math.hypot(game.player.x, game.player.z)); const own = owner(game.gsec, game.s.galaxy); const oc = (ownCol[own.id] ||= new THREE.Color(own.color));
+  const tt = [sec.tint[0] * 0.65 + oc.r * 0.35, sec.tint[1] * 0.65 + oc.g * 0.35, sec.tint[2] * 0.65 + oc.b * 0.35];
+  tint.x += (tt[0] - tint.x) * dt * 0.8; tint.y += (tt[1] - tint.y) * dt * 0.8; tint.z += (tt[2] - tint.z) * dt * 0.8;
   sky.material.uniforms.uTint.value.copy(tint); sky.material.uniforms.uTime.value = game.time;
   for (const l of starLayers) l.material.uniforms.uCam.value.set(camera.position.x, camera.position.z);
   dust.material.uniforms.uCam.value.set(camera.position.x, camera.position.z); dust.material.uniforms.uVel.value.set(game.player.vx, game.player.vz);
@@ -158,10 +161,25 @@ function frame() {
   perf.upd = perf.upd * 0.95 + (t1 - t0) * 0.05; perf.calls = renderer.info.render.calls; perf.tris = renderer.info.render.triangles;
 }
 const perf = { upd: 0, calls: 0, tris: 0 };
+// soundtrack: the manifest is tiny; each song streams only when it is about to play
+audio.musicMode = game.s.settings.musicMode;
+fetch('music/tracks.json?v=4').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
+  if (!Array.isArray(list) || !list.length) return; const s = game.s.settings;
+  audio.setTracks(list, s.trackIdx < list.length ? s.trackIdx : 0, s.trackIdx < list.length ? s.trackPos : 0);
+}).catch((e) => console.info('No soundtrack, using generated music:', e.message));
+audio.onTrack = (i, title) => { if (playing) ui.toast(`♪ Now playing: ${title}`); if (ui.modalOpen === 'settings') ui.render(); };
+audio.onSongFail = () => { if (playing) ui.toast('Soundtrack unavailable, switched to generated music'); };
 function audioTick(dt) {
   if (!audio.ctx) return; const g = game, p = g.player; let threat = 0;
   if (playing && !g.dead) for (const e of g.enemies) { if (e.dead || ((e.type === 'sentinel' || e.type === 'boss') && e.state === 'idle')) continue; if (Math.hypot(e.x - p.x, e.z - p.z) < 60) threat += e.type === 'boss' ? 3 : e.type === 'gunship' ? 1.5 : 1; }
-  audio.tick(Math.min(dt, 0.25), { x: p.x, z: p.z, thrust: p.thrust || 0, tier: g.s.tier, docked: g.docked, dockT: g.dockT || 0, combat: Math.min(1, threat / 3), hull: p.maxHp ? p.hp / p.maxHp : 1, dead: g.dead, paused: !!ui.modalOpen, playing });
+  const ts = audio.trackState(); if (ts) { g.s.settings.trackIdx = ts.idx; g.s.settings.trackPos = ts.pos; }
+  // music mood: peaceful (haven/liberated), mysterious (newly charted / unclaimed), tense (pirate territory), intense (boss, outpost assault, big battle)
+  const gs = g.gsec, G = g.s.galaxy; let mood = 'peaceful';
+  if (gs.faction !== 'haven' && !G.liberated[gs.id]) mood = gs.faction === 'neutral' || g.time - g.secEnterT < 90 ? 'mysterious' : 'tense';
+  const bossOn = g.boss && !g.boss.dead && g.boss.state === 'attack'; let outpostNear = false; for (const [, L] of g.liveOutposts) if (Math.hypot(L.o.x - p.x, L.o.z - p.z) < 70) outpostNear = true;
+  if (bossOn || outpostNear || threat >= 5) mood = 'intense';
+  g.mood = mood;
+  audio.tick(Math.min(dt, 0.25), { x: p.x, z: p.z, thrust: p.thrust || 0, tier: g.s.tier, docked: g.docked, dockT: g.dockT || 0, combat: Math.min(1, threat / 3), hull: p.maxHp ? p.hp / p.maxHp : 1, dead: g.dead, paused: !!ui.modalOpen, playing, mood });
 }
 resize();
 frame();

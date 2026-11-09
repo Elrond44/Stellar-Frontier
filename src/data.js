@@ -66,6 +66,10 @@ export const ENEMIES = {
   gunship:     { name: 'Armored Gunship', hp: 320,  speed: 8,  dmg: 11, fireRate: 0.55, range: 22, radius: 2.8, xp: 45,  credits: 110,  armor: 0.35 },
   sentinel:    { name: 'Mining Sentinel', hp: 130,  speed: 12, dmg: 7,  fireRate: 0.8,  range: 18, radius: 1.6, xp: 20,  credits: 45,   armor: 0.1 },
   boss:        { name: 'Warlord Dreadnought', hp: 7000, speed: 5, dmg: 16, fireRate: 1.2, range: 34, radius: 9, xp: 1500, credits: 5000, armor: 0.25 },
+  // v4 pirate outpost parts (static)
+  inst_core:   { name: 'Outpost Command Core', hp: 2600, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 5.6, xp: 120, credits: 300, armor: 0.3, inst: true },
+  inst_gen:    { name: 'Shield Generator', hp: 520, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 2.2, xp: 40, credits: 80, armor: 0.2, inst: true },
+  inst_turret: { name: 'Defense Turret', hp: 380, speed: 0, dmg: 8, fireRate: 0.75, range: 34, radius: 1.9, xp: 15, credits: 40, armor: 0.25, inst: true },
 };
 
 export const LEVEL_TITLES = ['Rookie Miner', 'Rock Hopper', 'Ore Runner', 'Starward Miner', 'Belt Prospector', 'Void Hauler', 'Frontier Captain', 'Fleet Commander', 'Industrial Baron', 'Frontier Sovereign'];
