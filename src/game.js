@@ -6,6 +6,7 @@ import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateSt
 import { Campaign, FLEET } from './campaign.js?v=5';
 import { roleAI } from './ai.js?v=5';
 import { BOSS_BY_BP } from './bosses.js?v=5';
+import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=5';
 import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=5';
 import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=5';
 import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=5';
@@ -464,9 +465,11 @@ export class Game {
     const fac = opts.faction !== undefined ? opts.faction : (FACTIONS[gs.faction] && type !== 'sentinel' && type !== 'boss' ? gs.faction : null);
     const P = this.proto(type, fac, opts.variant || ''); const M = this.facMods(fac);
     const danger = Math.max(D.inst ? 1 : 0, Math.min(3, gs.ringI)); const sc = (1 + 0.85 * Math.max(0, danger - 1)) * (gs.threat >= 5 ? 1.3 : 1); const easy = danger <= 1 && this.s.tier === 1 ? 0.7 : 1;
-    const elite = !!opts.elite; const hp = D.hp * sc * (opts.hpMul || 1) * M.hp * (elite ? 2.6 : 1);
+    const elite = !!opts.elite; const L0 = RING_L0[gs.ring] || 1; const lv = this.s.level;
+    const baseHp = D.inst && TTK[type] ? ttkHp(type, lv, L0, D.armor) : D.hp * sc * shipK(lv, L0);
+    const hp = baseHp * (opts.hpMul || 1) * M.hp * (elite ? 2.6 : 1);
     const g = P.group.clone(); g.rotation.order = 'YXZ'; this.scene.add(g); if (elite) g.scale.setScalar(1.25);
-    const e = { type, D, x, z, vx: 0, vz: 0, yaw: rand(0, TAU), bank: 0, hp, maxHp: hp, dmgMul: (1 + 0.5 * Math.max(0, danger - 1)) * easy * M.dmg * (elite ? 1.4 : 1),
+    const e = { type, D, x, z, vx: 0, vz: 0, yaw: rand(0, TAU), bank: 0, hp, maxHp: hp, dmgMul: (1 + 0.5 * Math.max(0, danger - 1)) * easy * M.dmg * (elite ? 1.4 : 1) * dmgK(lv, L0),
       group: g, turrets: [], cd: rand(0.5, 2), state: 'attack', t: rand(0, 10), radius: P.radius * (elite ? 1.2 : 1), hard: P.hardpoints, hitT: 0, orbit: rand(0, TAU),
       faction: fac, M, armor: Math.min(0.8, D.armor + M.armor), speedMul: M.speed, shield: hp * M.shield, maxShield: hp * M.shield, shieldT: 0, stunT: 0, burnT: 0, burnDps: 0, shredT: 0, elite, threat: gs.threat, sector: gs.id,
       cloaked: !!M.cloak && !D.inst && !D.part && !D.boss && type !== 'sentinel' && type !== 'freighter', aiAcc: 0, aiTick: 0, scale: elite ? 1.25 : 1, ...opts };
@@ -507,10 +510,11 @@ export class Game {
     else {
       const prev = this.heat; const mod = this.camp.directorMod();
       this.heat = Math.min(100, this.heat + dt * (0.35 + danger * 0.35) * (danger === 1 && this.s.tier === 1 ? 0.65 : 1) / mod);
-      for (const th of [40, 75]) if (prev < th && this.heat >= th) this.spawnWave(danger, false);
-      if (this.heat >= 100) { this.spawnWave(danger, true); this.heat = 55; }
+      const fb = this.camp.bossActive(); const flag = fb && !fb.bc.def.commander; if (flag) this.heat = Math.min(this.heat, 35); // a flagship fight replaces heat waves
+      for (const th of [40, 75]) if (prev < th && this.heat >= th && !this.camp.crowded(4)) this.spawnWave(danger, false);
+      if (this.heat >= 100) { if (!this.camp.crowded(6)) this.spawnWave(danger, true); this.heat = 55; }
       this.spawnT -= dt;
-      const cap = 4 + danger * 4; const pirates = this.enemies.filter((e) => e.type !== 'sentinel' && !e.D.boss && !e.D.inst && !e.D.part && !e.battle).length;
+      const cap = flag ? 2 : 4 + danger * 4; const pirates = this.enemies.filter((e) => e.type !== 'sentinel' && !e.D.boss && !e.D.inst && !e.D.part && !e.battle).length;
       if (this.spawnT <= 0) { this.spawnT = (rand(28, 40) - danger * 5 + (danger === 1 && this.s.tier === 1 ? 14 : 0)) * mod; if (pirates < cap) this.spawnWave(danger, false); }
     }
     // guards for rich asteroids: spawned lazily when the player gets close
@@ -868,7 +872,10 @@ export class Game {
   // ---------- targeting ----------
   findTarget(x, z, range, preferShips, avoid) {
     let best = null, bd = Infinity, bestS = null, bsd = Infinity;
-    for (const e of this.enemies) { if (e.dead || e.cloaked || (e.type === 'sentinel' && e.state === 'idle' && !preferShips) || (avoid && avoid.has(e))) continue; const d = Math.hypot(e.x - x, e.z - z) - e.radius; if (d < range && d < bsd) { bsd = d; bestS = e; } }
+    for (const e of this.enemies) { if (e.dead || e.cloaked || (e.type === 'sentinel' && e.state === 'idle' && !preferShips) || (avoid && avoid.has(e))) continue; const d = Math.hypot(e.x - x, e.z - z) - e.radius; if (d >= range) continue;
+      // priority: skip immune hulls (sector shield, pylons up, cloaked boss) in favour of what actually unlocks them
+      let sd = d; if (e.D.boss || e.D.inst) { const m = this.camp.dmgMod(e, true)[0]; if (m === 0) sd += 60; else if (m < 0.5) sd += 25; } if (e.partK === 'gen') sd -= 12;
+      if (sd < bsd) { bsd = sd; bestS = e; } }
     if (preferShips && bestS) return { kind: 'ship', o: bestS };
     for (const a of this.field.list) { if (!a.alive) continue; const d = Math.hypot(a.x - x, a.z - z) - a.r * 0.8; if (d < range && d < bd) { bd = d; best = a; } }
     if (best) return { kind: 'rock', o: best };

@@ -2,6 +2,7 @@
 // flagship bosses (phases, telegraphed attacks, destructible components), autonomous faction warfare with visible
 // skirmishes, friendly activity in liberated space and the dynamic mission runtime.
 import * as THREE from 'three';
+import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=5';
 import { ENEMIES } from './data.js?v=5';
 import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=5';
 import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=5';
@@ -85,6 +86,11 @@ export class Campaign {
   }
   inCircle(T, extra = 0) { const p = this.g.player; return !this.g.dead && Math.hypot(p.x - T.x, p.z - T.z) < T.r + p.radius * 0.5 + extra; }
   inLine(T) { const p = this.g.player; const ux = Math.sin(T.ang), uz = Math.cos(T.ang); const rx = p.x - T.x, rz = p.z - T.z; const along = rx * ux + rz * uz; const perp = Math.abs(rx * uz - rz * ux); return !this.g.dead && along > -1 && along < T.len + 1 && perp < T.w / 2 + p.radius * 0.6; }
+  // reinforcement budget: hostile ships near the player (installations, parts, bosses, freighters and battle ships excluded)
+  crowded(extra = 0, boss = false) {
+    const g = this.g, p = g.player; let n = 0; for (const e of g.enemies) if (!e.dead && !e.D.inst && !e.D.part && !e.D.boss && !e.battle && e.type !== 'freighter' && Math.abs(e.x - p.x) < 170 && Math.abs(e.z - p.z) < 170) n++;
+    const cap = (boss ? 14 : this.bossActive() ? 8 : 12) + 3 * Math.min(3, g.gsec.ringI || 0); return n + extra > cap;
+  }
   warnText(text, kind = 'boss') { this.warn = { text, kind, until: this.g.time + 2.2 }; this.g.audio.warn && this.g.audio.warn(); }
   // ------------------------------------------------------------------ installations
   scanInstallations() {
@@ -126,9 +132,9 @@ export class Campaign {
     if (L.sdome) { L.sdome.visible = this.hqShield(L); L.sdome.material.uniforms.uT.value = g.time; const u = L.sdome.material.uniforms.uHit; u.value = Math.max(0, u.value - dt * 3); }
     if (g.dead || e.stunT > 0) return;
     const k = e.kind; const danger = Math.max(1, Math.min(3, L.sec.ringI));
-    if (k === 'comm' && dist < 85) { L.callT -= dt; if (L.callT <= 0) { L.callT = 32; g.spawnWave(danger, false, { x: e.x, z: e.z }, '📡 Comm array called in reinforcements!'); } }
-    else if (k === 'yard' && dist < 110) { L.buildT -= dt; if (L.buildT <= 0) { L.buildT = 24; const n = g.enemies.filter((x) => !x.dead && x.yard === L.o.id).length; if (n < 5) { const t = L.fac === 'iron' ? 'gunship' : L.fac === 'void' ? pick(['interceptor', 'ew']) : L.fac === 'eclipse' ? pick(['sniper', 'interceptor']) : danger >= 2 && Math.random() < 0.4 ? 'gunship' : 'interceptor'; const s = g.spawnEnemy(t, e.x + rand(-4, 4), e.z + rand(-4, 4), { faction: L.fac, yard: L.o.id }); s.cloaked = false; s.group.visible = true; g.rings.spawn(e.x, 0.5, e.z, e.radius * 2, FACTIONS[L.fac] ? FACTIONS[L.fac].rgb : [3, 0.5, 0.4], 0.5); g.toast(`⚙ Shipyard launched a new ${s.D.name}`, 'warn'); } } }
-    else if (k === 'res' && dist < 80) { L.summonT -= dt; if (L.summonT <= 0) { L.summonT = 26; const n = g.enemies.filter((x) => !x.dead && x.mother === e).length; if (n < 4) for (let j = 0; j < 2; j++) g.spawnEnemy('drone', e.x + rand(-5, 5), e.z + rand(-5, 5), { faction: L.fac, mother: e }); } }
+    if (k === 'comm' && dist < 85) { L.callT -= dt; if (L.callT <= 0) { L.callT = 32; if (!this.crowded(4)) g.spawnWave(danger, false, { x: e.x, z: e.z }, '📡 Comm array called in reinforcements!'); } }
+    else if (k === 'yard' && dist < 110) { L.buildT -= dt; if (L.buildT <= 0) { L.buildT = 24; const n = g.enemies.filter((x) => !x.dead && x.yard === L.o.id).length; if (n < 5 && !this.crowded(1)) { const t = L.fac === 'iron' ? 'gunship' : L.fac === 'void' ? pick(['interceptor', 'ew']) : L.fac === 'eclipse' ? pick(['sniper', 'interceptor']) : danger >= 2 && Math.random() < 0.4 ? 'gunship' : 'interceptor'; const s = g.spawnEnemy(t, e.x + rand(-4, 4), e.z + rand(-4, 4), { faction: L.fac, yard: L.o.id }); s.cloaked = false; s.group.visible = true; g.rings.spawn(e.x, 0.5, e.z, e.radius * 2, FACTIONS[L.fac] ? FACTIONS[L.fac].rgb : [3, 0.5, 0.4], 0.5); g.toast(`⚙ Shipyard launched a new ${s.D.name}`, 'warn'); } } }
+    else if (k === 'res' && dist < 80) { L.summonT -= dt; if (L.summonT <= 0) { L.summonT = 26; const n = g.enemies.filter((x) => !x.dead && x.mother === e).length; if (n < 4 && !this.crowded(2)) for (let j = 0; j < 2; j++) g.spawnEnemy('drone', e.x + rand(-5, 5), e.z + rand(-5, 5), { faction: L.fac, mother: e }); } }
     else if (k === 'def' && dist < e.D.range) {
       const tu = e.turrets[0]; if (tu) tu.rotation.y = THREE.MathUtils.damp(tu.rotation.y, Math.atan2(dx, dz) - e.yaw, 3, dt);
       if (e.cd <= 0) { e.cd = 1 / e.D.fireRate * rand(0.85, 1.15); const p = g.player; const tx = p.x + p.vx * 1.1 + rand(-3, 3), tz = p.z + p.vz * 1.1 + rand(-3, 3); const dmg = e.D.dmg * e.dmgMul * 1.6;
@@ -136,8 +142,8 @@ export class Campaign {
         this.teleCircle(tx, tz, 5.5, 1.7, (T) => { g.boom(T.x, 0.5, T.z, 1.5, [3.6, 1.2, 0.4]); if (this.inCircle(T)) g.hurtPlayer(dmg, T.x, T.z, { energy: false }); this.splashFriends(T.x, T.z, T.r, dmg); }, WARN_COL.def); }
     }
     else if (k === 'hq' && dist < 75) {
-      L.summonT -= dt; if (L.summonT <= 0) { L.summonT = 15; const n = g.enemies.filter((x) => x.type === 'drone' && !x.dead).length; if (n < 6) for (let j = 0; j < 3; j++) g.spawnEnemy('drone', e.x + rand(-7, 7), e.z + rand(-7, 7), { faction: L.fac }); }
-      const f = e.hp / e.maxHp; if ((L.reinf === 0 && f < 0.66) || (L.reinf === 1 && f < 0.33)) { L.reinf++; g.spawnWave(Math.min(3, danger + 1), true, { x: e.x, z: e.z }, '☗ The stronghold calls its garrison!'); }
+      L.summonT -= dt; if (L.summonT <= 0) { L.summonT = 15; const n = g.enemies.filter((x) => x.type === 'drone' && !x.dead).length; if (n < 6 && !this.crowded(3)) for (let j = 0; j < 3; j++) g.spawnEnemy('drone', e.x + rand(-7, 7), e.z + rand(-7, 7), { faction: L.fac }); }
+      const f = e.hp / e.maxHp; if ((L.reinf === 0 && f < 0.66) || (L.reinf === 1 && f < 0.33)) { L.reinf++; if (!this.crowded(4)) g.spawnWave(Math.min(3, danger + 1), true, { x: e.x, z: e.z }, '☗ The stronghold calls its garrison!'); }
     }
   }
   turretAI(e, dt, dist, dx, dz) {
@@ -149,10 +155,10 @@ export class Campaign {
       for (const tu of e.turrets) tu.userData.rec = 1; g.audio.enemyShoot('gunship', e.x, e.z);
     }
   }
-  dmgMod(e) { // [multiplier, label] applied by Game.damageEnemy
+  dmgMod(e, probe) { // [multiplier, label] applied by Game.damageEnemy (probe = targeting query, no hit flash)
     if (e.inst) { const L = this.live.get(e.inst); if (L) {
-      if (L.sdome && e.type !== 'inst_turret' && this.hqShield(L)) { L.sdome.material.uniforms.uHit.value = 1; return [0, 'SECTOR SHIELD']; }
-      if (e === L.core && L.gens.some((x) => !x.dead)) { L.dome.material.uniforms.uHit.value = 1; return [0.1, 'SHIELDED']; } } }
+      if (L.sdome && e.type !== 'inst_turret' && this.hqShield(L)) { if (!probe) L.sdome.material.uniforms.uHit.value = 1; return [0, 'SECTOR SHIELD']; }
+      if (e === L.core && L.gens.some((x) => !x.dead)) { if (!probe) L.dome.material.uniforms.uHit.value = 1; return [0.1, 'SHIELDED']; } } }
     if (e.bc && (e.bc.gens.some((x) => !x.dead) || e.bc.invT > 0 || e.bc.cloaked)) return [0, 'SHIELDED'];
     return [1, null];
   }
@@ -237,15 +243,15 @@ export class Campaign {
     g.flashes.spawn(x, 3, z, 80, 0xff66ee, 0.5, 40); g.rings.spawn(x, 0.5, z, 24, FACTIONS[P.fac] ? FACTIONS[P.fac].rgb : [3, 0.5, 2], 0.9); g.audio.warp();
     this.spawnBoss(def, x, z, { sec: P.sec.id, wake: true });
   }
-  bossHpFor(def) { // scales gently with the player's level so the fight stays meaningful past the recommended level
-    const lv = this.g.s.level; if (def.commander) return Math.round(def.hp * (1 + Math.max(0, lv - 8) * 0.03));
-    return Math.round(def.hp * (1 + Math.max(0, lv - 22) * 0.035));
+  bossHpFor(def, sec) { // time-to-kill based (see balance.js): commanders at their sector's ring level, flagships at FLAGSHIP_L0
+    const lv = this.g.s.level; if (def.commander) return Math.round(ttkHp('commander', lv, RING_L0[sec ? sec.ring : 'R'] || 11, def.armor) * (sec && sec.threat >= 4 ? 1.25 : 1));
+    return Math.round(ttkHp('flagship', lv, FLAGSHIP_L0, def.armor) * def.hp / 15000);
   }
   spawnBoss(def, x, z, o = {}) {
     const g = this.g; const fk = def.fk; const type = def.commander ? 'commander' : 'flagship';
     const D = { ...ENEMIES[type], name: def.name, armor: def.armor, speed: def.speed, dmg: def.dmg, radius: def.radius };
-    const hp = this.bossHpFor(def); const keep = !def.commander && this.bossHp[fk];
-    const e = g.spawnEnemy(type, x, z, { faction: fk, variant: def.commander ? '' : fk, D, hp: keep ? keep.hp : hp, maxHp: hp, shield: 0, maxShield: 0, armor: def.armor, speedMul: 1, dmgMul: 1, cloaked: false, state: o.wake ? 'attack' : 'idle', elite: false, threat: 5 });
+    const hp = this.bossHpFor(def, o.sec ? SECTOR_BY_ID[o.sec] : null); const keep = !def.commander && this.bossHp[fk];
+    const e = g.spawnEnemy(type, x, z, { faction: fk, variant: def.commander ? '' : fk, D, hp: keep ? keep.hp : hp, maxHp: hp, shield: 0, maxShield: 0, armor: def.armor, speedMul: 1, dmgMul: dmgK(g.s.level, def.commander ? (RING_L0[(SECTOR_BY_ID[o.sec] || {}).ring] || 11) : FLAGSHIP_L0), cloaked: false, state: o.wake ? 'attack' : 'idle', elite: false, threat: 5 });
     e.group.visible = true; e.yaw = Math.atan2(g.player.x - x, g.player.z - z);
     e.bc = { def, phase: keep ? keep.phase : 0, atkT: 3, atkI: 0, sumT: 6, invT: 0, gens: [], parts: [], anchor: { x, z }, chargeT: 0, distAcc: 0, distN: 0, mode: null, modeT: 6, home: !!o.home, sec: o.sec };
     const php = Math.round(hp * (def.commander ? 0.12 : 0.06));
@@ -299,7 +305,7 @@ export class Campaign {
       if (bc.mode === 'pursuit') { attacks = ['charge', 'lance', 'spread']; keep = 12; } else if (bc.mode === 'kite') { attacks = ['nova', 'mines', 'spread']; keep = 30; } }
     if (bc.chargeT > 0) { bc.chargeT -= dt; e.vx = bc.cvx; e.vz = bc.cvz; if (!bc.chargeHit && dist < e.radius + p.radius + 1) { bc.chargeHit = true; g.hurtPlayer(e.D.dmg * 2.4, e.x, e.z, { energy: false }); g.addShake(0.6); } if (Math.random() < 0.8) g.fx.emit(e.x - bc.cvx * 0.05, 0.4, e.z - bc.cvz * 0.05, 0, 0, 0, 0.4, e.radius, 0.3, 3.4, 1.2, 0.4, 2); return { raw: true, wantFire: false }; }
     if (bc.cloaked) { bc.cloakT -= dt; if (bc.cloakT <= 0) { bc.cloaked = false; e.group.visible = true; g.fx.burst(e.x, 1, e.z, 40, 14, 0.5, 1.4, 0.1, [1.8, 0.6, 3.6], 2); this.attack(e, 'lance'); } return { tx: bc.cx, tz: bc.cz, spd: e.D.speed * 3, wantFire: false }; }
-    if (P.summon && this.partsLost(e, 'summon') < 1) { bc.sumT -= dt; if (bc.sumT <= 0) { bc.sumT = P.summon.every; const n = g.enemies.filter((x) => !x.dead && x.summoner === e).length; if (n < 8) { for (const t of P.summon.types) { const a = rand(0, TAU); const s = g.spawnEnemy(t, e.x + Math.cos(a) * (e.radius + 6), e.z + Math.sin(a) * (e.radius + 6), { faction: def.fk, summoner: e }); s.cloaked = false; s.group.visible = true; } g.rings.spawn(e.x, 0.5, e.z, e.radius * 2.5, FACTIONS[def.fk] ? FACTIONS[def.fk].rgb : [3, 0.5, 2], 0.6); g.toast(`${def.name} calls reinforcements!`, 'warn'); } } }
+    if (P.summon && this.partsLost(e, 'summon') < 1) { bc.sumT -= dt; if (bc.sumT <= 0) { bc.sumT = P.summon.every; const n = g.enemies.filter((x) => !x.dead && x.summoner === e).length; if (n < 8 && !this.crowded(P.summon.types.length, true)) { for (const t of P.summon.types) { const a = rand(0, TAU); const s = g.spawnEnemy(t, e.x + Math.cos(a) * (e.radius + 6), e.z + Math.sin(a) * (e.radius + 6), { faction: def.fk, summoner: e }); s.cloaked = false; s.group.visible = true; } g.rings.spawn(e.x, 0.5, e.z, e.radius * 2.5, FACTIONS[def.fk] ? FACTIONS[def.fk].rgb : [3, 0.5, 2], 0.6); g.toast(`${def.name} calls reinforcements!`, 'warn'); } } }
     bc.atkT -= dt; if (bc.atkT <= 0 && !g.dead) { const atk = attacks[bc.atkI++ % attacks.length]; bc.atkT = P.every * rand(0.9, 1.1); this.attack(e, atk); }
     const a = Math.atan2(-dz, -dx) + Math.sin(g.time * 0.25) * 0.9; let tx = p.x + Math.cos(a) * keep, tz = p.z + Math.sin(a) * keep;
     if (Math.hypot(e.x - bc.anchor.x, e.z - bc.anchor.z) > 140) { tx = bc.anchor.x; tz = bc.anchor.z; }

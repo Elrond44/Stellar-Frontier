@@ -41,7 +41,7 @@ function support(G, e, dt, dist, dx, dz, T, spd) {
     for (const o of G.enemies) { if (o === e || o.dead || o.D.inst || o.D.part || o.faction !== e.faction) continue; const d = Math.hypot(o.x - e.x, o.z - e.z); if (d > 30) continue; const f = o.hp / o.maxHp; if (f < best) { best = f; tgt = o; } }
     e.healTgt = tgt;
     if (tgt && Math.hypot(tgt.x - e.x, tgt.z - e.z) < 22 && e.stunT <= 0) {
-      const amt = tgt.maxHp * (tgt.D.boss ? 0.008 : 0.07); tgt.hp = Math.min(tgt.maxHp, tgt.hp + amt); if (tgt.maxShield) tgt.shield = Math.min(tgt.maxShield, tgt.shield + tgt.maxShield * 0.1);
+      const bc = tgt.bc; const ceil = bc ? tgt.maxHp * Math.min(1, bc.def.phases[bc.phase].at) : tgt.maxHp; const amt = tgt.maxHp * (bc ? 0.0025 : 0.07); tgt.hp = Math.min(Math.max(tgt.hp, ceil), tgt.hp + amt); if (tgt.maxShield) tgt.shield = Math.min(tgt.maxShield, tgt.shield + tgt.maxShield * 0.1);
       for (let k = 0; k < 6; k++) { const t = k / 6; G.fx.emit(e.x + (tgt.x - e.x) * t, 0.8, e.z + (tgt.z - e.z) * t, 0, 0.5, 0, 0.45, 0.7, 0.1, 0.4, 3.2, 1.2, 1); }
       if (Math.random() < 0.4) G.ui && G.ui.float(tgt.x, 1.8, tgt.z, '+' + Math.round(amt), '#5dff98');
     }
