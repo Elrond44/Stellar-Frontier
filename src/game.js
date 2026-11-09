@@ -270,6 +270,14 @@ export class Game {
     if (announce) { const R = RARITIES[it.r]; this.toast(`◆ ${R.name.toUpperCase()} · ${it.name}`, 'rar r' + it.r); }
     this.emit('item', { r: it.r }); return true;
   }
+  fabricate(bp) { // craft a copy of an unlocked flagship blueprint
+    const B = BOSS_BY_BP[bp]; if (!B || !this.s.blueprints[bp]) { this.audio.denied(); return false; } const R = B.reward, c = R.cost;
+    const mats = Object.entries(c).filter(([k]) => k !== 'credits' && k !== 'parts');
+    if (this.s.credits < c.credits || this.s.parts < c.parts || mats.some(([k, n]) => (this.s.vault[k] || 0) < n)) { this.audio.denied(); this.toast('Missing materials for this blueprint', 'warn'); return false; }
+    if (this.s.inv.length >= INV_CAP) { this.toast('Inventory full: salvage something first', 'warn'); return false; }
+    this.s.credits -= c.credits; this.s.parts -= c.parts; for (const [k, n] of mats) this.s.vault[k] -= n;
+    const it = makeItem(R.t, R.r, Math.max(this.s.level, 25), 'Blueprint fabrication', { name: R.name, sp: R.sp, bp }); this.addItem(it); this.audio.upgrade(); this.save(); return it;
+  }
   buyItem(t) {
     const offer = merchantStock(this.s.level).find((o) => o.t === t); if (!offer || offer.locked || this.s.credits < offer.price) { this.audio.denied(); return false; }
     if (this.s.inv.length >= INV_CAP) { this.toast('Inventory full: salvage something first', 'warn'); return false; }
@@ -1157,7 +1165,7 @@ export class Game {
       this.gsec = gs; const g = this.s.galaxy; const fresh = !g.explored[gs.id]; let xp = 0;
       if (fresh) { g.explored[gs.id] = 1; xp = 60 * Math.max(1, gs.ringI); this.addXP(xp); this.secEnterT = this.time; this.emit('discover', { id: gs.id }); this.save(); }
       if (this.time > 3) { this.audio.warp(); this.audio.sector(); }
-      this.ui && this.ui.sectorBanner(gs, { fresh, xp });
+      this.ui && this.ui.sectorBanner(gs, { fresh, xp, flip: g.flipT[gs.id] != null && this.s.war.clock - g.flipT[gs.id] < 400 });
     }
     // waypoint arrival
     { const wp = this.s.galaxy.wp; if (wp && Math.hypot(wp.x - p.x, wp.z - p.z) < 12 + p.radius) { this.toast(`Waypoint reached: ${wp.label}`, 'good'); this.audio.click(); this.s.galaxy.wp = null; this.save(); } }

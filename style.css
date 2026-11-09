@@ -354,3 +354,75 @@ textarea.code{width:100%;height:70px;margin-top:8px;border-radius:8px;background
 .card.sinfo.fog{border-style:dashed;--fc:#678}
 .ins{display:inline-block;vertical-align:middle}
 @media (max-height:700px){#abilities{top:calc(var(--sat) + 236px);gap:5px}.abil{width:46px;height:46px}.abil .aic{font-size:18px}}
+/* ===== v5: liberation stage tracker ===== */
+#libWrap{background:none;border:0;padding:0;width:118px;color:#8fe6ff;font:inherit;font-size:8.5px;letter-spacing:.06em;cursor:pointer;pointer-events:auto;text-align:center}
+#stagePips{display:flex;justify-content:center;gap:2px;margin-bottom:2px}
+#stagePips i,#banner .stg i{font-style:normal;width:15px;height:15px;display:grid;place-items:center;font-size:9px;border-radius:50%;border:1px solid rgba(143,230,255,.35);color:rgba(143,230,255,.5);background:rgba(4,14,26,.7)}
+#stagePips i.done,#banner .stg i.done{background:#1a90c4;border-color:#6fe8ff;color:#fff}
+#stagePips i.cur,#banner .stg i.cur{border-color:#ffd166;color:#ffd166;box-shadow:0 0 6px #ffd166;animation:pulse 1s infinite alternate}
+#libLbl{display:block;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#libObj{display:block;font-size:8px;color:#ffd166;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 4px #000}
+#banner .stg{display:flex!important;justify-content:center;gap:4px;margin:6px 0;opacity:1!important}
+#banner .stg i{width:22px;height:22px;font-size:12px}
+/* ===== v5: boss bar ===== */
+#bossBar{--fc:#ff4dd8;top:calc(var(--sat) + 232px);width:min(82vw,420px);color:var(--fc);text-shadow:0 0 6px var(--fc);pointer-events:none}
+#bossBar .bbHead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11px}
+#bossBar .bbHead span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bossPhase{font-style:normal;font-size:9px;color:#ffd166;white-space:nowrap}
+#bossBar .bar{position:relative;height:11px;border:1px solid color-mix(in srgb,var(--fc) 60%,transparent)}
+#bossBar .bar i{background:linear-gradient(90deg,color-mix(in srgb,var(--fc) 55%,#000),var(--fc));box-shadow:0 0 10px var(--fc)}
+#bossShield{position:absolute;inset:0;display:grid;place-items:center;font-size:8px;color:#bff4ff;letter-spacing:.14em;text-shadow:0 0 4px #000}
+#bossBar.shielded .bar{border-color:#6fe8ff;box-shadow:0 0 10px #4fd2ff,inset 0 0 8px #4fd2ff}
+#bossBar.shielded .bar i{filter:saturate(.4) brightness(.8)}
+#bossParts{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;margin-top:4px}
+#bossParts span{position:relative;font-size:8px;letter-spacing:.06em;padding:2px 5px 3px;border-radius:4px;background:rgba(10,4,16,.75);border:1px solid color-mix(in srgb,var(--fc) 45%,transparent);color:#ffd9f2;overflow:hidden;text-shadow:none}
+#bossParts span i{position:absolute;left:0;bottom:0;height:2px;background:var(--fc)}
+#bossParts span.dead{opacity:.45;text-decoration:line-through;border-color:#556}
+#bossWarn{position:absolute;top:calc(var(--sat) + 300px);left:50%;transform:translateX(-50%);padding:5px 12px;border-radius:8px;background:rgba(60,0,10,.75);border:1px solid #ff4a5a;color:#ffd0d4;font-size:12px;font-weight:800;letter-spacing:.1em;white-space:nowrap;display:none;pointer-events:none;animation:pulse .35s infinite alternate}
+#bossWarn.show{display:block}
+#banner.boss{font-size:26px}
+/* ===== v5: trader button ===== */
+#btnTrade{position:absolute;left:10px;bottom:calc(var(--sab,0px) + 136px);display:none;padding:8px 16px;border-radius:12px;font-weight:900;letter-spacing:.14em;color:#5dff98;border:1.5px solid #5dff98;box-shadow:0 0 14px rgba(93,255,152,.45);pointer-events:auto;z-index:6}
+#btnTrade small{display:block;font-size:8px;letter-spacing:.1em;color:#bfffd8;font-weight:600}
+#btnTrade.show{display:block}
+/* ===== v5: quest card mission mode ===== */
+#questCard.mis{border-color:#ffd166}#questCard.mis .qhead{color:#ffd166;border-color:rgba(255,209,102,.3)}
+#questCard.mis .bar i{background:linear-gradient(90deg,#c98a10,#ffd166)}
+/* ===== v5: missions ===== */
+.card.mis{border-left:3px solid var(--mc)}.card.mis.trk{box-shadow:0 0 12px color-mix(in srgb,var(--mc) 45%,transparent);border-color:var(--mc)}
+.card.mis .row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.card.mis .mIco{width:30px;height:30px;flex:none;display:grid;place-items:center;font-size:16px;border-radius:8px;background:color-mix(in srgb,var(--mc) 20%,transparent);color:var(--mc)}
+.card.mis h4{margin:1px 0 2px;font-size:13px}.card.mis small{font-size:9px;letter-spacing:.1em;color:#9fd8ee}
+.card.mis.fail{opacity:.7}.card.mis .btnrow{margin-top:6px}
+.badgeN{display:inline-grid;place-items:center;min-width:15px;height:15px;border-radius:8px;background:#ffd166;color:#000;font-size:9px;margin-left:3px}
+.thr{display:flex;flex-direction:column;align-items:flex-end;font-size:9px;gap:2px}
+/* ===== v5: sector info stages / installations ===== */
+ol.stages{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:4px}
+ol.stages li{display:flex;gap:8px;align-items:flex-start;font-size:11px;opacity:.6}
+ol.stages li.done{opacity:.9}ol.stages li.cur{opacity:1}
+ol.stages .si{width:20px;height:20px;flex:none;display:grid;place-items:center;border-radius:50%;border:1px solid #456;font-size:10px}
+ol.stages li.done .si{background:#1a90c4;border-color:#6fe8ff;color:#fff}ol.stages li.cur .si{border-color:#ffd166;color:#ffd166;box-shadow:0 0 6px #ffd166}
+ol.stages small{display:block;font-size:10px;opacity:.85;margin-top:1px}
+ol.stages em{display:flex;flex-wrap:wrap;gap:4px;font-style:normal;margin-top:2px}
+ol.stages em span{font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,.06);border:1px solid #345}ol.stages em span.ok{border-color:#4fd2ff;color:#8fe6ff}
+.instList{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:6px 0}
+.inst{display:flex;gap:6px;align-items:center;text-align:left;padding:5px 6px;border-radius:8px;border:1px solid color-mix(in srgb,var(--fc) 50%,transparent);background:rgba(255,255,255,.03);font-size:10.5px;color:#e8fbff}
+.inst b{width:20px;flex:none;text-align:center;font-size:14px;color:var(--fc)}.inst small{display:block;font-size:8.5px;opacity:.7;letter-spacing:.04em}
+.inst.dead{opacity:.45;text-decoration:line-through}.inst.unk{border-style:dashed;opacity:.75}
+.bossNote{font-size:11px;padding:6px 8px;border-radius:8px;border:1px solid var(--fc);background:color-mix(in srgb,var(--fc) 10%,transparent)}
+/* ===== v5: faction war panel ===== */
+.card.war{border-color:#a07cff;font-size:11px}.card.war small{display:block;font-size:9.5px;opacity:.75;margin-top:3px}
+.tug{display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:4px;background:#123}.tug i{display:block;height:100%}
+.card.fac{border-color:color-mix(in srgb,var(--fc) 55%,transparent)}.card.fac .row{display:flex;gap:8px;align-items:center}
+.card.fac h4{margin:0 0 3px;color:var(--fc);font-size:13px}.card.fac small{display:block;font-size:9.5px;opacity:.8;margin-top:3px}
+.card.fac .bar{height:6px}.fIns .ins{width:28px;height:28px;filter:drop-shadow(0 0 6px var(--fc))}
+.wlog p{margin:2px 0;font-size:10.5px;opacity:.85}.wlog p.flip{color:#ffd166}.wlog p.pact{color:#9fffd0}
+.card.bp.locked{opacity:.65}
+.libIn.boss{border-color:var(--fc);box-shadow:0 0 30px color-mix(in srgb,var(--fc) 50%,transparent)}.libIn.boss h2{text-shadow:0 0 18px var(--fc)}
+/* v5 layout: boss bar sits bottom-left above the cargo panel, clear of the radar, quest card and joystick */
+#bossBar{top:auto;bottom:calc(var(--sab) + 128px);left:10px;transform:none;width:min(60vw,300px);text-align:left}
+#bossParts{justify-content:flex-start}
+#bossWarn{top:auto;bottom:calc(var(--sab) + 246px)}
+#bossBar .bbHead{flex-direction:column;align-items:flex-start;gap:0}#bossBar .bbHead span{max-width:100%}
+#battleTag{position:absolute;left:10px;bottom:calc(var(--sab) + 128px);width:min(60vw,280px);display:none;padding:6px 9px;border-radius:10px;background:rgba(14,6,30,.72);border:1px solid #a07cff;color:#e6d8ff;font-size:10px;letter-spacing:.08em;pointer-events:none}
+#battleTag.show{display:block}#battleTag small{display:block;font-size:8px;opacity:.7;margin-top:3px;letter-spacing:.04em}

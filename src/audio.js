@@ -632,6 +632,9 @@ export class Audio {
   tierUp() { this.play('fanfare'); this.duck(0.3, 3); }
   stationUp() { this.play('fanfare', { rate: 0.94 }); this.duck(0.3, 3); }
   alarm() { this.play('pirate'); }
+  quest() { this.play('quest', { vol: 0.8 }); }
+  warn() { const t = performance.now(); if (t - (this._warnT || 0) < 900) return; this._warnT = t; this.play('denied', { rate: 1.5, vol: 0.55 }); }
+  bossPhase() { this.play('pirate', { rate: 0.82 }); this.play('shieldDown', { rate: 0.7, vol: 0.6, delay: 0.25 }); this.duck(0.4, 2); }
   saved() { this.play('save'); }
   warp() { this.play('warp'); }
   boost() { this.play('boost'); }

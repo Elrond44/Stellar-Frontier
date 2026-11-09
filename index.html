@@ -29,10 +29,11 @@
     </div>
     <div id="radarWrap"><canvas id="radar" width="140" height="140" aria-label="Radar: tap for galaxy map"></canvas><button id="btnMap" aria-label="Galaxy map">MAP</button><button id="sectorName"></button>
       <div id="heatWrap"><span>PIRATE HEAT</span><div class="bar heat"><i id="heatFill"></i></div></div>
-      <div id="libWrap"><span id="libLbl">LIBERATION 0%</span><div class="bar lib"><i id="libFill"></i></div></div>
+      <button id="libWrap" aria-label="Liberation stages"><div id="stagePips"></div><span id="libLbl">LIBERATION 0%</span><div class="bar lib"><i id="libFill"></i></div><small id="libObj"></small></button>
     </div>
     <div id="abilities"></div>
-    <div id="bossBar"><span>☠ WARLORD DREADNOUGHT</span><div class="bar"><i id="bossFill"></i></div></div>
+    <div id="bossBar"><div class="bbHead"><span id="bossName">☠</span><em id="bossPhase"></em></div><div class="bar"><i id="bossFill"></i><b id="bossShield"></b></div><div id="bossParts"></div></div>
+    <div id="bossWarn"></div><div id="battleTag"><b id="btTitle"></b><div class="tug"><i id="btA"></i><i id="btD"></i></div><small>Destroy either side to tip the battle · they ignore you unless you attack</small></div>
     <div id="leftCol">
       <button id="questCard" class="panel">
         <div class="qhead">◈ ACTIVE QUEST</div>
@@ -43,6 +44,7 @@
       <button id="btnUpgrades" class="panel sidebtn"><svg viewBox="0 0 32 32"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M16 4l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/><path stroke="currentColor" stroke-width="1.6" d="M16 27v3M10 29h12"/></svg><span>UPGRADES</span></button>
       <button id="btnMissions" class="panel sidebtn"><svg viewBox="0 0 32 32"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M8 4h16v24H8zM12 10h8M12 15h8M12 20h5"/></svg><span>MISSIONS</span></button>
     </div>
+    <button id="btnTrade" class="panel">⚖ TRADER<small>Liberated-sector stock</small></button>
     <div id="dockTag">◆ DOCKED · CARGO SOLD · HULL REPAIRING</div>
     <div id="toasts"></div>
     <div id="banner"></div>

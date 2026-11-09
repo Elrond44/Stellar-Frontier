@@ -166,7 +166,7 @@ export class Campaign {
     for (let k = 0; k < 5; k++) setTimeout(() => g.boom(e.x + rand(-9, 9), 0.5, e.z + rand(-9, 9), 1.8, FACTIONS[e.faction] ? FACTIONS[e.faction].rgb : [3.2, 0.6, 0.4], k % 2 === 0), 120 + k * 160);
     g.flashes.spawn(e.x, 3, e.z, 120, 0xffb070, 0.6, 50);
     const th = Math.max(1, L.sec.threat); g.dropLoot(e.x, e.z, 'installation', th, o.kind === 'hq' ? 2 : 1); if (th >= 4 || o.kind === 'hq') g.dropLoot(e.x, e.z, 'installation', th);
-    if (o.kind === 'res') { const keys = ['iron', 'copper', 'crimsonite', 'voidstone']; for (let k = 0; k < 3; k++) g.minerals.spawn(e.x, e.z, pick(keys), 6, 12); }
+    if (o.kind === 'res') { const keys = ['stellarite', 'viridium', 'crimsonite', 'voidstone']; for (let k = 0; k < 3; k++) g.minerals.spawn(e.x, e.z, pick(keys), 6, 12); }
     const msg = { comm: 'enemy coordination disrupted', res: `${FACTIONS[L.fac] ? FACTIONS[L.fac].name : 'faction'} income reduced`, yard: 'no more replacement ships', def: 'artillery cover removed', hq: 'the stronghold has fallen' }[o.kind];
     g.toast(`${instName(o)} destroyed: ${msg}`, 'level'); g.emit('outpost', { kind: o.kind });
     if (o.kind === 'hq') {
@@ -262,7 +262,7 @@ export class Campaign {
   partsLost(e, weak) { const all = e.bc.parts.filter((x) => x.weak === weak); if (!all.length) return 0; return all.filter((x) => x.dead).length / all.length; }
   enterPhase(e, i) {
     const g = this.g; const bc = e.bc; const def = bc.def; const P = def.phases[i]; bc.phase = i; bc.invT = 1.4; bc.atkT = 2.2; bc.sumT = 0.5;
-    g.toast(`☠ ${def.name}: ${P.name}!`, 'warn'); g.audio.bossPhase ? g.audio.bossPhase() : g.audio.alarm(); g.ui && g.ui.bossPhase && g.ui.bossPhase(def, i);
+    if (!(g.ui && g.ui.bossPhase)) g.toast(`☠ ${def.name}: ${P.name}!`, 'warn'); g.audio.bossPhase ? g.audio.bossPhase() : g.audio.alarm(); g.ui && g.ui.bossPhase && g.ui.bossPhase(def, i);
     g.rings.spawn(e.x, 0.5, e.z, e.radius * 3, FACTIONS[def.fk] ? FACTIONS[def.fk].rgb : [3, 0.5, 2], 0.9); g.addShake(0.4, e.x, e.z);
     if (P.rage) e.speedMul = (e.speedMul || 1) * 1.25;
     if (P.shieldGens) { const n = P.shieldGens; const hp = Math.round(e.maxHp * 0.045);
@@ -510,7 +510,7 @@ export class Campaign {
           if (R.scan >= 4 && !R.resolved) { R.resolved = true; const out = m.data.outcome;
             if (out === 'ambush') { g.toast('◉ It was a trap! Pirate ambush!', 'warn'); this.spawnGroup(m.fac || 'void', m.x, m.z, 3 + Math.min(3, m.threat), {}).forEach((e) => { e.cloaked = false; e.group.visible = true; }); g.dropLoot(m.x, m.z, 'cache', m.threat); }
             else if (out === 'relic') { g.toast('◉ Signal source: a pre-collapse relic vault!', 'good'); g.dropLoot(m.x, m.z, 'mission', m.threat, 2); g.addXP(150 * m.threat); }
-            else { g.toast('◉ Signal source: a derelict freighter with salvage', 'good'); g.dropLoot(m.x, m.z, 'cache', m.threat); g.minerals.spawn(m.x, m.z, pick(['copper', 'crimsonite', 'voidstone']), 10, 10); }
+            else { g.toast('◉ Signal source: a derelict freighter with salvage', 'good'); g.dropLoot(m.x, m.z, 'cache', m.threat); g.minerals.spawn(m.x, m.z, pick(['viridium', 'crimsonite', 'voidstone']), 10, 10); }
             m.prog = 1; this.finish(m, 'done'); }
           break;
         case 'escort': this.escortTick(m, R, dt); break;
