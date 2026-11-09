@@ -41,7 +41,7 @@ export class Campaign {
   }
   update(dt) {
     const g = this.g; if (!g.s.war) return;
-    this.scanT -= dt; if (this.scanT <= 0) { this.scanT = 0.5; this.scanInstallations(); this.scanLairs(); this.scanSkirmishes(); }
+    this.scanT -= dt; if (this.scanT <= 0) { this.scanT = 0.5; this.scanInstallations(); this.scanLairs(); this.scanSkirmishes(); if (isPirate(g.gsec) && !g.dead) this.checkStage(g.gsec); }
     this.updateTele(dt); this.updateWar(dt); this.updateConvoys(dt); this.updateCommander(dt); this.updateFriendly(dt); this.updateMissions(dt);
     for (const f of this.friends) if (f.hitT > 0) f.hitT -= dt;
     if (this.warn && g.time > this.warn.until) this.warn = null;
