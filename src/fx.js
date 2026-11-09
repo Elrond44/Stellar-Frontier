@@ -4,8 +4,8 @@ import { rand, TAU } from './util.js';
 import { glowTexture } from './models.js';
 
 export class Particles {
-  constructor(scene, max = 4000) {
-    this.max = max; this.i = 0;
+  constructor(scene, max = 4000, opts = {}) {
+    this.max = max; this.i = 0; const normal = !!opts.normal;
     const g = new THREE.BufferGeometry();
     this.pos = new Float32Array(max * 3); this.col = new Float32Array(max * 3); this.size = new Float32Array(max); this.alpha = new Float32Array(max);
     this.vel = new Float32Array(max * 3); this.life = new Float32Array(max); this.maxLife = new Float32Array(max);
@@ -18,10 +18,10 @@ export class Particles {
       uniforms: { uScale: { value: 400 }, uMap: { value: glowTexture() } },
       vertexShader: `attribute float size; attribute float alpha; attribute vec3 color; varying vec3 vC; varying float vA; uniform float uScale;
         void main(){ vC=color; vA=alpha; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize = size*uScale/(-mv.z); gl_Position=projectionMatrix*mv; }`,
-      fragmentShader: `uniform sampler2D uMap; varying vec3 vC; varying float vA; void main(){ float a=texture2D(uMap,gl_PointCoord).a*vA; if(a<0.01) discard; gl_FragColor=vec4(vC*a,a);} `,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      fragmentShader: `uniform sampler2D uMap; varying vec3 vC; varying float vA; void main(){ float a=texture2D(uMap,gl_PointCoord).a*vA; if(a<0.01) discard; ${normal ? 'gl_FragColor=vec4(vC,a*0.75);' : 'gl_FragColor=vec4(vC*a,a);'} } `,
+      transparent: true, depthWrite: false, blending: normal ? THREE.NormalBlending : THREE.AdditiveBlending,
     });
-    this.points = new THREE.Points(g, this.mat); this.points.frustumCulled = false; this.points.renderOrder = 5;
+    this.points = new THREE.Points(g, this.mat); this.points.frustumCulled = false; this.points.renderOrder = normal ? 4 : 5;
     scene.add(this.points); this.geo = g; this.active = 0; this.budget = 1;
   }
   emit(x, y, z, vx, vy, vz, life, s0, s1, r, gg, b, drag = 2, alpha = 1) {
@@ -186,6 +186,25 @@ export class FloatText {
       const x = (this.v.x * 0.5 + 0.5) * w, y = (-this.v.y * 0.5 + 0.5) * h - t * 40;
       it.el.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%) scale(${1 + (1 - t) * 0.2})`;
       it.el.style.opacity = String(Math.min(1, (1 - t) * 2));
+    }
+  }
+}
+
+// Pooled point lights for explosion / muzzle flashes (disabled on Low quality)
+export class Flashes {
+  constructor(scene, n = 3) {
+    this.pool = []; this.enabled = true;
+    for (let i = 0; i < n; i++) { const l = new THREE.PointLight(0xffaa55, 0, 30, 1.6); l.position.set(0, -999, 0); scene.add(l); this.pool.push({ l, life: 0, max: 1, i0: 0 }); }
+  }
+  spawn(x, y, z, intensity = 40, color = 0xffaa55, life = 0.35, dist = 30) {
+    if (!this.enabled) return;
+    let o = this.pool[0]; for (const p of this.pool) if (p.life < o.life) o = p;
+    o.life = o.max = life; o.i0 = intensity; o.l.color.setHex(color); o.l.distance = dist; o.l.position.set(x, y + 2, z); o.l.intensity = intensity;
+  }
+  update(dt) {
+    for (const o of this.pool) {
+      if (o.life <= 0) { if (o.l.intensity) o.l.intensity = 0; continue; }
+      o.life -= dt; const t = Math.max(0, o.life / o.max); o.l.intensity = o.i0 * t * t;
     }
   }
 }

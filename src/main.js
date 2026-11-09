@@ -6,7 +6,7 @@ import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
 import { Game } from './game.js';
 import { UI } from './ui.js';
 import { Audio } from './audio.js';
-import { makeSky, makeStarLayer } from './world.js';
+import { makeSky, makeStarLayer, makeDust } from './world.js';
 import { SECTORS, sectorAt } from './data.js';
 
 const canvas = document.getElementById('c');
@@ -43,12 +43,13 @@ const fill = new THREE.DirectionalLight(0xff8a50, 0.5); fill.position.set(30, -1
 const sky = makeSky(); scene.add(sky);
 const stars1 = makeStarLayer(1600, 500, -140, -90, 0.35, 1.8, 11); scene.add(stars1);
 const stars2 = makeStarLayer(700, 300, -60, -30, 0.22, 1.4, 12); scene.add(stars2);
-const dust = makeStarLayer(400, 140, -6, 4, 0.07, 0.35, 13); scene.add(dust);
-const starLayers = [stars1, stars2, dust];
+const motes = makeStarLayer(260, 140, -6, 4, 0.06, 0.3, 13); scene.add(motes);
+const dust = makeDust(); scene.add(dust);
+const starLayers = [stars1, stars2, motes];
 
 const audio = new Audio();
 const game = new Game(scene, camera, audio);
-const opts = { canvas, showFps: false, fpsText: () => '', applySettings: null };
+const opts = { canvas, showFps: false, fpsText: () => '', applySettings: null, isPlaying: () => playing, onLoaded: null };
 const ui = new UI(game, audio, opts);
 
 // post-processing
@@ -59,7 +60,8 @@ function setupQuality() {
   const pr = q === 'low' ? Math.min(dpr, 1) : q === 'medium' ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
   renderer.setPixelRatio(pr);
   renderer.setSize(innerWidth, innerHeight, false);
-  game.fx.budget = q === 'low' ? 0.5 : 1;
+  game.fx.budget = q === 'low' ? 0.5 : 1; game.setQuality(q);
+  sky.material.uniforms.uDetail.value = q === 'low' ? 0 : 1; dust.visible = q !== 'low'; motes.visible = q === 'high';
   if (q === 'low') { composer = null; bloom = null; }
   else {
     composer = new EffectComposer(renderer);
@@ -82,7 +84,7 @@ function resize() {
   renderer.setSize(w, h, false);
   if (composer) { composer.setSize(w, h); }
   const scale = renderer.getDrawingBufferSize(new THREE.Vector2()).y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
-  game.fx.mat.uniforms.uScale.value = scale; for (const l of starLayers) l.material.uniforms.uScale.value = scale;
+  game.fx.mat.uniforms.uScale.value = scale; game.smoke.mat.uniforms.uScale.value = scale; for (const l of starLayers) l.material.uniforms.uScale.value = scale;
 }
 addEventListener('resize', resize);
 audio.musicOn = game.s.settings.music; audio.sfxOn = game.s.settings.sfx;
@@ -95,25 +97,33 @@ opts.fpsText = () => `${fps.toFixed(0)} fps · ${renderer.info.render.calls} dra
 // title
 let playing = false;
 const title = document.getElementById('title');
-const btnPlay = document.getElementById('btnPlay'), btnNew = document.getElementById('btnNew');
+const btnPlay = document.getElementById('btnPlay'), btnNew = document.getElementById('btnNew'), btnLoad = document.getElementById('btnLoad');
 const hasSave = !!localStorage.getItem('stellar-frontier-save-v1');
 document.getElementById('loadMsg').classList.add('hidden');
-btnPlay.classList.remove('hidden');
+btnPlay.classList.remove('hidden'); btnLoad.classList.remove('hidden');
 if (hasSave) { btnPlay.textContent = `CONTINUE · LV ${game.s.level}`; btnNew.classList.remove('hidden'); }
-btnPlay.addEventListener('click', () => {
+function startGame() {
+  if (playing) return;
   audio.init(); audio.setMusic(game.s.settings.music); audio.setSfx(game.s.settings.sfx);
   title.classList.add('gone'); playing = true; setTimeout(() => title.remove(), 700);
   const sec = sectorAt(Math.hypot(game.player.x, game.player.z)); ui.sectorBanner(sec);
   if (game.offlineGain > 1) ui.toast(`Your factory produced ${Math.floor(game.offlineGain)} credits while you were away`, 'good');
   if (!game.s.tutorialDone) { game.s.tutorialDone = true; setTimeout(() => ui.toast('Mine asteroids, fill your cargo, then return to the station to sell.'), 1500); }
   else document.getElementById('hint').classList.add('gone');
+}
+btnPlay.addEventListener('click', startGame);
+btnLoad.addEventListener('click', () => { audio.init(); ui.open('saves'); });
+opts.onLoaded = () => { if (!playing) { game.offlineGain = 0; startGame(); } };
+let newArmed = 0;
+btnNew.addEventListener('click', () => {
+  if (Date.now() - newArmed < 3500) { game.reset(); return; }
+  newArmed = Date.now(); btnNew.textContent = 'Tap again to erase progress'; setTimeout(() => { btnNew.textContent = 'New game'; }, 3500);
 });
-btnNew.addEventListener('click', () => { if (confirm('Start a new game? Current progress will be erased.')) game.reset(); });
 
 // autosave
 setInterval(() => { if (playing) game.save(); }, 8000);
-addEventListener('visibilitychange', () => { if (document.hidden) game.save(); });
-addEventListener('pagehide', () => game.save());
+addEventListener('visibilitychange', () => { if (document.hidden && playing) game.save(); });
+addEventListener('pagehide', () => { if (playing) game.save(); });
 
 // sky tint per sector
 const tint = new THREE.Vector3(...SECTORS[0].tint);
@@ -123,13 +133,13 @@ function frame() {
   const rawDt = clock.getDelta(); const dt = Math.min(rawDt, 1 / 20);
   frames++; fpsAcc += rawDt; if (fpsAcc >= 0.5) { fps = frames / fpsAcc; frames = 0; fpsAcc = 0; }
   const t0 = performance.now();
-  if (playing) {
+  if (playing && !ui.modalOpen) {
     game.update(dt);
     if (game.s.settings.quality === 'auto' && !autoChecked) {
       autoT += rawDt; if (rawDt > 1 / 32) slowFrames++;
       if (autoT > 5) { autoChecked = true; if (slowFrames / (autoT * 50) > 0.5 && quality !== 'low') { quality = 'low'; setupQuality(); ui.toast('Graphics set to LOW for smoother play (change in Settings)'); } }
     }
-  } else {
+  } else if (!playing) {
     game.time += dt; game.player.yaw += dt * 0.2; game.player.group.rotation.y = game.player.yaw;
     game.field.update(game.player.x, game.player.z, game.time, dt);
   }
@@ -141,6 +151,7 @@ function frame() {
   tint.x += (sec.tint[0] - tint.x) * dt * 0.8; tint.y += (sec.tint[1] - tint.y) * dt * 0.8; tint.z += (sec.tint[2] - tint.z) * dt * 0.8;
   sky.material.uniforms.uTint.value.copy(tint); sky.material.uniforms.uTime.value = game.time;
   for (const l of starLayers) l.material.uniforms.uCam.value.set(camera.position.x, camera.position.z);
+  dust.material.uniforms.uCam.value.set(camera.position.x, camera.position.z); dust.material.uniforms.uVel.value.set(game.player.vx, game.player.vz);
   const t1 = performance.now();
   if (composer) composer.render(); else renderer.render(scene, camera);
   perf.upd = perf.upd * 0.95 + (t1 - t0) * 0.05; perf.calls = renderer.info.render.calls; perf.tris = renderer.info.render.triangles;

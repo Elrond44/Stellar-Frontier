@@ -2,6 +2,7 @@
 import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, WEAPONS, WEAPON_KEYS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt, BOSS_LAIR } from './data.js';
 import { fmt, clamp } from './util.js';
 import { FloatText } from './fx.js';
+import { Preview } from './preview.js';
 
 const $ = (id) => document.getElementById(id);
 const TIER_CROPS = [[18, 368, 120, 100], [122, 305, 232, 190], [320, 228, 275, 255], [495, 220, 385, 310], [745, 105, 530, 490]];
@@ -17,7 +18,7 @@ export class UI {
     this.keys = {};
     this.tiersImg = new Image(); this.tiersImg.src = 'art/tiers.jpg';
     this.bind();
-    this.hudT = 0; this.radarT = 0; this.liveT = 0;
+    this.hudT = 0; this.radarT = 0; this.liveT = 0; this.preview = new Preview(); this.pvTier = null; this.confirmKey = null;
     game.ui = this;
   }
   float(x, y, z, t, c, big) { this.float3.spawn(x, y, z, t, c, big); }
@@ -102,6 +103,7 @@ export class UI {
     this.hudT -= dt; if (this.hudT <= 0) { this.hudT = 0.12; this.refreshHud(); }
     this.radarT -= dt; if (this.radarT <= 0) { this.radarT = 1 / 20; this.drawRadar(); }
     this.liveT -= dt; if (this.modalOpen && this.liveT <= 0) { this.liveT = 0.25; this.live(); }
+    if (this.modalOpen) this.preview.render(dt);
     this.homeArrow(w, h);
   }
   refreshHud(force) {
@@ -203,7 +205,10 @@ export class UI {
     $('modal').classList.remove('hidden'); $('modal').dataset.kind = which;
     this.render(true);
   }
-  close() { if (!this.modalOpen) return; this.modalOpen = null; $('modal').classList.add('hidden'); this.g.save(); }
+  close() {
+    if (!this.modalOpen) return; this.modalOpen = null; this.preview.hide(); this.confirmKey = null;
+    $('modal').classList.add('hidden'); if (this.opts.isPlaying()) this.g.save();
+  }
   render(resetScroll) {
     const body = $('modalBody'); const st = body.scrollTop;
     const which = this.modalOpen; let title = '', tabs = '', html = '';
@@ -216,8 +221,11 @@ export class UI {
     } else if (which === 'upgrades') { title = 'SHIP UPGRADES'; html = this.renderUpgrades(); }
     else if (which === 'missions') { title = 'MISSIONS'; html = this.renderMissions(); }
     else if (which === 'settings') { title = 'SETTINGS'; html = this.renderSettings(); }
+    else if (which === 'saves') { title = 'SAVE / LOAD'; html = this.renderSaves(); }
     $('modalTitle').textContent = title; $('modalTabs').innerHTML = tabs; $('modalTabs').style.display = tabs ? '' : 'none';
     body.innerHTML = html; body.scrollTop = resetScroll ? 0 : st;
+    if (resetScroll) { body.classList.remove('enter'); void body.offsetWidth; body.classList.add('enter'); }
+    this.attachPreview();
     this.live();
   }
   live() {
@@ -225,6 +233,12 @@ export class UI {
     const g = this.g, s = g.s; $('modalCredits').innerHTML = CRYSTAL + fmt(s.credits);
     document.querySelectorAll('#modalBody [data-cost]').forEach((b) => { const ok = s.credits >= +b.dataset.cost && b.dataset.block !== '1'; b.classList.toggle('dis', !ok); });
     const ff = $('facStored'); if (ff) { const r = g.factoryRates(); ff.textContent = fmt(s.factory.stored); $('facBar').style.width = (100 * s.factory.stored / r.capacity) + '%'; $('facClaim').classList.toggle('dis', s.factory.stored < 1); }
+  }
+  attachPreview() {
+    const slot = document.querySelector('#modalBody .pvSlot');
+    if (!slot) { this.preview.hide(); return; }
+    const ok = this.preview.show(slot, slot.dataset.kind, +slot.dataset.arg);
+    slot.classList.toggle('noPv', !ok);
   }
   dockNote() { return this.g.docked ? '' : `<div class="note">🚀 Dock at the station to use this. <button class="btn sm" data-act="autopilot">Autopilot home</button></div>`; }
   matsHtml(mats) { if (!mats) return ''; return Object.entries(mats).map(([k, n]) => `<span class="mat ${this.g.s.vault[k] >= n ? '' : 'miss'}" style="--c:${MINERALS[k].css}">${this.g.s.vault[k]}/${n} ${MINERALS[k].name}</span>`).join(' '); }
@@ -243,17 +257,18 @@ export class UI {
     const g = this.g, s = g.s, r = g.factoryRates();
     const ci = g.factoryUpCost('inc'), cc = g.factoryUpCost('cap');
     return `<div class="card fac"><div class="row"><div class="facIcon">🏭</div><div style="flex:1"><h4>REFINERY FACTORY</h4><p>Produces credits around the clock, even while you're away.</p></div></div>
-      <div class="stats3"><div><small>INCOME</small><b>${fmt(r.income)}/min</b></div><div><small>CAPACITY</small><b>${fmt(r.capacity)}</b></div><div><small>STORED</small><b id="facStored">${fmt(s.factory.stored)}</b></div></div>
+      <div class="stats3"><div><small>INCOME</small><b>${fmt(r.income + g.droneIncome())}/min</b></div><div><small>CAPACITY</small><b>${fmt(r.capacity)}</b></div><div><small>STORED</small><b id="facStored">${fmt(s.factory.stored)}</b></div></div>
       <div class="bar big"><i id="facBar"></i></div>
       <button id="facClaim" class="btn wide gold" data-act="claim">CLAIM</button></div>
       <div class="card up"><div class="upi">⇪</div><div class="upt"><h4>Income · Lv ${s.factory.inc + 1}</h4><p>+30% credits per minute</p></div><button class="btn" data-act="facup" data-w="inc" data-cost="${ci}">${CRYSTAL}${fmt(ci)}</button></div>
       <div class="card up"><div class="upi">▤</div><div class="upt"><h4>Capacity · Lv ${s.factory.cap + 1}</h4><p>+45% storage before it's full</p></div><button class="btn" data-act="facup" data-w="cap" data-cost="${cc}">${CRYSTAL}${fmt(cc)}</button></div>
+      <div class="card up"><div class="upi">⛏</div><div class="upt"><h4>Mining drones · ${g.droneCount()}</h4><p>${g.droneCount() ? `Station drones mine nearby rocks: +${fmt(g.droneIncome())} cr/min into the factory${s.stationLvl >= 3 ? ' and the odd Viridium for the vault' : ''}.` : 'Expand the station to Lv 2 to launch mining drones.'}</p></div></div>
       <p class="muted">Station level multiplies factory output (×${STATION_LEVELS[s.stationLvl - 1].mult}).</p>`;
   }
   tab_expand() {
     const g = this.g, s = g.s; const inf = g.stationUpgradeInfo();
     let h = this.dockNote();
-    h += `<div class="card"><div class="stationArt" style="background-position:${['0%', '0%', '50%', '50%', '100%', '100%'][s.stationLvl - 1]} 50%"></div>
+    h += `<div class="card"><div class="pvSlot station" data-kind="station" data-arg="${s.stationLvl}"><div class="stationArt" style="background-position:${['0%', '0%', '50%', '50%', '100%', '100%'][s.stationLvl - 1]} 50%"></div><span class="pvTag">LIVE VIEW · LV ${s.stationLvl}</span></div>
       <h4>LEVEL ${s.stationLvl}: ${STATION_LEVELS[s.stationLvl - 1].name.toUpperCase()}</h4><p>${STATION_LEVELS[s.stationLvl - 1].desc}</p>
       <div class="pips">${STATION_LEVELS.map((l) => `<i class="${l.lvl <= s.stationLvl ? 'on' : ''}"></i>`).join('')}</div></div>`;
     if (inf) {
@@ -266,6 +281,9 @@ export class UI {
   tierCanvas(i) { return `<canvas class="tierArt" data-tier="${i}" width="200" height="120"></canvas>`; }
   tab_shipyard() {
     const g = this.g, s = g.s; let h = this.dockNote();
+    const pt = this.pvTier || Math.min(5, s.tier + 1); const PT = TIERS[pt - 1];
+    h += `<div class="card pvCard"><div class="pvSlot" data-kind="ship" data-arg="${pt}"><span class="pvTag">TIER ${pt} · ${PT.name.toUpperCase()}</span></div>
+      <div class="seg pvSel">${TIERS.map((T) => `<button class="${pt === T.tier ? 'on' : ''}" data-act="pvtier" data-t="${T.tier}">T${T.tier}</button>`).join('')}</div></div>`;
     TIERS.forEach((T, i) => {
       const owned = s.tier >= T.tier, next = T.tier === s.tier + 1; const inf = g.tierInfo(T.tier);
       const req = T.tier > 1 ? `Requires station Lv ${T.station}` : '';
@@ -334,14 +352,60 @@ export class UI {
     return tg('music', 'Music') + tg('sfx', 'Sound effects') + tg('shake', 'Camera shake') + tg('fps', 'Show FPS') +
       `<div class="card row"><span>Graphics quality</span><div class="seg">${['auto', 'low', 'medium', 'high'].map((q) => `<button class="${st.quality === q ? 'on' : ''}" data-act="quality" data-q="${q}">${q.toUpperCase()}</button>`).join('')}</div></div>
       <div class="card"><h4>CONTROLS</h4><p>Touch: drag anywhere to steer (virtual joystick). Weapons fire automatically.<br>Desktop: WASD / arrow keys or drag with the mouse. U = upgrades, M = missions, F = factory, H = station/autopilot, Esc = close.</p></div>
-      <div class="card row"><span>Progress saves automatically.</span><button class="btn sm" data-act="save">Save now</button></div>
-      <div class="card row"><span>Erase all progress</span><button class="btn sm danger" data-act="reset">Reset</button></div>
-      <p class="muted">Stellar Frontier v1.0 · Built with three.js</p>`;
+      <div class="card row"><span>Progress autosaves every few seconds.</span><span class="btnrow"><button class="btn sm gold" data-act="save">Save game</button><button class="btn sm" data-act="saves">Save / Load…</button></span></div>
+      <div class="card row"><span>Erase all progress</span><button class="btn sm danger" data-act="reset" data-confirm="1">Reset</button></div>
+      <p class="muted">Stellar Frontier v2.0 · Built with three.js</p>`;
   }
+  slotCard(i) {
+    const g = this.g; const auto = i === 'auto'; const m = g.slotMeta(i); const name = auto ? 'AUTOSAVE' : `SLOT ${i}`;
+    const when = (t) => t ? new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const pt = (sec) => { sec = Math.floor(sec || 0); const h = Math.floor(sec / 3600), mm = Math.floor(sec / 60) % 60; return h ? `${h}h ${mm}m` : `${mm}m ${sec % 60}s`; };
+    let h = `<div class="card slot ${m ? '' : 'empty'}" data-slot="${i}"><div class="sHead"><span class="sName">${name}</span><span class="sDate">${m ? when(m.savedAt) : 'Empty slot'}</span></div>`;
+    if (m) h += `<div class="sGrid"><span><small>SHIP</small><b>T${m.tier} ${m.tierName}</b></span><span><small>LEVEL</small><b>${m.level}</b></span><span><small>CREDITS</small><b>${fmt(m.credits)}</b></span>
+      <span><small>STATION</small><b>Lv ${m.station}</b></span><span><small>SECTOR</small><b>${m.sector}</b></span><span><small>PLAYTIME</small><b>${pt(m.playTime)}</b></span></div>`;
+    h += `<div class="sBtns">`;
+    if (!auto) h += `<button class="btn sm gold" data-act="slotsave" data-i="${i}" ${m ? 'data-confirm="1"' : ''}>${m ? 'OVERWRITE' : 'SAVE HERE'}</button>`;
+    if (m) h += `<button class="btn sm" data-act="slotload" data-i="${i}" data-confirm="1">LOAD</button>`;
+    if (m && !auto) h += `<button class="btn sm danger" data-act="slotdel" data-i="${i}" data-confirm="1">DELETE</button>`;
+    return h + `</div></div>`;
+  }
+  renderSaves() {
+    const g = this.g; let h = `<p class="muted">Three manual slots plus the autosave. Saves live in this browser; use Export to move progress to another device.</p>`;
+    h += this.slotCard('auto'); for (let i = 1; i <= g.slotCount(); i++) h += this.slotCard(i);
+    h += `<h5>TRANSFER</h5><div class="card"><h4>EXPORT</h4><p>Copy a save code or download a save file.</p>
+      <div class="btnrow"><button class="btn sm" data-act="export">SHOW CODE</button><button class="btn sm" data-act="copycode">COPY CODE</button><button class="btn sm" data-act="download">DOWNLOAD FILE</button></div>
+      <textarea id="exportBox" class="code ${this.exportShown ? '' : 'hidden'}" readonly></textarea></div>
+      <div class="card"><h4>IMPORT</h4><p>Paste a save code or pick a save file. This replaces your current game.</p>
+      <textarea id="importBox" class="code" placeholder="Paste SF2.… code here"></textarea>
+      <div class="btnrow"><button class="btn sm gold" data-act="importcode" data-confirm="1">IMPORT CODE</button><label class="btn sm filebtn">IMPORT FILE<input id="importFile" type="file" accept=".sfsave,.txt,.json,text/plain,application/json"></label></div></div>`;
+    setTimeout(() => {
+      const eb = $('exportBox'); if (eb && this.exportShown) eb.value = g.exportSave();
+      const f = $('importFile'); if (f) f.onchange = () => { const file = f.files[0]; if (!file) return; if (file.size > 2e6) { this.toast('That file is too large to be a save', 'warn'); return; }
+        file.text().then((t) => this.doImport(t)).catch(() => this.toast('Could not read that file', 'warn')); f.value = ''; };
+    }, 0);
+    return h;
+  }
+  doImport(text) {
+    const r = this.g.importSave(text);
+    if (!r.ok) { this.toast('Import failed: ' + r.error, 'warn'); return false; }
+    this.toast('Save imported', 'good'); this.afterLoad(); return true;
+  }
+  afterLoad() { this.close(); this.refreshHud(true); this.opts.onLoaded && this.opts.onLoaded(); }
   onAction(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const g = this.g; const a = b.dataset.act; this.audio.click();
-    if (b.classList.contains('dis') && !['slot', 'toggle', 'quality', 'reset', 'save', 'autopilot'].includes(a)) { this.toast(b.dataset.block === '1' && !g.docked ? 'Dock at the station first' : 'Not enough credits or materials', 'warn'); return; }
+    // tap-again confirmation for destructive actions (window.confirm is unreliable inside some webviews)
+    if (b.dataset.confirm === '1') {
+      const key = a + ':' + (b.dataset.i || '');
+      if (this.confirmKey !== key) {
+        this.confirmKey = key; document.querySelectorAll('#modalBody .confirming').forEach((x) => { x.classList.remove('confirming'); x.textContent = x.dataset.label; });
+        b.dataset.label = b.textContent; b.textContent = 'TAP AGAIN TO CONFIRM'; b.classList.add('confirming');
+        clearTimeout(this.confirmT); this.confirmT = setTimeout(() => { if (this.confirmKey === key) { this.confirmKey = null; if (b.isConnected) { b.classList.remove('confirming'); b.textContent = b.dataset.label; } } }, 3500);
+        return;
+      }
+      this.confirmKey = null;
+    }
+    if (b.classList.contains('dis') && !['slot', 'toggle', 'quality', 'reset', 'save', 'autopilot', 'saves', 'pvtier'].includes(a)) { this.toast(b.dataset.block === '1' && !g.docked ? 'Dock at the station first' : 'Not enough credits or materials', 'warn'); return; }
     switch (a) {
       case 'sell': { const r = g.sellCargo(); if (r) this.toast(`Sold: +${r.credits} cr`, 'good'); break; }
       case 'sellvault': g.sellVault(b.dataset.k, 10); break;
@@ -357,8 +421,20 @@ export class UI {
       case 'autopilot': this.close(); g.autopilot = true; this.toast('Autopilot engaged: returning to station'); return;
       case 'toggle': { const k = b.dataset.k; g.s.settings[k] = !g.s.settings[k]; this.opts.applySettings(); g.save(); break; }
       case 'quality': g.s.settings.quality = b.dataset.q; this.opts.applySettings(); g.save(); break;
-      case 'save': g.save(); this.toast('Game saved', 'good'); break;
-      case 'reset': if (confirm('Erase all progress and start over?')) g.reset(); return;
+      case 'save': { const ok = g.save(); this.toast(ok ? 'Game saved' : 'Save failed: storage is unavailable', ok ? 'good' : 'warn'); break; }
+      case 'saves': this.open('saves'); return;
+      case 'pvtier': this.pvTier = +b.dataset.t; break;
+      case 'slotsave': { const ok = g.saveSlot(+b.dataset.i); this.toast(ok ? `Game saved to slot ${b.dataset.i}` : 'Save failed: storage is unavailable', ok ? 'good' : 'warn'); break; }
+      case 'slotload': { const i = b.dataset.i === 'auto' ? 'auto' : +b.dataset.i; if (g.loadSlot(i)) { this.toast(i === 'auto' ? 'Autosave loaded' : `Slot ${i} loaded`, 'good'); this.afterLoad(); } else this.toast('That save could not be read', 'warn'); return; }
+      case 'slotdel': g.deleteSlot(+b.dataset.i); this.toast(`Slot ${b.dataset.i} deleted`); break;
+      case 'export': this.exportShown = true; break;
+      case 'copycode': { const code = g.exportSave(); this.exportShown = true; const done = () => this.toast('Save code copied', 'good');
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, () => this.toast('Copy blocked: select the code and copy it manually', 'warn')); else this.toast('Select the code and copy it manually', 'warn'); break; }
+      case 'download': { const code = g.exportSave(); const blob = new Blob([code], { type: 'text/plain' }); const url = URL.createObjectURL(blob);
+        const el = document.createElement('a'); el.href = url; el.download = `stellar-frontier-${new Date().toISOString().slice(0, 10)}.sfsave`; document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+        this.toast('Save file downloaded', 'good'); break; }
+      case 'importcode': { const t = ($('importBox') || {}).value || ''; if (!t.trim()) { this.toast('Paste a save code first', 'warn'); return; } this.doImport(t); return; }
+      case 'reset': g.reset(); return;
     }
     this.render(); this.refreshHud();
   }

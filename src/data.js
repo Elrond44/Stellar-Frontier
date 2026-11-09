@@ -61,7 +61,7 @@ export const UPGRADES = [
 export const upgradeCost = (u, lvl) => Math.round(u.base * Math.pow(u.growth, lvl));
 
 export const ENEMIES = {
-  drone:       { name: 'Raider Drone',    hp: 28,   speed: 17, dmg: 4,  fireRate: 0.9,  range: 15, radius: 1.0, xp: 6,   credits: 12,   armor: 0 },
+  drone:       { name: 'Raider Drone',    hp: 28,   speed: 17, dmg: 3,  fireRate: 0.9,  range: 15, radius: 1.0, xp: 6,   credits: 12,   armor: 0 },
   interceptor: { name: 'Interceptor',     hp: 65,   speed: 25, dmg: 6,  fireRate: 1.6,  range: 18, radius: 1.4, xp: 14,  credits: 30,   armor: 0 },
   gunship:     { name: 'Armored Gunship', hp: 320,  speed: 8,  dmg: 11, fireRate: 0.55, range: 22, radius: 2.8, xp: 45,  credits: 110,  armor: 0.35 },
   sentinel:    { name: 'Mining Sentinel', hp: 130,  speed: 12, dmg: 7,  fireRate: 0.8,  range: 18, radius: 1.6, xp: 20,  credits: 45,   armor: 0.1 },
