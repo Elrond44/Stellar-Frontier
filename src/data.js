@@ -70,6 +70,21 @@ export const ENEMIES = {
   inst_core:   { name: 'Outpost Command Core', hp: 2600, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 5.6, xp: 120, credits: 300, armor: 0.3, inst: true },
   inst_gen:    { name: 'Shield Generator', hp: 520, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 2.2, xp: 40, credits: 80, armor: 0.2, inst: true },
   inst_turret: { name: 'Defense Turret', hp: 380, speed: 0, dmg: 8, fireRate: 0.75, range: 34, radius: 1.9, xp: 15, credits: 40, armor: 0.25, inst: true },
+  // v5 installation cores (one per installation, plus generators + turrets)
+  inst_comm:   { name: 'Communication Array', hp: 1500, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 4, xp: 160, credits: 260, armor: 0.25, inst: true },
+  inst_res:    { name: 'Resource Facility', hp: 1700, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 4.6, xp: 160, credits: 420, armor: 0.3, inst: true },
+  inst_yard:   { name: 'Hidden Shipyard', hp: 2400, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 6, xp: 220, credits: 380, armor: 0.3, inst: true },
+  inst_def:    { name: 'Orbital Defense Platform', hp: 2200, speed: 0, dmg: 22, fireRate: 0.28, range: 60, radius: 5, xp: 220, credits: 360, armor: 0.4, inst: true },
+  inst_hq:     { name: 'Faction Stronghold', hp: 6500, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 9, xp: 600, credits: 1500, armor: 0.35, inst: true },
+  // v5 AI roles
+  sniper:      { name: 'Rail Sniper', hp: 80, speed: 18, dmg: 20, fireRate: 0.32, range: 46, radius: 1.6, xp: 22, credits: 50, armor: 0, role: 'sniper' },
+  support:     { name: 'Repair Tender', hp: 150, speed: 15, dmg: 3, fireRate: 0.6, range: 16, radius: 1.8, xp: 26, credits: 60, armor: 0.1, role: 'support' },
+  ew:          { name: 'EW Jammer', hp: 120, speed: 17, dmg: 4, fireRate: 0.8, range: 20, radius: 1.7, xp: 26, credits: 60, armor: 0.05, role: 'ew' },
+  capital:     { name: 'Fleet Carrier', hp: 1900, speed: 4.5, dmg: 9, fireRate: 0.9, range: 30, radius: 6, xp: 220, credits: 500, armor: 0.35, role: 'capital' },
+  freighter:   { name: 'Supply Freighter', hp: 520, speed: 7, dmg: 0, fireRate: 0, range: 0, radius: 3, xp: 40, credits: 160, armor: 0.25, role: 'freighter' },
+  commander:   { name: 'Sector Commander', hp: 2600, speed: 8, dmg: 10, fireRate: 1.0, range: 30, radius: 4.2, xp: 500, credits: 1500, armor: 0.25, boss: true },
+  flagship:    { name: 'Faction Flagship', hp: 15000, speed: 5, dmg: 16, fireRate: 1.2, range: 34, radius: 10, xp: 3000, credits: 12000, armor: 0.3, boss: true },
+  bpart:       { name: 'Ship Component', hp: 900, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 1.8, xp: 60, credits: 120, armor: 0.2, part: true },
 };
 
 export const LEVEL_TITLES = ['Rookie Miner', 'Rock Hopper', 'Ore Runner', 'Starward Miner', 'Belt Prospector', 'Void Hauler', 'Frontier Captain', 'Fleet Commander', 'Industrial Baron', 'Frontier Sovereign'];

@@ -1,12 +1,12 @@
 // HUD, joystick, radar and menus (DOM overlay)
-import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt, BOSS_LAIR } from './data.js?v=4';
-import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=4';
-import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=4';
-import { FACTIONS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, outposts, caches, liberation, owner, isPirate, threatLabel, neighbours, killsNeeded, NEUTRAL } from './galaxy.js?v=4';
-import { INV_CAP } from './save.js?v=4';
-import { fmt, clamp } from './util.js?v=4';
-import { FloatText } from './fx.js?v=4';
-import { Preview } from './preview.js?v=4';
+import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt, BOSS_LAIR } from './data.js?v=5';
+import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=5';
+import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=5';
+import { FACTIONS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, outposts, caches, liberation, owner, isPirate, threatLabel, neighbours, killsNeeded, NEUTRAL } from './galaxy.js?v=5';
+import { INV_CAP } from './save.js?v=5';
+import { fmt, clamp } from './util.js?v=5';
+import { FloatText } from './fx.js?v=5';
+import { Preview } from './preview.js?v=5';
 
 const $ = (id) => document.getElementById(id);
 const TIER_CROPS = [[18, 368, 120, 100], [122, 305, 232, 190], [320, 228, 275, 255], [495, 220, 385, 310], [745, 105, 530, 490]];

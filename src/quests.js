@@ -1,6 +1,6 @@
 // Story missions + rotating contracts
-import { MINERALS } from './data.js?v=4';
-import { pick, randInt } from './util.js?v=4';
+import { MINERALS } from './data.js?v=5';
+import { pick, randInt } from './util.js?v=5';
 
 // kind: event-driven counters ('collect', 'collect:<type>', 'sell', 'upgrade', 'claim', 'kill', 'rock', 'boss')
 // or state checks ('station', 'tier', 'sector', 'level')
@@ -20,8 +20,8 @@ export const STORY = [
   { id: 's13', title: 'Blood Crystals', desc: 'Collect 30 Crimsonite from rich asteroids', kind: 'collect:crimsonite', need: 30, reward: { credits: 3500, xp: 1000 } },
   { id: 's14', title: 'Orbital Works', desc: 'Upgrade the station to level 4', kind: 'station', need: 4, reward: { credits: 5000, xp: 1500 } },
   { id: 's15', title: 'Heavy Metal', desc: 'Buy the Tier 4 Heavy Cruiser', kind: 'tier', need: 4, reward: { credits: 6000, xp: 1800 } },
-  { id: 's16', title: "Warlord's Maw", desc: 'Enter Sector 4, home of the Warlord', kind: 'sector', need: 4, reward: { credits: 5000, xp: 2000 } },
-  { id: 's17', title: 'Slay the Warlord', desc: 'Destroy the Warlord Dreadnought', kind: 'boss', need: 1, reward: { credits: 20000, xp: 6000 } },
+  { id: 's16', title: "Warlord's Maw", desc: 'Enter Sector 4, home of Admiral Varkos', kind: 'sector', need: 4, reward: { credits: 5000, xp: 2000 } },
+  { id: 's17', title: 'The Crimson Dread', desc: 'Defeat a faction flagship (Admiral Varkos waits in the Maw)', kind: 'boss', need: 1, reward: { credits: 20000, xp: 6000 } },
   { id: 's18', title: 'Industrial Hub', desc: 'Upgrade the station to level 5', kind: 'station', need: 5, reward: { credits: 15000, xp: 5000 } },
   { id: 's19', title: 'Sovereign', desc: 'Commission the Tier 5 Capital Dreadnought', kind: 'tier', need: 5, reward: { credits: 30000, xp: 8000 } },
   { id: 's20', title: 'Frontier Citadel', desc: 'Upgrade the station to level 6', kind: 'station', need: 6, reward: { credits: 60000, xp: 15000 } },

@@ -53,12 +53,15 @@ const rnd = (seed) => { let t = seed >>> 0; return () => { t += 0x6d2b79f5; let 
 // Create an item. rar = rarity index 0..5, il = item level (= required ship level)
 export function makeItem(t, rar, il, src = 'Merchant', opts = {}) {
   const T = TEMPLATES[t]; const R = RARITIES[rar]; const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31); const r = rnd(seed);
-  const pool = [...BEH_SPECIALS[T.beh]]; const sp = [];
-  for (let i = 0; i < R.specials && pool.length; i++) sp.push(pool.splice(Math.floor(r() * pool.length), 1)[0]);
+  const pool = [...BEH_SPECIALS[T.beh]]; const sp = opts.sp ? opts.sp.filter((k) => SPECIALS[k]).slice(0, 4) : [];
+  if (!opts.sp) for (let i = 0; i < R.specials && pool.length; i++) sp.push(pool.splice(Math.floor(r() * pool.length), 1)[0]);
   let name = T.name;
   if (rar >= 4) name = UNIQUE[T.cat][Math.floor(r() * 2)] + ` (${T.name})`;
   else if (sp.length) name = `${SPECIALS[sp[0]].name} ${T.name}`;
-  return { id: opts.id || newItemId(), t, r: rar, il: Math.max(1, Math.round(il)), up: 0, sp, seed, src, name, at: opts.at || Date.now() };
+  if (opts.name) name = String(opts.name).slice(0, 48);
+  const it = { id: opts.id || newItemId(), t, r: rar, il: Math.max(1, Math.round(il)), up: 0, sp, seed, src, name, at: opts.at || Date.now() };
+  if (opts.bp) it.bp = String(opts.bp).slice(0, 24); // crafted from / dropped as a boss blueprint
+  return it;
 }
 // Full stat block for an item (pure function of the item)
 export function itemStats(it) {
@@ -93,7 +96,7 @@ export const upgradeCost = (it) => ({ credits: Math.round(120 * Math.pow(1.7, it
 export const salvageValue = (it) => ({ parts: Math.round(RARITIES[it.r].salvage * (1 + it.up * 0.35) * (1 + it.il * 0.03)), credits: Math.round(25 * (it.r + 1) * (1 + it.il * 0.1)) });
 
 // ---- loot tables: rarity gated by sector threat (1..5) and source ----
-const SOURCE = { pirate: { chance: 0.06, cap: 0, bonus: 0 }, elite: { chance: 0.4, cap: 1, bonus: 1 }, cache: { chance: 1, cap: 1, bonus: 0.6 }, installation: { chance: 1, cap: 1, bonus: 1.2 }, boss: { chance: 1, cap: 2, bonus: 2.5 }, liberation: { chance: 1, cap: 2, bonus: 2 } };
+const SOURCE = { pirate: { chance: 0.06, cap: 0, bonus: 0 }, elite: { chance: 0.4, cap: 1, bonus: 1 }, cache: { chance: 1, cap: 1, bonus: 0.6 }, installation: { chance: 1, cap: 1, bonus: 1.2 }, boss: { chance: 1, cap: 2, bonus: 2.5 }, commander: { chance: 1, cap: 1, bonus: 1.8 }, supply: { chance: 0.5, cap: 0, bonus: 0.6 }, mission: { chance: 1, cap: 1, bonus: 1.2 }, liberation: { chance: 1, cap: 2, bonus: 2 } };
 export function lootChance(src, luck = 0) { return Math.min(1, SOURCE[src].chance * (1 + luck)); }
 export function rollRarity(threat, src, luck = 0, minR = 0) {
   const S = SOURCE[src]; const maxR = Math.min(5, Math.max(1, threat - 1) + S.cap + (threat >= 5 && (src === 'boss' || src === 'liberation') ? 1 : 0));
@@ -108,7 +111,7 @@ export function rollTemplate(level, rar) {
 export function rollLoot(level, threat, src, luck = 0, minR = 0) {
   const rar = rollRarity(threat, src, luck, minR); const t = rollTemplate(level, rar);
   const il = Math.max(1, Math.min(level + (src === 'boss' || src === 'liberation' ? 2 : 1), level + Math.floor(Math.random() * 3) - 1));
-  return makeItem(t, rar, il, { pirate: 'Pirate wreck', elite: 'Elite pirate', cache: 'Hidden cache', installation: 'Pirate outpost', boss: 'Faction boss', liberation: 'Liberation reward' }[src]);
+  return makeItem(t, rar, il, { pirate: 'Pirate wreck', elite: 'Elite pirate', cache: 'Hidden cache', installation: 'Pirate outpost', boss: 'Faction boss', liberation: 'Liberation reward', commander: 'Sector commander', supply: 'Supply ship', mission: 'Mission reward' }[src] || 'Salvage');
 }
 // Merchant stock: common/uncommon versions of non-drop templates unlocked by level
 export function merchantStock(level) {

@@ -3,12 +3,12 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
-import { Game } from './game.js?v=4';
-import { UI } from './ui.js?v=4';
-import { Audio } from './audio.js?v=4';
-import { makeSky, makeStarLayer, makeDust } from './world.js?v=4';
-import { SECTORS, sectorAt } from './data.js?v=4';
-import { owner } from './galaxy.js?v=4';
+import { Game } from './game.js?v=5';
+import { UI } from './ui.js?v=5';
+import { Audio } from './audio.js?v=5';
+import { makeSky, makeStarLayer, makeDust } from './world.js?v=5';
+import { SECTORS, sectorAt } from './data.js?v=5';
+import { owner } from './galaxy.js?v=5';
 
 const canvas = document.getElementById('c');
 let renderer;
@@ -163,7 +163,7 @@ function frame() {
 const perf = { upd: 0, calls: 0, tris: 0 };
 // soundtrack: the manifest is tiny; each song streams only when it is about to play
 audio.musicMode = game.s.settings.musicMode;
-fetch('music/tracks.json?v=4').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
+fetch('music/tracks.json?v=5').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
   if (!Array.isArray(list) || !list.length) return; const s = game.s.settings;
   audio.setTracks(list, s.trackIdx < list.length ? s.trackIdx : 0, s.trackIdx < list.length ? s.trackPos : 0);
 }).catch((e) => console.info('No soundtrack, using generated music:', e.message));
@@ -171,13 +171,13 @@ audio.onTrack = (i, title) => { if (playing) ui.toast(`♪ Now playing: ${title}
 audio.onSongFail = () => { if (playing) ui.toast('Soundtrack unavailable, switched to generated music'); };
 function audioTick(dt) {
   if (!audio.ctx) return; const g = game, p = g.player; let threat = 0;
-  if (playing && !g.dead) for (const e of g.enemies) { if (e.dead || ((e.type === 'sentinel' || e.type === 'boss') && e.state === 'idle')) continue; if (Math.hypot(e.x - p.x, e.z - p.z) < 60) threat += e.type === 'boss' ? 3 : e.type === 'gunship' ? 1.5 : 1; }
+  if (playing && !g.dead) for (const e of g.enemies) { if (e.dead || e.D.part || e.hold || ((e.type === 'sentinel' || e.D.boss) && e.state === 'idle')) continue; if (Math.hypot(e.x - p.x, e.z - p.z) < 60) threat += e.D.boss ? 3 : e.type === 'gunship' || e.type === 'capital' ? 1.5 : e.battle ? 0.5 : 1; }
   const ts = audio.trackState(); if (ts) { g.s.settings.trackIdx = ts.idx; g.s.settings.trackPos = ts.pos; }
   // music mood: peaceful (haven/liberated), mysterious (newly charted / unclaimed), tense (pirate territory), intense (boss, outpost assault, big battle)
   const gs = g.gsec, G = g.s.galaxy; let mood = 'peaceful';
   if (gs.faction !== 'haven' && !G.liberated[gs.id]) mood = gs.faction === 'neutral' || g.time - g.secEnterT < 90 ? 'mysterious' : 'tense';
-  const bossOn = g.boss && !g.boss.dead && g.boss.state === 'attack'; let outpostNear = false; for (const [, L] of g.liveOutposts) if (Math.hypot(L.o.x - p.x, L.o.z - p.z) < 70) outpostNear = true;
-  if (bossOn || outpostNear || threat >= 5) mood = 'intense';
+  const bossOn = !!g.camp.bossActive(); const outpostNear = g.camp.instNear(70); const battleNear = !!g.camp.skirmishNear(60);
+  if (bossOn || outpostNear || battleNear || threat >= 5) mood = 'intense';
   g.mood = mood;
   audio.tick(Math.min(dt, 0.25), { x: p.x, z: p.z, thrust: p.thrust || 0, tier: g.s.tier, docked: g.docked, dockT: g.dockT || 0, combat: Math.min(1, threat / 3), hull: p.maxHp ? p.hp / p.maxHp : 1, dead: g.dead, paused: !!ui.modalOpen, playing, mood });
 }

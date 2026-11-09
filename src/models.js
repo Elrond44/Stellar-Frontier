@@ -1,7 +1,7 @@
 // Procedural models v2: detailed ships, turrets, pirates, station, asteroid geometry + materials.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
-import { mulberry, fbm3 } from './util.js?v=4';
+import { mulberry, fbm3 } from './util.js?v=5';
 
 // ================= Procedural textures =================
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -656,6 +656,48 @@ export function buildPirate(type) {
     for (let i = 0; i < 6; i++) { const h = { x: (i % 2 ? 1 : -1) * (2.5 + (i >> 1) * 1.2), y: 1.6, z: 5 - (i >> 1) * 5, size: 1.6 }; hard.push(h); turrets.push({ ...h, size: 1.8 }); }
     k.lights.push({ x: 0.6, y: 8.1, z: -3.6, color: 0xff2020, mode: 'strobe', size: 2.5 }, { x: -7.5, y: 1.2, z: -7, color: 0xff2020, mode: 'blink', size: 2 }, { x: 7.5, y: 1.2, z: -7, color: 0xff2020, mode: 'blink', size: 2 });
     radius = 9;
+  } else if (type === 'sniper') { // long-range rail platform
+    k.slab('pirateDark', [[0, 2.6], [0.35, 1.2], [0.9, -1.6], [0.35, -1.9], [-0.35, -1.9], [-0.9, -1.6], [-0.35, 1.2]], 0.32, 0);
+    k.slab('pirateAccent', [[0, 2.3], [0.22, 1.1], [0.55, -1.3], [-0.55, -1.3], [-0.22, 1.1]], 0.08, 0.2);
+    k.zcyl('pirateDark', 0.09, 0.12, 3.6, 8, 0, 0.18, 2.4); k.zcyl('pirate', 0.16, 0.16, 0.5, 8, 0, 0.18, 1.0); k.zcyl('red', 0.07, 0.07, 0.06, 8, 0, 0.18, 4.2);
+    for (const z of [1.6, 2.3, 3.0, 3.7]) k.add('redSoft', new THREE.TorusGeometry(0.15, 0.025, 4, 10), 0, 0.18, z);
+    k.box('glass', 0.22, 0.1, 0.3, 0, 0.3, 0.3); for (const sx of [-1, 1]) k.box('pirateBone', 0.06, 0.4, 0.9, sx * 0.85, 0.12, -1.3);
+    k.engine(0, 0, -1.95, 0.22, 0.35); hard = [{ x: 0, y: 0.18, z: 4.2 }]; radius = 1.6;
+  } else if (type === 'support') { // repair / shield tender
+    k.sphere('pirateDark', 1.1, 0, 0, 0, 1, 0.55, 1.3, 14, 8); k.sphere('pirate', 0.7, 0, 0.35, -0.2, 1, 0.6, 1.1, 12, 6);
+    k.add('green', new THREE.TorusGeometry(1.45, 0.06, 6, 28), 0, 0.1, 0, Math.PI / 2);
+    for (const sx of [-1, 1]) { k.box('pirateBone', 0.12, 0.12, 1.2, sx * 1.1, 0, 0.7, 0, sx * 0.4, 0); k.sphere('green', 0.16, sx * 1.35, 0, 1.2); k.zcyl('pirateDark', 0.2, 0.25, 0.7, 8, sx * 0.9, 0, -0.9); }
+    k.cyl('pirateAccent', 0.25, 0.3, 0.4, 8, 0, 0.75, -0.2); k.sphere('green', 0.18, 0, 1.0, -0.2);
+    k.engine(-0.5, 0, -1.35, 0.2, 0.3); k.engine(0.5, 0, -1.35, 0.2, 0.3);
+    k.lights.push({ x: 0, y: 1.1, z: -0.2, color: 0x30ff70, mode: 'pulse', size: 1.4 }); hard = [{ x: 0, y: 0.2, z: 1.2 }]; radius = 1.8;
+  } else if (type === 'ew') { // electronic warfare
+    k.add('pirateDark', new THREE.OctahedronGeometry(1.1, 0), 0, 0, 0, 0, 0, 0, 1.1, 0.5, 1.5);
+    k.slab('pirateAccent', [[0, 1.9], [1.5, -0.6], [0.5, -1.4], [-0.5, -1.4], [-1.5, -0.6]], 0.12, 0.25);
+    k.dish(0, 0.35, -0.2, 0.9, 0.9, 0); for (const sx of [-1, 1]) { k.antenna(sx * 1.2, 0.2, -0.6, 1.2, true); k.box('redSoft', 0.05, 0.05, 1.2, sx * 0.8, 0.32, 0.3, 0, sx * 0.5, 0); }
+    k.add('red', new THREE.TorusGeometry(0.5, 0.04, 4, 16), 0, 0.2, 1.1, 0.3);
+    k.engine(0, 0, -1.6, 0.25, 0.35); hard = [{ x: 0, y: 0.2, z: 1.4 }]; radius = 1.7;
+  } else if (type === 'capital') { // fleet carrier / command ship
+    k.slab('pirateDark', [[0, 8], [2.4, 5], [3.6, -1], [3.4, -7], [-3.4, -7], [-3.6, -1], [-2.4, 5]], 1.8, 0);
+    k.slab('pirateAccent', [[0, 7.3], [1.7, 4.6], [2.6, -1], [2.5, -6.2], [-2.5, -6.2], [-2.6, -1], [-1.7, 4.6]], 0.45, 1.1);
+    k.plate('pirate', 2.2, 1.4, 3.0, 0, 1.9, -2.6); k.plate('pirateDark', 1.4, 1.0, 1.6, 0, 3.0, -3.0); k.windows(0, 2.0, -1.1, 1.8, 8, 'x');
+    for (const sx of [-1, 1]) { for (let i = 0; i < 4; i++) k.plate('pirateBone', 0.9, 1.6, 1.8, sx * 3.9, 0, 3 - i * 2.4, sx * 0.03); k.box('glowSoft', 0.1, 0.6, 2.6, sx * 3.75, 0.2, -1.8); k.hazard(0.3, 0.06, 2.6, sx * 3.3, 0.95, -1.8); for (let i = 0; i < 2; i++) k.engine(sx * (1 + i * 1.6), 0, -7.2, 0.6, 0.7); }
+    k.antenna(0.5, 3.5, -3.2, 2.2); k.antenna(-0.5, 3.5, -2.8, 1.6); k.dress(rng, -2, 2, -5.5, 4, 1.2, 40, 0.5);
+    for (let i = 0; i < 4; i++) { const h = { x: (i % 2 ? 1 : -1) * 2.0, y: 1.2, z: 4 - (i >> 1) * 6, size: 1.4 }; hard.push(h); turrets.push(h); }
+    k.lights.push({ x: 0, y: 4.2, z: -3.0, color: 0xff2020, mode: 'strobe', size: 2.2 }); radius = 6;
+  } else if (type === 'freighter') { // pirate supply hauler
+    k.box('pirateDark', 1.4, 1.0, 6.0, 0, 0, -0.4); k.plate('pirate', 1.6, 0.9, 1.6, 0, 0.1, 3.0); k.box('glass', 1.0, 0.25, 0.2, 0, 0.35, 3.75);
+    for (let i = 0; i < 3; i++) for (const sx of [-1, 1]) { k.box(i % 2 ? 'pirateAccent' : 'pirateBone', 1.0, 0.9, 1.5, sx * 1.25, 0.05, 1.3 - i * 1.7); k.hazard(1.02, 0.06, 0.2, sx * 1.25, 0.52, 1.3 - i * 1.7); }
+    k.engine(-0.5, 0, -3.5, 0.35, 0.5); k.engine(0.5, 0, -3.5, 0.35, 0.5); k.lights.push({ x: 0, y: 0.7, z: -3.2, color: 0xffa020, mode: 'blink', size: 1.2 });
+    hard = [{ x: 0, y: 0.5, z: 3.5 }]; radius = 3;
+  } else if (type === 'commander') { // sector command cruiser
+    k.slab('pirateDark', [[0, 4.6], [1.9, 2.4], [2.6, -3], [-2.6, -3], [-1.9, 2.4]], 1.2, 0);
+    k.slab('pirateAccent', [[0, 4.2], [1.3, 2.3], [1.7, -0.6], [-1.7, -0.6], [-1.3, 2.3]], 0.3, 0.8);
+    k.plate('pirate', 1.6, 1.2, 1.8, 0, 1.4, -1.4); k.plate('pirateDark', 1.0, 0.8, 1.0, 0, 2.4, -1.6); k.windows(0, 1.5, -0.45, 1.2, 5, 'x');
+    for (let i = 0; i < 5; i++) { const a = -0.9 + i * 0.45; k.add('pirateBone', new THREE.ConeGeometry(0.12, 0.9, 4), Math.sin(a) * 0.55, 3.1 + Math.cos(a) * 0.2, -1.6); }
+    for (const sx of [-1, 1]) { for (let i = 0; i < 3; i++) k.plate('pirateBone', 0.7, 1.1, 1.3, sx * 2.8, 0, 1.6 - i * 1.5, sx * 0.04); k.engine(sx * 1.2, 0, -3.1, 0.5, 0.6); k.box('red', 0.08, 0.25, 1.6, sx * 2.45, 0.4, -0.5); }
+    k.lights.push({ x: 0, y: 3.3, z: -1.6, color: 0xff2020, mode: 'strobe', size: 1.6 });
+    hard = [{ x: 0, y: 1, z: 4 }, { x: -2, y: 0.6, z: 1.8 }, { x: 2, y: 0.6, z: 1.8 }]; radius = 4.2;
+    turrets.push({ x: -1.1, y: 1.0, z: 1.8, size: 1.2 }, { x: 1.1, y: 1.0, z: 1.8, size: 1.2 });
   }
   const group = k.build();
   for (const t of turrets) { const tu = makeTurret('cannon', t.size, 'pirate'); tu.position.set(t.x, t.y, t.z); tu.name = 'eturret'; group.add(tu); }
@@ -860,3 +902,136 @@ export function buildCacheCrate() {
   const k = new Kit(); k.box('dark', 1.6, 1.0, 1.1, 0, 0.5, 0); k.box('orange', 1.7, 0.18, 1.2, 0, 0.2, 0); k.box('orange', 1.7, 0.18, 1.2, 0, 0.85, 0); k.hazard(1.0, 0.04, 0.3, 0, 1.03, 0); k.box('green', 0.3, 0.06, 0.06, 0.55, 1.03, 0.4);
   const g = k.build(); const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0x5dff98, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); sp.material.userData.own = true; sp.scale.setScalar(5); sp.position.y = 0.8; g.add(sp); g.userData.sp = sp; return g;
 }
+
+// ================= v5: installations, flagships, boss components, civilians =================
+// Pirate installation cores. kind: comm | yard | res | def | hq   (relay = friendly repair beacon)
+export function buildInstallationV5(kind) {
+  const k = new Kit(); const rng = mulberry(kind.charCodeAt(0) * 97 + kind.length * 13); let radius = 4;
+  const ring = (r, n = 8) => { const pts = []; for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + Math.PI / n; pts.push([Math.cos(a) * r, Math.sin(a) * r]); } return pts; };
+  if (kind === 'comm') {
+    k.slab('pirateDark', ring(3.6, 6), 0.7, -0.2); k.slab('pirate', ring(2.4, 6), 0.4, 0.3);
+    for (let i = 0; i < 4; i++) { const y = 1 + i * 1.6; k.cyl('pirateDark', 0.5 - i * 0.08, 0.6 - i * 0.08, 1.5, 6, 0, y, 0); for (let j = 0; j < 3; j++) { const a = j * 2.094 + i; k.box('pirateBone', 0.08, 1.6, 0.08, Math.cos(a) * 0.7, y, Math.sin(a) * 0.7); } }
+    k.dish(-1.8, 0.3, 1.2, 1.3, 0.8, 0.6); k.dish(1.6, 0.3, -1.4, 1.0, 0.7, 2.6); k.dish(0, 5.6, 0, 0.9, 1.0, 1.2);
+    k.antenna(0.3, 7.2, 0, 2.4); k.add('redSoft', new THREE.TorusGeometry(1.0, 0.06, 4, 20), 0, 4.6, 0, Math.PI / 2); k.sphere('red', 0.3, 0, 7.0, 0);
+    k.lights.push({ x: 0, y: 9.7, z: 0, color: 0xff2020, mode: 'strobe', size: 2 }); radius = 4;
+  } else if (kind === 'yard') {
+    k.slab('pirateDark', [[-6, -4], [6, -4], [6, 4], [-6, 4]].map(([x, z]) => [x, z]), 0.5, -0.3);
+    for (const sx of [-1, 1]) { for (let i = 0; i < 4; i++) { k.box('pirateBone', 0.35, 4.2, 0.35, sx * 5.2, 1.9, -3 + i * 2); } k.box('pirate', 0.4, 0.4, 8.4, sx * 5.2, 4.0, 0); k.hazard(0.5, 0.08, 8, sx * 5.2, 0.05, 0); }
+    for (let i = 0; i < 4; i++) k.box('pirateDark', 10.8, 0.3, 0.3, 0, 4.0, -3 + i * 2);
+    // half-built hull in the cradle
+    k.slab('pirateAccent', [[0, 3.4], [1.5, 1.6], [2.0, -2.8], [-2.0, -2.8], [-1.5, 1.6]], 0.8, 1.0); k.box('pirateBone', 0.1, 1.4, 5, 0.9, 1.3, 0); k.box('pirateBone', 0.1, 1.4, 5, -0.9, 1.3, 0);
+    k.box('pirateDark', 1.4, 0.4, 0.4, 0, 3.6, 0.6); k.cyl('pirateDark', 0.06, 0.06, 2.0, 4, 0, 2.6, 0.6); k.lights.push({ x: 0, y: 1.8, z: 0.6, color: 0xffb030, mode: 'blink', size: 1.6 });
+    k.dress(rng, -4.5, 4.5, -3.5, 3.5, 0.0, 26, 0.45); radius = 6;
+  } else if (kind === 'res') {
+    k.sphere('pirateBone', 3.2, 0, 0.2, 0, 1.2, 0.55, 1, 9, 6); k.sphere('pirateDark', 2.6, 0.8, 0.8, -0.4, 1, 0.5, 1.1, 8, 5);
+    k.cyl('pirate', 0.9, 1.1, 1.6, 8, 0, 2.2, 0); k.cyl('pirateDark', 0.25, 0.25, 3.4, 6, 0, 3.6, 0); k.cyl('orange', 0.12, 0.3, 1.2, 6, 0, 0.6, 0);
+    for (let i = 0; i < 3; i++) { const a = i * 2.094; k.zcyl('pirateAccent', 0.55, 0.55, 1.6, 10, Math.cos(a) * 2.6, 1.3, Math.sin(a) * 2.6); k.box('pirateBone', 0.1, 1.6, 0.1, Math.cos(a) * 1.4, 2.6, Math.sin(a) * 1.4, 0.4 * Math.sin(a), 0, -0.4 * Math.cos(a)); }
+    k.pipe(-2.6, 1.0, 0, 0, 0, 0.12); k.pipe(1.3, 1.0, 2.2, 0, 0, 0.12); k.add('amber', new THREE.TorusGeometry(0.9, 0.08, 4, 16), 0, 3.1, 0, Math.PI / 2);
+    k.lights.push({ x: 0, y: 5.4, z: 0, color: 0xffa020, mode: 'blink', size: 1.6 }); radius = 4.6;
+  } else if (kind === 'def') {
+    k.slab('pirateDark', ring(4.6, 8), 1.0, 0); k.slab('pirate', ring(3.4, 8), 0.5, 0.75);
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; k.plate('pirateBone', 1.2, 1.3, 0.6, Math.cos(a) * 4.4, 0.3, Math.sin(a) * 4.4, -a + Math.PI / 2); }
+    k.cyl('pirateDark', 1.8, 2.1, 1.0, 10, 0, 1.4, 0); k.hazard(3.6, 0.06, 0.4, 0, 1.92, 2.0);
+    k.lights.push({ x: 3.8, y: 1.2, z: 0, color: 0xff2020, mode: 'blink', size: 1.3 }, { x: -3.8, y: 1.2, z: 0, color: 0xff2020, mode: 'blink', size: 1.3 }); radius = 5;
+  } else if (kind === 'hq') {
+    k.slab('pirateDark', ring(9.4, 8), 1.2, -0.3); k.slab('pirate', ring(7.2, 8), 0.8, 0.6); k.slab('pirateDark', ring(4.6, 8), 1.6, 1.6);
+    k.cyl('pirate', 2.6, 3.4, 3.6, 10, 0, 3.6, 0); k.cyl('pirateDark', 1.6, 2.2, 2.4, 10, 0, 6.4, 0); k.sphere('red', 1.3, 0, 8.0, 0, 1, 0.8, 1, 16, 8);
+    k.add('redSoft', new THREE.TorusGeometry(3.0, 0.16, 6, 36), 0, 5.4, 0, Math.PI / 2); k.add('red', new THREE.TorusGeometry(5.6, 0.12, 6, 40), 0, 1.0, 0, Math.PI / 2);
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 + 0.2; k.add('pirateBone', new THREE.ConeGeometry(0.4, 3.2, 4), Math.cos(a) * 8.6, 1.2, Math.sin(a) * 8.6); k.box('pirateAccent', 1.0, 0.7, 3.2, Math.cos(a) * 6.0, 1.1, Math.sin(a) * 6.0, 0, -a, 0); }
+    k.dish(-4.2, 2.2, 3.2, 1.4, 0.7, 0.8); k.dish(4.4, 2.2, -2.8, 1.2, 0.7, 3.4); k.antenna(1.0, 8.6, 0.6, 3.2); k.antenna(-1.2, 8.2, -0.5, 2.4); k.dress(rng, -5, 5, -5, 5, 1.0, 50, 0.6);
+    k.lights.push({ x: 0, y: 11.8, z: 0.6, color: 0xff2020, mode: 'strobe', size: 3 }); radius = 9;
+  } else if (kind === 'relay') { // friendly repair beacon (player palette)
+    k.slab('dark', ring(3.4, 8), 0.6, 0); k.slab('hull', ring(2.4, 8), 0.4, 0.5); k.cyl('hull', 0.9, 1.2, 2.4, 10, 0, 1.6, 0); k.cyl('dark', 0.4, 0.5, 1.6, 8, 0, 3.4, 0);
+    k.add('green', new THREE.TorusGeometry(2.0, 0.09, 6, 30), 0, 1.6, 0, Math.PI / 2); k.add('glow', new THREE.TorusGeometry(1.1, 0.06, 6, 24), 0, 4.0, 0, Math.PI / 2); k.sphere('green', 0.35, 0, 4.4, 0);
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; k.box('orange', 0.3, 0.2, 1.6, Math.cos(a) * 2.6, 0.45, Math.sin(a) * 2.6, 0, -a, 0); k.box('solar', 2.2, 0.05, 1.0, Math.cos(a) * 4.6, 1.2, Math.sin(a) * 4.6, 0.25, -a + Math.PI / 2, 0); }
+    k.antenna(0.4, 4.6, 0, 1.6, false); k.lights.push({ x: 0, y: 4.8, z: 0, color: 0x30ff70, mode: 'pulse', size: 2.6 }); radius = 4;
+  }
+  const g = k.build();
+  if (kind === 'def') { const tu = makeTurret('cannon', 3.4, 'pirate'); tu.position.y = 1.9; tu.name = 'eturret'; g.add(tu); }
+  return { group: g, hardpoints: [{ x: 0, y: 2, z: 0 }], engines: [], radius };
+}
+
+// Faction flagships: five distinct silhouettes. Materials are faction-tinted copies of the pirate set.
+export function buildFlagship(fk, F) {
+  const k = new Kit(); const rng = mulberry(fk.charCodeAt(0) * 71 + 3); const turrets = []; const hard = []; let radius = 10;
+  const D = 'pirateDark', H = F.hull, A = F.accent, R = F.red, B = 'pirateBone';
+  if (fk === 'crimson') { // Dread Sovereign: armoured ram battleship
+    k.slab(D, [[0, 12.5], [3.2, 7.5], [7, 0], [7.4, -8.5], [-7.4, -8.5], [-7, 0], [-3.2, 7.5]], 2.4, 0);
+    k.slab(A, [[0, 11.4], [2.3, 7], [5.3, 0], [5.5, -7.4], [-5.5, -7.4], [-5.3, 0], [-2.3, 7]], 0.6, 1.5);
+    for (const sx of [-1, 1]) { k.add(B, new THREE.ConeGeometry(0.6, 4.6, 5), sx * 1.7, 0, 12.6, Math.PI / 2, 0, sx * 0.2); for (let i = 0; i < 5; i++) k.plate(B, 1.4, 2.2, 2.1, sx * 7.8, 0, 3.2 - i * 2.15, sx * 0.03); for (let i = 0; i < 3; i++) k.engine(sx * (1.6 + i * 2.1), 0, -8.7, 0.85, 0.9); k.vent(sx * 3.6, 1.55, -5.8, 1.7, 2.1, 6); }
+    k.plate(H, 3.4, 1.8, 4.4, 0, 2.4, -3.2); k.plate(H, 2.4, 1.6, 2.8, 0, 4.0, -3.6); k.plate(D, 1.5, 1.1, 1.5, 0, 5.2, -3.8); k.windows(0, 2.5, -0.98, 2.8, 10, 'x');
+    k.sphere(R, 1.1, 0, 1.8, -0.4, 1, 0.6, 1, 16, 8); k.dress(rng, -4, 4, -7, 6, 1.7, 60, 0.6);
+    for (let i = 0; i < 4; i++) { const h = { x: (i % 2 ? 1 : -1) * 2.6, y: 1.8, z: 6 - (i >> 1) * 5, size: 1.9 }; hard.push(h); turrets.push(h); }
+    k.lights.push({ x: 0, y: 5.9, z: -3.8, color: 0xff2020, mode: 'strobe', size: 2.6 }); radius = 10;
+  } else if (fk === 'void') { // Requiem: blade-thin stealth cruiser
+    k.slab(D, [[0, 13], [1.6, 6], [6.5, -6], [5.6, -8], [1.2, -6], [-1.2, -6], [-5.6, -8], [-6.5, -6], [-1.6, 6]], 1.0, 0);
+    k.slab(A, [[0, 12], [0.8, 5], [3.6, -5.5], [-3.6, -5.5], [-0.8, 5]], 0.25, 0.6);
+    k.box(R, 0.18, 0.12, 16, 0, 0.78, 2.5); for (const sx of [-1, 1]) { k.slab(A, [[sx * 1.6, 2], [sx * 4.8, -4], [sx * 4.2, -5.5]], 0.15, 1.2); k.box(R, 0.06, 1.8, 3.5, sx * 3.2, 1.2, -3.6, 0, sx * 0.5, 0); k.engine(sx * 1.4, 0, -6.6, 0.55, 0.7); }
+    k.plate(H, 1.6, 1.0, 3.2, 0, 1.0, -1.6); k.box('glass', 0.9, 0.2, 0.6, 0, 1.6, -0.2); k.dress(rng, -1.2, 1.2, -5, 8, 0.6, 26, 0.35);
+    for (let i = 0; i < 3; i++) { const h = { x: 0, y: 1.0, z: 9 - i * 4, size: 1.4 }; hard.push(h); }
+    turrets.push({ x: 0, y: 1.3, z: 5, size: 1.5 }); k.lights.push({ x: 0, y: 1.5, z: 12.5, color: 0xa040ff, mode: 'pulse', size: 2.2 }); radius = 9;
+  } else if (fk === 'iron') { // Bastion of Iron: hexagonal flying fortress
+    const hex = []; for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + Math.PI / 6; hex.push([Math.cos(a) * 10, Math.sin(a) * 11.5]); }
+    k.slab(D, hex, 3.0, 0); k.slab(H, hex.map(([x, z]) => [x * 0.75, z * 0.75]), 1.0, 1.9); k.slab(A, hex.map(([x, z]) => [x * 0.45, z * 0.45]), 1.4, 3.0);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; k.plate(B, 3.4, 3.0, 1.4, Math.cos(a) * 9.4, 0.2, Math.sin(a) * 10.4, -a + Math.PI / 2); }
+    k.box('pirateDark', 4.2, 1.6, 3.0, 0, 1.0, -9.4); k.hazard(4.0, 0.1, 0.4, 0, 1.85, -8.2); k.box('glowSoft', 3.6, 1.0, 0.1, 0, 1.0, -10.9);
+    for (let i = 0; i < 4; i++) k.engine(-4.5 + i * 3, 0, -11.2, 0.9, 0.9); k.plate(H, 3, 2.2, 3, 0, 4.4, -2); k.windows(0, 4.6, -0.45, 2.4, 8, 'x'); k.dress(rng, -6, 6, -7, 7, 2.5, 70, 0.7);
+    for (let i = 0; i < 6; i++) { const h = { x: (i % 2 ? 1 : -1) * 4.6, y: 2.6, z: 6 - (i >> 1) * 5, size: 2.0 }; hard.push(h); turrets.push(h); }
+    k.lights.push({ x: 0, y: 6.0, z: -2, color: 0x4060ff, mode: 'strobe', size: 2.6 }); radius = 11;
+  } else if (fk === 'eclipse') { // Penumbra: ring-ship with prism spikes
+    k.sphere(D, 3.2, 0, 1.2, 0, 1, 0.7, 1.3, 18, 10); k.sphere(H, 2.2, 0, 2.2, 0.4, 1, 0.6, 1.2, 16, 8); k.sphere(R, 1.0, 0, 3.0, 1.4, 1, 0.7, 1, 14, 8);
+    const t = new THREE.TorusGeometry(8, 0.8, 8, 48); k.add(A, t, 0, 1.2, 0, Math.PI / 2); const t2 = new THREE.TorusGeometry(8, 0.25, 6, 48); k.add(R, t2, 0, 1.9, 0, Math.PI / 2);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; k.box(D, 0.6, 0.5, 5.6, Math.cos(a) * 5.2, 1.2, Math.sin(a) * 5.2, 0, -a + Math.PI / 2, 0); k.add(B, new THREE.OctahedronGeometry(0.9, 0), Math.cos(a) * 8.8, 1.2, Math.sin(a) * 8.8, 0, 0, 0, 0.6, 1.8, 0.6); }
+    k.engine(-1.4, 1.0, -4.0, 0.7, 0.8); k.engine(1.4, 1.0, -4.0, 0.7, 0.8);
+    for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2 + 0.5; const h = { x: Math.cos(a) * 3.4, y: 2.4, z: Math.sin(a) * 3.4, size: 1.5 }; hard.push(h); }
+    turrets.push({ x: 0, y: 3.6, z: -1.2, size: 1.6 }); k.lights.push({ x: 0, y: 4.2, z: 1.4, color: 0xffd040, mode: 'pulse', size: 3 }); radius = 9.5;
+  } else { // ashen Cinderwake: twin-hull raider carrier
+    for (const sx of [-1, 1]) {
+      k.slab(D, [[sx * 3.2, 11], [sx * 5.0, 6], [sx * 5.6, -8], [sx * 1.6, -8], [sx * 1.8, 6]].map(([x, z]) => [x, z]), 1.6, 0);
+      k.slab(A, [[sx * 3.3, 9.6], [sx * 4.5, 5.6], [sx * 4.8, -6.5], [sx * 2.3, -6.5], [sx * 2.4, 5.6]], 0.4, 1.0);
+      for (let i = 0; i < 3; i++) k.engine(sx * (2.4 + i * 1.2), 0, -8.4, 0.55, 0.9); k.add(B, new THREE.ConeGeometry(0.4, 3, 5), sx * 3.4, 0, 11.6, Math.PI / 2);
+      k.box(R, 0.12, 0.2, 12, sx * 5.4, 0.5, 0); k.hazard(0.3, 0.08, 6, sx * 2.0, 0.85, 0);
+    }
+    k.box(D, 3.6, 0.8, 7, 0, 0.3, 0); k.plate(H, 2.4, 1.4, 3.4, 0, 1.2, -1.5); k.windows(0, 1.4, 0.2, 1.8, 6, 'x'); k.dress(rng, -1.4, 1.4, -4, 3, 0.75, 24, 0.4);
+    for (let i = 0; i < 4; i++) { const h = { x: (i % 2 ? 1 : -1) * 3.8, y: 1.0, z: 7 - (i >> 1) * 6, size: 1.3 }; hard.push(h); }
+    turrets.push({ x: -3.8, y: 1.0, z: 4, size: 1.4 }, { x: 3.8, y: 1.0, z: 4, size: 1.4 }); k.lights.push({ x: 0, y: 2.2, z: -1.5, color: 0xff8020, mode: 'strobe', size: 2.2 }); radius = 9;
+  }
+  const group = k.build();
+  for (const t of turrets) { const tu = makeTurret('cannon', t.size, 'pirate'); tu.position.set(t.x, t.y, t.z); tu.name = 'eturret'; group.add(tu); }
+  return { group, hardpoints: hard, engines: k.engines, radius };
+}
+// destructible boss components (separate hittable entities that ride on the flagship)
+export function buildBossPart(kind) {
+  const k = new Kit(); let radius = 1.8;
+  if (kind === 'cannon') { k.cyl('pirateDark', 1.2, 1.5, 0.6, 10, 0, 0.3, 0); radius = 2; }
+  else if (kind === 'missile') { k.cyl('pirateDark', 1.1, 1.3, 0.5, 8, 0, 0.25, 0); radius = 1.9; }
+  else if (kind === 'engine') { k.zcyl('pirateDark', 1.2, 1.5, 3.0, 12, 0, 0.6, 0); k.zcyl('pirate', 1.6, 1.6, 0.5, 12, 0, 0.6, 0.3); k.zcyl('glow', 0.9, 0.9, 0.08, 12, 0, 0.6, -1.55); k.add('orange', new THREE.TorusGeometry(1.25, 0.12, 6, 18), 0, 0.6, -1.4); radius = 2; }
+  else if (kind === 'prism') { k.cyl('pirateDark', 0.9, 1.1, 0.5, 8, 0, 0.25, 0); k.add('red', new THREE.OctahedronGeometry(0.9, 0), 0, 1.8, 0, 0, 0, 0, 0.8, 1.6, 0.8); radius = 1.6; }
+  else if (kind === 'dish') { k.cyl('pirateDark', 0.9, 1.1, 0.5, 8, 0, 0.25, 0); k.dish(0, 0.4, 0, 1.3, 0.6, 0); radius = 1.6; }
+  else if (kind === 'bay') { k.box('pirateDark', 3.0, 1.2, 2.0, 0, 0.6, 0); k.hazard(3.0, 0.08, 0.3, 0, 1.25, 0.9); k.box('glowSoft', 2.6, 0.7, 0.05, 0, 0.6, -1.02); radius = 2; }
+  else if (kind === 'shroud') { k.sphere('pirateDark', 0.9, 0, 0.6, 0, 1, 0.7, 1, 12, 8); k.add('red', new THREE.TorusGeometry(1.2, 0.08, 6, 20), 0, 0.6, 0, Math.PI / 2); radius = 1.5; }
+  else if (kind === 'core') { k.cyl('pirateDark', 1.0, 1.2, 0.4, 10, 0, 0.2, 0); k.sphere('red', 0.9, 0, 1.0, 0, 1, 1, 1, 14, 10); k.add('redSoft', new THREE.TorusGeometry(1.3, 0.07, 6, 22), 0, 1.0, 0, Math.PI / 2); radius = 1.5; }
+  else { // shield pylon (phase generators)
+    k.cyl('pirateDark', 1.0, 1.3, 0.5, 8, 0, 0, 0); k.cyl('pirate', 0.35, 0.55, 2.2, 8, 0, 1.3, 0); k.sphere('glow', 0.6, 0, 2.8, 0); k.add('glowSoft', new THREE.TorusGeometry(0.9, 0.05, 6, 20), 0, 2.8, 0, Math.PI / 2); radius = 1.8;
+  }
+  const g = k.build();
+  if (kind === 'cannon') { const tu = makeTurret('cannon', 2.2, 'pirate'); tu.position.y = 0.6; tu.name = 'eturret'; g.add(tu); }
+  if (kind === 'missile') { const tu = makeTurret('missile', 2.0, 'pirate'); tu.position.y = 0.5; tu.name = 'eturret'; g.add(tu); }
+  return { group: g, hardpoints: [{ x: 0, y: 1, z: 0 }], engines: [], radius };
+}
+// civilian freighter (player palette) for escort missions and merchants
+export function buildCivilian(kind = 'freighter') {
+  const k = new Kit();
+  if (kind === 'merchant') {
+    k.box('hull', 2.2, 1.6, 7, 0, 0, 0); k.plate('dark', 2.8, 0.5, 7.4, 0, -0.6, 0); k.plate('hull', 1.8, 1.2, 2, 0, 1.1, 2.4); k.box('glass', 1.4, 0.3, 0.2, 0, 1.3, 3.4);
+    for (const sx of [-1, 1]) { k.box('orange', 0.2, 1.0, 5, sx * 1.15, 0.2, -0.5); k.box('solar', 3.0, 0.05, 1.6, sx * 2.8, 0.6, -1.2); k.engine(sx * 0.7, 0, -3.6, 0.45, 0.6); }
+    k.lights.push({ x: 0, y: 1.8, z: 2.4, color: 0x30ff70, mode: 'blink', size: 1.6 }, { x: 0, y: 0.9, z: -3.4, color: 0xffd040, mode: 'blink', size: 1.2 });
+  } else {
+    k.box('dark', 1.2, 0.9, 5.6, 0, 0, -0.3); k.plate('hull', 1.5, 0.9, 1.6, 0, 0.1, 2.8); k.box('glass', 0.9, 0.25, 0.2, 0, 0.35, 3.55);
+    for (let i = 0; i < 3; i++) for (const sx of [-1, 1]) { k.box(i % 2 ? 'orange' : 'hull', 0.9, 0.8, 1.4, sx * 1.1, 0.05, 1.2 - i * 1.6); }
+    k.engine(-0.45, 0, -3.2, 0.32, 0.5); k.engine(0.45, 0, -3.2, 0.32, 0.5); k.lights.push({ x: 0, y: 0.7, z: -3.0, color: 0x30ff70, mode: 'blink', size: 1.2 });
+  }
+  return { group: k.build(), engines: k.engines, radius: kind === 'merchant' ? 3.6 : 3 };
+}
+// recolour pirate materials in place without adding a variant part (flagships, installations, boss parts)
+export function retint(group, fid, rgb, hullHex) { const F = factionMats(fid, rgb, hullHex); group.traverse((o) => { if (o.isMesh && F[o.material.uuid]) o.material = F[o.material.uuid]; }); return F; }
