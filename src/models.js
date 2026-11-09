@@ -1,7 +1,7 @@
 // Procedural models v2: detailed ships, turrets, pirates, station, asteroid geometry + materials.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
-import { mulberry, fbm3 } from './util.js?v=5';
+import { mulberry, fbm3 } from './util.js?v=6';
 
 // ================= Procedural textures =================
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }

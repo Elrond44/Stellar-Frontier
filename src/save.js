@@ -1,12 +1,12 @@
 // Save system: versioned state, migration, validation, manual slots, export/import codes
-import { MINERAL_KEYS, UPGRADES, TIERS } from './data.js?v=5';
-import { TEMPLATES, LEGACY, makeItem, RARITIES } from './items.js?v=5';
-import { SKILL_BY_ID } from './rpg.js?v=5';
-import { SECTOR_BY_ID, freshGalaxy, legacyOutpost, FACTION_KEYS } from './galaxy.js?v=5';
-import { freshWar } from './war.js?v=5';
-import { MTYPES, freshMissions } from './missions.js?v=5';
+import { MINERAL_KEYS, UPGRADES, TIERS } from './data.js?v=6';
+import { TEMPLATES, LEGACY, makeItem, RARITIES } from './items.js?v=6';
+import { SKILL_BY_ID } from './rpg.js?v=6';
+import { SECTOR_BY_ID, freshGalaxy, legacyOutpost, FACTION_KEYS } from './galaxy.js?v=6';
+import { freshWar } from './war.js?v=6';
+import { MTYPES, freshMissions } from './missions.js?v=6';
 
-export const SAVE_VERSION = 5; // v3 builds still wrote v2 (audio settings were additive); v5 = campaign (stages, war, missions, bosses)
+export const SAVE_VERSION = 6; // v6 = flight-assist setting (physics overhaul); v3 builds still wrote v2 (audio settings were additive); v5 = campaign (stages, war, missions, bosses)
 export const INV_CAP = 48;
 export const AUTO_KEY = 'stellar-frontier-save-v1'; // kept so v1 autosaves keep loading
 export const SLOT_COUNT = 3;
@@ -24,7 +24,7 @@ export function freshState() {
     // v5 campaign: faction war simulation, missions, unlocked flagship blueprints
     war: freshWar(), missions: freshMissions(), blueprints: {},
     stats: { mined: 0, rocks: 0, kills: 0, sold: 0, bosses: 0, deaths: 0, playTime: 0, outposts: 0, liberated: 0, caches: 0, items: 0 },
-    settings: { music: true, sfx: true, shake: true, quality: 'auto', fps: false, masterVol: 0.8, musicVol: 0.6, sfxVol: 0.85, mute: false, musicMode: 'soundtrack', trackIdx: 0, trackPos: 0, war: 'normal' },
+    settings: { music: true, sfx: true, shake: true, quality: 'auto', fps: false, masterVol: 0.8, musicVol: 0.6, sfxVol: 0.85, mute: false, musicMode: 'soundtrack', trackIdx: 0, trackPos: 0, war: 'normal', assist: 'normal' },
     pos: { x: 0, z: 34 }, hp: null, tutorialDone: false, savedAt: Date.now(), created: Date.now(),
   };
 }
@@ -98,7 +98,7 @@ export function sanitize(raw) {
   const st = d.settings || {}; s.settings = { music: st.music !== false, sfx: st.sfx !== false, shake: st.shake !== false, quality: ['auto', 'low', 'medium', 'high'].includes(st.quality) ? st.quality : 'auto', fps: st.fps === true,
     // v3 audio mixer (older saves: the on/off toggles map onto the new sliders)
     masterVol: num(st.masterVol, 0.8, 0, 1), musicVol: num(st.musicVol, st.music === false ? 0 : 0.6, 0, 1), sfxVol: num(st.sfxVol, st.sfx === false ? 0 : 0.85, 0, 1), mute: st.mute === true,
-    musicMode: st.musicMode === 'generated' ? 'generated' : 'soundtrack', trackIdx: int(st.trackIdx, 0, 0, 99), trackPos: num(st.trackPos, 0, 0, 36000), war: ['off', 'low', 'normal', 'high'].includes(st.war) ? st.war : 'normal' };
+    musicMode: st.musicMode === 'generated' ? 'generated' : 'soundtrack', trackIdx: int(st.trackIdx, 0, 0, 99), trackPos: num(st.trackPos, 0, 0, 36000), war: ['off', 'low', 'normal', 'high'].includes(st.war) ? st.war : 'normal', assist: ['low', 'normal', 'high'].includes(st.assist) ? st.assist : 'normal' };
   s.settings.music = s.settings.musicVol > 0; s.settings.sfx = s.settings.sfxVol > 0;
   s.pos = { x: num(d.pos && d.pos.x, 0, -1e5, 1e5), z: num(d.pos && d.pos.z, 34, -1e5, 1e5) };
   s.hp = d.hp == null ? null : num(d.hp, null, 0, 1e9);

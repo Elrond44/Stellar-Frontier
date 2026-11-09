@@ -1,15 +1,15 @@
 // HUD, joystick, radar and menus (DOM overlay)
-import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=5';
-import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=5';
-import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=5';
-import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=5';
-import { factionStats, WAR_LEVELS, allied } from './war.js?v=5';
-import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=5';
-import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=5';
-import { INV_CAP } from './save.js?v=5';
-import { fmt, clamp } from './util.js?v=5';
-import { FloatText } from './fx.js?v=5';
-import { Preview } from './preview.js?v=5';
+import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=6';
+import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=6';
+import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=6';
+import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=6';
+import { factionStats, WAR_LEVELS, allied } from './war.js?v=6';
+import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=6';
+import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=6';
+import { INV_CAP } from './save.js?v=6';
+import { fmt, clamp } from './util.js?v=6';
+import { FloatText } from './fx.js?v=6';
+import { Preview } from './preview.js?v=6';
 
 const $ = (id) => document.getElementById(id);
 const TIER_CROPS = [[18, 368, 120, 100], [122, 305, 232, 190], [320, 228, 275, 255], [495, 220, 385, 310], [745, 105, 530, 490]];
@@ -734,7 +734,8 @@ export class UI {
     const st = this.g.s.settings; const tg = (k, label) => `<div class="card row"><span>${label}</span><button class="toggle ${st[k] ? 'on' : ''}" data-act="toggle" data-k="${k}">${st[k] ? 'ON' : 'OFF'}</button></div>`;
     const sl = (k, label) => { const v = Math.round((st[k] ?? 0) * 100); return `<div class="card row vol"><span>${label}</span><input type="range" min="0" max="100" step="1" value="${v}" data-vol="${k}" aria-label="${label} volume"><b class="volv" id="vol_${k}">${v}%</b></div>`; };
     return `<div class="card"><h4>AUDIO</h4></div>` + sl('masterVol', 'Master') + sl('musicVol', 'Music') + sl('sfxVol', 'Sound effects') + tg('mute', 'Mute all') + this.renderMusicCard() + tg('shake', 'Camera shake') + tg('fps', 'Show FPS') +
-      `<div class="card row"><span>Graphics quality</span><div class="seg">${['auto', 'low', 'medium', 'high'].map((q) => `<button class="${st.quality === q ? 'on' : ''}" data-act="quality" data-q="${q}">${q.toUpperCase()}</button>`).join('')}</div></div>
+      `<div class="card row"><span>Graphics quality</span><div class="seg">${['auto', 'low', 'medium', 'high'].map((q) => `<button class="${st.quality === q ? 'on' : ''}" data-act="quality" data-q="${q}">${q.toUpperCase()}</button>`).join('')}</div></div>`+
+      `<div class="card row"><span>Flight assist</span><div class="seg">${[['low', 'LOW'], ['normal', 'NORMAL'], ['high', 'HIGH']].map(([q, l]) => `<button class="${(st.assist || 'normal') === q ? 'on' : ''}" data-act="assist" data-q="${q}">${l}</button>`).join('')}</div></div>
       <div class="card row"><span>Faction warfare<small class="muted" style="display:block">How often factions fight each other and take territory</small></span><div class="seg">${['off', 'low', 'normal', 'high'].map((q) => `<button class="${(st.war || 'normal') === q ? 'on' : ''}" data-act="warlvl" data-q="${q}">${q.toUpperCase()}</button>`).join('')}</div></div>
       <div class="card"><h4>CONTROLS</h4><p>Touch: drag anywhere to steer (virtual joystick). Weapons fire automatically. Tap the round ability buttons on the right; tap the radar for the galaxy map.<br>Desktop: WASD / arrow keys or drag with the mouse. 1–6 = abilities, Space = Quantum Dash, G = galaxy map, K = skills, I = gear, U = upgrades, M = missions, F = factory, H = station/autopilot, Esc = close.</p></div>
       <div class="card row"><span>Progress autosaves every few seconds.</span><span class="btnrow"><button class="btn sm gold" data-act="save">Save game</button><button class="btn sm" data-act="saves">Save / Load…</button></span></div>
@@ -800,7 +801,7 @@ export class UI {
       }
       this.confirmKey = null;
     }
-    if (b.classList.contains('dis') && !['toggle', 'quality', 'musicmode', 'track', 'reset', 'save', 'autopilot', 'saves', 'pvtier', 'equip', 'buyskill'].includes(a)) { this.toast(b.dataset.block === '1' && !g.docked && ['respec', 'buyitem', 'station', 'tier'].includes(a) ? 'Dock at the station first' : a === 'itemup' ? 'Not enough credits or components' : 'Not enough credits or materials', 'warn'); this.audio.denied(); return; }
+    if (b.classList.contains('dis') && !['toggle', 'quality', 'assist', 'musicmode', 'track', 'reset', 'save', 'autopilot', 'saves', 'pvtier', 'equip', 'buyskill'].includes(a)) { this.toast(b.dataset.block === '1' && !g.docked && ['respec', 'buyitem', 'station', 'tier'].includes(a) ? 'Dock at the station first' : a === 'itemup' ? 'Not enough credits or components' : 'Not enough credits or materials', 'warn'); this.audio.denied(); return; }
     switch (a) {
       case 'sell': { const r = g.sellCargo(); if (r) this.toast(`Sold: +${r.credits} cr`, 'good'); break; }
       case 'sellvault': g.sellVault(b.dataset.k, 10); break;
@@ -842,6 +843,7 @@ export class UI {
       case 'musicmode': g.s.settings.musicMode = b.dataset.m; this.audio.setMusicMode(b.dataset.m); g.save(); break;
       case 'track': this.audio.nextTrack(+b.dataset.d); break;
       case 'quality': g.s.settings.quality = b.dataset.q; this.opts.applySettings(); g.save(); break;
+      case 'assist': g.s.settings.assist = b.dataset.q; g.save(); this.toast(`Flight assist: ${b.dataset.q.toUpperCase()}${b.dataset.q === 'low' ? ' — Newtonian drift, manual braking' : b.dataset.q === 'high' ? ' — arcade handling' : ''}`); break;
       case 'save': { const ok = g.save(); if (ok) this.audio.saved(); this.toast(ok ? 'Game saved' : 'Save failed: storage is unavailable', ok ? 'good' : 'warn'); break; }
       case 'saves': this.open('saves'); return;
       case 'pvtier': this.pvTier = +b.dataset.t; break;

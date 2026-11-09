@@ -1,8 +1,8 @@
 // Background (nebula skybox, wrapped star layers, dust), asteroid chunk streaming, mineral pickups
 import * as THREE from 'three';
-import { mulberry, hash2, rand, TAU } from './util.js?v=5';
-import { MINERALS, sectorAt } from './data.js?v=5';
-import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=5';
+import { mulberry, hash2, rand, TAU } from './util.js?v=6';
+import { MINERALS, sectorAt } from './data.js?v=6';
+import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=6';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
 
 export function makeSky() {
@@ -146,7 +146,7 @@ export class AsteroidField {
     this.frustum = new THREE.Frustum(); this._pm = new THREE.Matrix4(); this._sph = new THREE.Sphere();
     this.visible = 0;
   }
-  makeAsteroid(o) { o.hitT = 0; o.alive = true; o.rx = o.rx || 0; o.ry = o.ry || 0; o.seedF = ((o.variant * 0.6180339) % 1); this.list.push(o); return o; }
+  makeAsteroid(o) { o.hitT = 0; o.alive = true; o.vx = o.vx || 0; o.vz = o.vz || 0; o.rx = o.rx || 0; o.ry = o.ry || 0; o.seedF = ((o.variant * 0.6180339) % 1); this.list.push(o); return o; }
   genChunk(cx, cz, now) {
     const key = cx + ',' + cz; const rng = mulberry(hash2(cx, cz, 9001)); const ch = { key, list: [] };
     const centerX = (cx + 0.5) * CHUNK, centerZ = (cz + 0.5) * CHUNK; const sec = sectorAt(Math.hypot(centerX, centerZ));
@@ -180,6 +180,7 @@ export class AsteroidField {
       const a = L[i]; if (!a.alive) continue;
       if (!a.chunk && (Math.abs(a.x - px) > CHUNK * (R + 1.5) || Math.abs(a.z - pz) > CHUNK * (R + 1.5))) { a.alive = false; continue; }
       a.ry += a.spin * dt; a.rx += a.spin * 0.5 * dt; if (a.hitT > 0) a.hitT -= dt;
+      if (a.vx || a.vz) { a.x += a.vx * dt; a.z += a.vz * dt; const k = Math.exp(-0.12 * dt); a.vx *= k; a.vz *= k; if (Math.abs(a.vx) + Math.abs(a.vz) < 0.03) a.vx = a.vz = 0; if (Math.abs(a.spin) > 0.5) a.spin *= Math.exp(-0.3 * dt); } // momentum (v6)
       L[w++] = a;
     }
     L.length = w;

@@ -2,15 +2,15 @@
 // flagship bosses (phases, telegraphed attacks, destructible components), autonomous faction warfare with visible
 // skirmishes, friendly activity in liberated space and the dynamic mission runtime.
 import * as THREE from 'three';
-import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=5';
-import { ENEMIES } from './data.js?v=5';
-import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=5';
-import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=5';
-import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=5';
-import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=5';
-import { makeItem, RARITIES, rollTemplate } from './items.js?v=5';
-import { INV_CAP } from './save.js?v=5';
-import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=5';
+import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=6';
+import { ENEMIES } from './data.js?v=6';
+import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=6';
+import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=6';
+import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=6';
+import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=6';
+import { makeItem, RARITIES, rollTemplate } from './items.js?v=6';
+import { INV_CAP } from './save.js?v=6';
+import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=6';
 
 const TAU = Math.PI * 2; const rand = (a, b) => a + Math.random() * (b - a); const randInt = (a, b) => Math.floor(rand(a, b + 1));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];

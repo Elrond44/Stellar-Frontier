@@ -1,7 +1,7 @@
 // Pooled visual effects: GPU points particles, debris, shockwave rings, instanced bolts, floating text
 import * as THREE from 'three';
-import { rand, TAU } from './util.js?v=5';
-import { glowTexture } from './models.js?v=5';
+import { rand, TAU } from './util.js?v=6';
+import { glowTexture } from './models.js?v=6';
 
 export class Particles {
   constructor(scene, max = 4000, opts = {}) {

@@ -3,12 +3,12 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
-import { Game } from './game.js?v=5';
-import { UI } from './ui.js?v=5';
-import { Audio } from './audio.js?v=5';
-import { makeSky, makeStarLayer, makeDust } from './world.js?v=5';
-import { SECTORS, sectorAt } from './data.js?v=5';
-import { owner } from './galaxy.js?v=5';
+import { Game } from './game.js?v=6';
+import { UI } from './ui.js?v=6';
+import { Audio } from './audio.js?v=6';
+import { makeSky, makeStarLayer, makeDust } from './world.js?v=6';
+import { SECTORS, sectorAt } from './data.js?v=6';
+import { owner } from './galaxy.js?v=6';
 
 const canvas = document.getElementById('c');
 let renderer;
@@ -163,7 +163,7 @@ function frame() {
 const perf = { upd: 0, calls: 0, tris: 0 };
 // soundtrack: the manifest is tiny; each song streams only when it is about to play
 audio.musicMode = game.s.settings.musicMode;
-fetch('music/tracks.json?v=5').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
+fetch('music/tracks.json?v=6').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
   if (!Array.isArray(list) || !list.length) return; const s = game.s.settings;
   audio.setTracks(list, s.trackIdx < list.length ? s.trackIdx : 0, s.trackIdx < list.length ? s.trackPos : 0);
 }).catch((e) => console.info('No soundtrack, using generated music:', e.message));

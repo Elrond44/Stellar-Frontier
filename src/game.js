@@ -1,19 +1,20 @@
 // Core game: state, player ship, weapons, enemies, economy, quests, saving
 import * as THREE from 'three';
-import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=5';
-import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=5';
-import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=5';
-import { Campaign, FLEET } from './campaign.js?v=5';
-import { roleAI } from './ai.js?v=5';
-import { BOSS_BY_BP } from './bosses.js?v=5';
-import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=5';
-import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=5';
-import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=5';
-import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=5';
-import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=5';
-import { AsteroidField, Minerals } from './world.js?v=5';
-import { Particles, Debris, Rings, Bolts, Flashes } from './fx.js?v=5';
-import { STORY, makeContract } from './quests.js?v=5';
+import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=6';
+import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=6';
+import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=6';
+import { Campaign, FLEET } from './campaign.js?v=6';
+import { roleAI } from './ai.js?v=6';
+import { BOSS_BY_BP } from './bosses.js?v=6';
+import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=6';
+import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=6';
+import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=6';
+import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=6';
+import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=6';
+import { AsteroidField, Minerals } from './world.js?v=6';
+import { Particles, Debris, Rings, Bolts, Flashes } from './fx.js?v=6';
+import { STORY, makeContract } from './quests.js?v=6';
+import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=6';
 
 const DOCK_R = 28;
 const BEH_TURRET = { beam: 'laser', bolt: 'cannon', missile: 'missile', pulse: 'pulse' };
@@ -34,6 +35,7 @@ export class Game {
     this.debris = new Debris(scene);
     this.rings = new Rings(scene);
     this.bolts = new Bolts(scene, 600);
+    this.flight = new FlightModel(); this.thr = this.flight.out; this.hashE = new SpatialHash(14); this.hashR = new SpatialHash(12); this._cand = []; this._bA = {}; this._bB = {}; this.kick = { x: 0, z: 0 };
     this.field = new AsteroidField(scene); this.field.camera = camera;
     this.minerals = new Minerals(scene);
     this.enemies = []; this.protos = {};
@@ -562,7 +564,7 @@ export class Game {
     }
   }
   enemyStatus(e, dt) { // shared per-enemy timers: hit flash, stun, burn, shred, shield regen
-    e.t += dt; e.cd -= dt; if (e.hitT > 0) e.hitT -= dt; if (e.shredT > 0) e.shredT -= dt;
+    e.t += dt; e.cd -= dt; if (e.hitT > 0) e.hitT -= dt; if (e.knockT > 0) { e.knockT -= dt; e.yaw += (e.spinV || 0) * dt; e.spinV = (e.spinV || 0) * Math.exp(-3 * dt); } if (e.shredT > 0) e.shredT -= dt;
     if (e.burnT > 0) { e.burnT -= dt; e.burnAcc = (e.burnAcc || 0) + e.burnDps * dt; if (e.burnAcc > 4 || e.burnT <= 0) { const d = e.burnAcc; e.burnAcc = 0; e.hp -= d; if (Math.random() < 0.5) this.ui && this.ui.float(e.x, 1.6, e.z, Math.round(d), '#ff9a3d'); if (e.hp <= 0) { this.killEnemy(e); return false; } }
       if (Math.random() < 0.5 * this.fx.budget) this.fx.emit(e.x + rand(-1, 1) * e.radius * 0.5, 0.6, e.z + rand(-1, 1) * e.radius * 0.5, 0, 2, 0, 0.4, 0.9, 0.2, 3.2, 1.2, 0.3, 2); }
     if (e.stunT > 0) { e.stunT -= dt; if (Math.random() < 0.6 * this.fx.budget) this.fx.emit(e.x + rand(-1, 1) * e.radius, 0.8 + rand(0, 1), e.z + rand(-1, 1) * e.radius, rand(-3, 3), rand(0, 2), rand(-3, 3), 0.2, 0.5, 0.1, 0.8, 2.6, 3.6, 3); }
@@ -598,7 +600,8 @@ export class Game {
     if (T.hold) { spd *= 0.45; }
     if (e.stunT > 0) { wantFire = false; spd *= 0.15; }
     const heavy = e.D.boss || e.type === 'capital' || e.type === 'freighter';
-    if (!raw) { // steering
+    if (e.knockT > 0) { const k = Math.exp(-0.6 * dt); e.vx *= k; e.vz *= k; } // shoved: momentum carries until the pilot recovers
+    else if (!raw) { // steering
       const sx = tx - e.x, sz = tz - e.z, sd = Math.hypot(sx, sz) || 0.001;
       const accel = heavy ? 4 : e.type === 'gunship' || e.type === 'support' ? 10 : 30;
       const desiredV = Math.min(spd, sd * 2);
@@ -865,7 +868,7 @@ export class Game {
     this.minerals.spawn(a.x, a.z, a.type, n, 5 + a.r);
     this.addXP(Math.round(a.r * 2 * sec.id * (a.rich ? 3 : 1)));
     this.s.stats.rocks++; this.emit('rock', {});
-    if (a.r > 1.9 && !a.rich) { const k = a.r > 3.3 ? randInt(2, 3) : randInt(1, 2); for (let i = 0; i < k; i++) { const ang = rand(0, TAU); this.field.spawnFragment(a.x + Math.cos(ang) * a.r * 0.6, a.z + Math.sin(ang) * a.r * 0.6, a.r > 3.3 ? rand(1.0, 1.5) : rand(0.7, 1.0), a.type, a.sector); } }
+    if (a.r > 1.9 && !a.rich) { const k = a.r > 3.3 ? randInt(2, 3) : randInt(1, 2); for (let i = 0; i < k; i++) { const ang = rand(0, TAU); const f = this.field.spawnFragment(a.x + Math.cos(ang) * a.r * 0.6, a.z + Math.sin(ang) * a.r * 0.6, a.r > 3.3 ? rand(1.0, 1.5) : rand(0.7, 1.0), a.type, a.sector); const kv = rand(1.5, 3.5); f.vx = (a.vx || 0) + Math.cos(ang) * kv; f.vz = (a.vz || 0) + Math.sin(ang) * kv; } }
     this.field.destroy(a, this.time, a.rich ? 240 : 150);
   }
 
@@ -953,6 +956,7 @@ export class Game {
           const sp = rand(-0.03, 0.03); const ux = (ax - muzzle.x) / ad, uz = (az - muzzle.z) / ad; const c = Math.cos(sp), s = Math.sin(sp);
           const crit = Math.random() < critC;
           this.bolts.spawn({ x: muzzle.x, z: muzzle.z, y: muzzle.y, vx: (ux * c - uz * s) * speed, vz: (uz * c + ux * s) * speed, dmg: S.dmg * st.dmg, crit, owner: 'p', kind: 'cannon', S, pierce: S.pierce, life: range * 1.3 / speed, len: S.len, w: S.w, color: S.rgb });
+          this.recoil(muzzle, ux, uz, S, st);
           const mc = S.rgb; this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.08, 1.8 * S.w, 0.5, mc[0], mc[1], mc[2], 0); this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.05, 0.7, 0.2, 4, 4, 3, 0); w.recoil = 1;
           this.audio.shoot(muzzle.x, muzzle.z, this.s.tier + (S.cat === 'plasma' ? -1.5 : S.cat === 'railgun' && S.speed > 100 ? -2 : S.cat === 'ion' ? 2 : 0));
         } else if (S.beh === 'missile') {
@@ -993,6 +997,14 @@ export class Game {
       }
     }
   }
+  // recoil: impulse scales with weapon power, divided by ship mass; off-centre hardpoints add a little torque
+  recoil(muzzle, ux, uz, S, st) {
+    const p = this.player; const m = p.mass || TIER_MASS[this.s.tier - 1];
+    const J = S.dmg * st.dmg * (S.speed / 60) * (S.cat === 'railgun' ? 0.11 : S.cat === 'plasma' ? 0.07 : 0.035);
+    const dv = Math.min(2.2, J / m); p.vx -= ux * dv; p.vz -= uz * dv;
+    const lx = muzzle.x - p.x, lz = muzzle.z - p.z; const I = m * p.radius * p.radius * 0.5; p.yawVel = clamp(p.yawVel + (lx * -uz - lz * -ux) * J * 0.15 / I, -6, 6);
+    if (S.cat === 'railgun' || S.cat === 'plasma') { const k = Math.min(0.5, J * 0.04) * (this.s.settings.shake ? 1 : 0.3); this.kick.x -= ux * k; this.kick.z -= uz * k; }
+  }
   firePulse(radius, dmg, S, critC) {
     const p = this.player;
     const c0 = RARITIES[0].rgb; const tint = S.rgb || [1.8, 0.8, 3.2];
@@ -1014,6 +1026,7 @@ export class Game {
   }
   updateBolts(dt) {
     const p = this.player; const st = this.stats();
+    const fE = (b) => (e) => !e.dead && !e.cloaked && !(b.hitSet && b.hitSet.has(e));
     for (const b of this.bolts.list) {
       if (b.dead) continue;
       b.life -= dt;
@@ -1021,42 +1034,161 @@ export class Game {
         const t = b.target; let tx, tz;
         if (t && (t.kind === 'rock' ? t.o.alive : !t.o.dead)) { tx = t.o.x; tz = t.o.z; }
         else { const nt = this.findTarget(b.x, b.z, 30, true); if (nt) { b.target = nt; tx = nt.o.x; tz = nt.o.z; } }
-        const cur = Math.atan2(b.vx, b.vz); let sp = Math.hypot(b.vx, b.vz); sp = Math.min(b.speed, sp + b.speed * 2 * dt);
-        const tr = b.turn || 6; let ang = cur; if (tx !== undefined) ang = cur + clamp(angleDiff(cur, Math.atan2(tx - b.x, tz - b.z)), -tr * dt, tr * dt);
+        // turn-rate-limited homing: slow off the rail, then the motor lights and the seeker gets authority
+        b.age = (b.age || 0) + dt; const cur = Math.atan2(b.vx, b.vz); let sp = Math.hypot(b.vx, b.vz); sp = Math.min(b.speed, sp + b.speed * (b.age < 0.15 ? 0.6 : 2.4) * dt);
+        const tr = (b.turn || 6) * Math.min(1, 0.25 + b.age * 2.5) * clamp(1.4 - sp / (b.speed * 1.6), 0.55, 1); let ang = cur; if (tx !== undefined) ang = cur + clamp(angleDiff(cur, Math.atan2(tx - b.x, tz - b.z)), -tr * dt, tr * dt);
         b.vx = Math.sin(ang) * sp; b.vz = Math.cos(ang) * sp;
+        if (tx !== undefined && b.splash && Math.hypot(tx - b.x, tz - b.z) < Math.max(1.2, b.splash * 0.35) && b.age > 0.2) { this.explodeMissile(b); b.dead = true; continue; } // proximity fuse
         if (Math.random() < 0.8 * this.fx.budget) this.fx.emit(b.x, b.y, b.z, rand(-1, 1), rand(0, 1), rand(-1, 1), 0.3, 0.8, 0.3, 2.4, 1.1, 0.4, 2);
         if (Math.random() < 0.9 * this.smoke.budget) this.smoke.emit(b.x, b.y, b.z, rand(-0.6, 0.6), rand(0, 0.8), rand(-0.6, 0.6), 1.1, 0.4, 1.8, 0.32, 0.31, 0.33, 1.5, 0.8);
       }
-      b.x += b.vx * dt; b.z += b.vz * dt;
+      let x0 = b.x, z0 = b.z; const x1 = b.x + b.vx * dt, z1 = b.z + b.vz * dt; b.x = x1; b.z = z1;
       if (b.owner === 'p') {
-        let hit = false; const S = b.S;
-        for (const e of this.enemies) {
-          if (e.dead || e.cloaked || (b.hitSet && b.hitSet.has(e))) continue;
-          if (Math.hypot(e.x - b.x, e.z - b.z) < e.radius + 0.4) {
+        let hit = false; const S = b.S; const filt = fE(b);
+        for (let guard = 0; guard < 4 && !hit; guard++) {
+          // continuous (swept) test: fast slugs can't tunnel through thin hulls or small rocks
+          const he = this.sweepHash(this.hashE, x0, z0, x1, z1, 0.5, filt, (e) => e.radius + 0.4);
+          const hr = this.sweepHash(this.hashR, x0, z0, x1, z1, 0.2, (a) => a.alive, (a) => a.r * 0.85);
+          if (!he && !hr) break;
+          if (he && (!hr || he.t <= hr.t)) {
+            const e = he.o; b.x = x0 + (x1 - x0) * he.t; b.z = z0 + (z1 - z0) * he.t;
             if (b.kind === 'missile') { hit = true; this.explodeMissile(b); break; }
             let tgt = e; if (e.bc) for (const q of [...e.bc.gens, ...e.bc.parts]) if (!q.dead && Math.hypot(q.x - b.x, q.z - b.z) < q.radius + 1.2) { tgt = q; break; } // components first
             const c = !!b.crit; this.damageEnemy(tgt, b.dmg * S.vsShip * (c ? 2.5 : 1), c, S);
+            this.knock(e, b, S);
             if (S.splash) this.boltSplash(b, e);
-            const col = b.color || [3, 2, 0.8]; this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, col, 3); this.audio.hit(b.x, b.z);
-            if (b.pierce > 0) { b.pierce--; (b.hitSet ||= new Set()).add(e); b.dmg *= 0.8; continue; }
-            hit = true; break;
+            this.impactFx(b, e, S); this.audio.hit(b.x, b.z);
+            if (b.pierce > 0) { b.pierce--; (b.hitSet ||= new Set()).add(e); b.dmg *= 0.8; x0 = b.x; z0 = b.z; b.x = x1; b.z = z1; continue; }
+            hit = true;
+          } else {
+            const a = hr.o; b.x = x0 + (x1 - x0) * hr.t; b.z = z0 + (z1 - z0) * hr.t; hit = true;
+            if (b.kind === 'missile') this.explodeMissile(b);
+            else { const c = !!b.crit; this.knock(a, b, S); this.damageRock(a, b.dmg * S.vsRock * st.mining * (c ? 2.5 : 1), c); this.audio.rockHit(b.x, b.z); this.impactFx(b, a, S, true); this.smoke.emit(b.x, a.y + 0.3, b.z, 0, 0.6, 0, 0.9, 0.5, 1.4, 0.2, 0.18, 0.18, 1.5, 0.7); }
           }
         }
-        if (!hit) for (const a of this.field.list) { if (!a.alive) continue; if (Math.abs(a.x - b.x) < a.r && Math.abs(a.z - b.z) < a.r && Math.hypot(a.x - b.x, a.z - b.z) < a.r * 0.85) { hit = true; if (b.kind === 'missile') this.explodeMissile(b); else { const c = !!b.crit; this.damageRock(a, b.dmg * S.vsRock * st.mining * (c ? 2.5 : 1), c); this.audio.rockHit(b.x, b.z); this.fx.burst(b.x, a.y, b.z, 5, 9, 0.3, 0.45, 0.06, b.color || [3, 2, 0.8], 3, 0.7); this.smoke.emit(b.x, a.y + 0.3, b.z, 0, 0.6, 0, 0.9, 0.5, 1.4, 0.2, 0.18, 0.18, 1.5, 0.7); } break; } }
         if (hit) { b.dead = true; continue; }
         if (b.life <= 0 && b.kind === 'missile') this.explodeMissile(b);
       } else {
         // enemy bolts: rival skirmish ships and friendly units (patrols, escorts, defended stations) can be hit too
         let hit = false;
-        if (b.battle) for (const e of this.enemies) { if (e.dead || e.battle !== b.battle || e.side === b.side) continue; if (Math.hypot(e.x - b.x, e.z - b.z) < e.radius + 0.3) { this.damageEnemy(e, b.dmg, false, null, true, 'rival'); this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, b.color || [3, 0.6, 0.4], 3); hit = true; break; } }
-        if (!hit) for (const f of this.camp.friends) { if (f.dead) continue; if (Math.hypot(f.x - b.x, f.z - b.z) < f.radius + 0.3) { this.camp.hurtFriend(f, b.dmg); this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, [0.6, 2.2, 3.4], 3); hit = true; break; } }
+        if (b.battle) { const h = this.sweepHash(this.hashE, x0, z0, x1, z1, 0.4, (e) => !e.dead && e.battle === b.battle && e.side !== b.side, (e) => e.radius + 0.3);
+          if (h) { const e = h.o; b.x = x0 + (x1 - x0) * h.t; b.z = z0 + (z1 - z0) * h.t; this.damageEnemy(e, b.dmg, false, null, true, 'rival'); this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, b.color || [3, 0.6, 0.4], 3); hit = true; } }
+        if (!hit) for (const f of this.camp.friends) { if (f.dead) continue; const t = sweptCircle(x0, z0, x1, z1, f.x, f.z, f.radius + 0.3); if (t >= 0) { this.camp.hurtFriend(f, b.dmg); this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, [0.6, 2.2, 3.4], 3); hit = true; break; } }
         if (hit) { b.dead = true; continue; }
         if (this.dead) { if (b.life <= 0) b.dead = true; continue; }
-        if (Math.hypot(p.x - b.x, p.z - b.z) < p.radius) { const M = b.fac ? this.facMods(b.fac) : null; this.hurtPlayer(b.dmg, b.x - b.vx * 0.05, b.z - b.vz * 0.05, { energy: b.energy, drain: M && M.drain, shieldBreak: M && M.shieldBreak }); this.fx.burst(b.x, 0.5, b.z, 6, 8, 0.3, 0.8, 0.1, [3, 0.6, 0.4], 3); b.dead = true; continue; }
+        const tp = sweptCircle(x0, z0, x1, z1, p.x, p.z, p.radius);
+        if (tp >= 0) { b.x = x0 + (x1 - x0) * tp; b.z = z0 + (z1 - z0) * tp; const M = b.fac ? this.facMods(b.fac) : null; this.hurtPlayer(b.dmg, b.x - b.vx * 0.05, b.z - b.vz * 0.05, { energy: b.energy, drain: M && M.drain, shieldBreak: M && M.shieldBreak }); this.fx.burst(b.x, 0.5, b.z, 6, 8, 0.3, 0.8, 0.1, [3, 0.6, 0.4], 3); b.dead = true; continue; }
       }
       if (b.life <= 0) b.dead = true;
     }
     this.bolts.sync();
+  }
+  // momentum transfer from a projectile (railguns shove, everything else nudges)
+  knock(o, b, S) {
+    const sp = Math.hypot(b.vx, b.vz) || 1; const m = o.m !== undefined && o.alive !== undefined ? o.m : massOf(o); if (m === Infinity || !m) return;
+    const J = b.dmg * (S && S.cat === 'railgun' ? 0.09 : S && S.cat === 'plasma' ? 0.05 : 0.02) * Math.min(2.5, sp / 50);
+    const dv = Math.min(o.alive !== undefined ? 6 : 3.5, J / m); o.vx = (o.vx || 0) + b.vx / sp * dv; o.vz = (o.vz || 0) + b.vz / sp * dv;
+    if (o.alive === undefined && dv > 0.8) { o.knockT = Math.max(o.knockT || 0, 0.2); o.spinV = rand(-1, 1) * dv; }
+  }
+  impactFx(b, o, S, rock) {
+    const col = b.color || [3, 2, 0.8]; const sp = Math.hypot(b.vx, b.vz) || 1; const ux = b.vx / sp, uz = b.vz / sp; const y = rock ? o.y : 0.5;
+    const n = S && S.cat === 'railgun' ? 10 : 5; const bud = this.fx.budget;
+    for (let i = 0; i < n; i++) { if (Math.random() > bud) continue; const a = Math.atan2(-ux, -uz) + rand(-1, 1) * (S && S.cat === 'railgun' ? 0.6 : 1.3); const v = rand(5, S && S.cat === 'railgun' ? 22 : 11);
+      this.fx.emit(b.x, y, b.z, Math.sin(a) * v, rand(-1, 3), Math.cos(a) * v, rand(0.15, 0.4), rock ? 0.5 : 0.6, 0.08, col[0], col[1], col[2], 3); }
+    if (S && S.cat === 'railgun') for (let i = 0; i < 4; i++) this.fx.emit(b.x, y, b.z, ux * rand(6, 16) + rand(-2, 2), rand(0, 2), uz * rand(6, 16) + rand(-2, 2), 0.35, 0.4, 0.1, 3.4, 3, 2.4, 2); // exit spray
+    this.fx.emit(b.x, y, b.z, 0, 0, 0, 0.07, rock ? 1.4 : 1.8, 0.4, col[0], col[1], col[2], 0);
+  }
+  // ---------- v6 physics: broadphase + impulse collisions (player / ships / asteroids) ----------
+  buildHashes() {
+    const hE = this.hashE, hR = this.hashR; hE.clear(); hR.clear();
+    for (const e of this.enemies) if (!e.dead) hE.insert(e, e.x, e.z, e.radius + 0.5);
+    for (const a of this.field.list) if (a.alive) { if (a.m === undefined) a.m = rockMass(a.r, a.rich); hR.insert(a, a.x, a.z, a.r); }
+  }
+  impactDamage(vn, mSelf, mOther, thr = 9) { return Math.max(0, vn - thr) * 0.6 * clamp(2 * mOther / (mSelf + mOther), 0.15, 1.5); }
+  body(B, o, x, z, vx, vz, m, r, yawVel) { B.o = o; B.x = x; B.z = z; B.vx = vx; B.vz = vz; B.m = m; B.r = r; B.yawVel = yawVel; return B; }
+  physicsStep(dt) {
+    this.buildHashes();
+    const p = this.player; const st = this.stats(); const cand = this._cand; const A = this._bA, Bb = this._bB; const tier = this.s.tier;
+    this.collisions = this.collisions || { n: 0, maxJ: 0 };
+    const spark = (x, z, nx, nz, n, col) => { if (this.fx.budget <= 0) return; for (let i = 0; i < n; i++) { const a = Math.atan2(nx, nz) + rand(-1.1, 1.1); const v = rand(6, 16); this.fx.emit(x, rand(0.3, 1), z, Math.sin(a) * v, rand(0, 3), Math.cos(a) * v, rand(0.2, 0.5), 0.35, 0.05, col[0], col[1], col[2], 4); } };
+    if (!this.dead) {
+      const m = p.mass || TIER_MASS[tier - 1]; const pr = p.radius * 0.7;
+      // player vs asteroids
+      this.hashR.query(p.x, p.z, pr + 0.5, cand);
+      for (const a of cand) {
+        if (!a.alive) continue;
+        this.body(A, p, p.x, p.z, p.vx, p.vz, m, pr, p.yawVel); this.body(Bb, a, a.x, a.z, a.vx || 0, a.vz || 0, a.m, a.r * 0.85, 0);
+        const res = collideCircles(A, Bb, 0.3); if (!res) continue;
+        p.x = A.x; p.z = A.z; p.vx = A.vx; p.vz = A.vz; p.yawVel = clamp(A.yawVel, -6, 6); a.x = Bb.x; a.z = Bb.z; a.vx = Bb.vx; a.vz = Bb.vz; a.spin = clamp((a.spin || 0) + Bb.yawVel * 0.5, -3, 3);
+        if (res.vn > 1.5) { this.collisions.n++; this.collisions.maxJ = Math.max(this.collisions.maxJ, res.j); const cx = p.x + res.nx * pr, cz = p.z + res.nz * pr; spark(cx, cz, -res.nx, -res.nz, Math.min(10, Math.round(res.vn * 0.6)), [3, 2, 1]); a.hitT = Math.max(a.hitT, 0.12); if (res.vn > 5) this.audio.rockHit(cx, cz); }
+        if (res.vn > 6) this.damageRock(a, res.e * 0.05);
+        const dmg = this.impactDamage(res.vn, m, a.m) * tier;
+        if (dmg > 0 && !st.fx.collision && !this.docked && this.dashT <= 0) this.hurtPlayer(dmg, a.x, a.z, { energy: false });
+      }
+      // player vs ships (ramming): mass decides who gets shoved
+      this.hashE.query(p.x, p.z, pr + 0.5, cand);
+      for (const e of cand) {
+        if (e.dead || (e.type === 'sentinel' && e.state === 'idle' && e.cloaked)) continue;
+        const me = massOf(e); const er = e.radius * (e.D.inst ? 0.6 : 0.75);
+        this.body(A, p, p.x, p.z, p.vx, p.vz, m, pr, p.yawVel); this.body(Bb, e, e.x, e.z, e.vx || 0, e.vz || 0, me, er, 0);
+        const res = collideCircles(A, Bb, 0.25); if (!res) continue;
+        p.x = A.x; p.z = A.z; p.vx = A.vx; p.vz = A.vz; p.yawVel = clamp(A.yawVel, -6, 6);
+        if (me !== Infinity) { e.x = Bb.x; e.z = Bb.z; e.vx = Bb.vx; e.vz = Bb.vz; if (res.vn > 2) { e.knockT = Math.min(0.7, res.vn * 0.04 * Math.min(1, m / me)); e.spinV = clamp(Bb.yawVel * 2 + (Math.random() - 0.5) * res.j / me, -4, 4); } }
+        if (res.vn > 2) { this.collisions.n++; this.collisions.maxJ = Math.max(this.collisions.maxJ, res.j); spark(p.x + res.nx * pr, p.z + res.nz * pr, res.nx, res.nz, Math.min(14, Math.round(res.vn)), [3.4, 2.2, 1]); }
+        if (res.vn > 6) { this.addShake(Math.min(0.4, res.vn * 0.02)); this.damageEnemy(e, (res.vn - 6) * m * 5 * st.dmg * (this.dashT > 0 ? 2 : 1), false, this.RAM_S || (this.RAM_S = { vsShip: 1, vsRock: 1, shieldMul: 1, pen: 0.3, ram: true })); }
+        const dmg = this.impactDamage(res.vn, m, me, 8) * tier;
+        if (dmg > 0 && !st.fx.collision && this.dashT <= 0) this.hurtPlayer(dmg, e.x, e.z, { energy: false });
+      }
+    }
+    // ships vs asteroids (near the player only)
+    for (const e of this.enemies) {
+      if (e.dead || e.D.inst || e.D.part || Math.abs(e.x - p.x) > 110 || Math.abs(e.z - p.z) > 110) continue;
+      const me = massOf(e); const er = e.radius * 0.75;
+      this.hashR.query(e.x, e.z, er, cand);
+      for (const a of cand) {
+        if (!a.alive) continue;
+        this.body(A, e, e.x, e.z, e.vx || 0, e.vz || 0, me, er, 0); this.body(Bb, a, a.x, a.z, a.vx || 0, a.vz || 0, a.m, a.r * 0.85, 0);
+        const res = collideCircles(A, Bb, 0.3); if (!res) continue;
+        e.x = A.x; e.z = A.z; e.vx = A.vx; e.vz = A.vz; a.x = Bb.x; a.z = Bb.z; a.vx = Bb.vx; a.vz = Bb.vz;
+        if (res.vn > 4) { e.knockT = Math.min(0.5, res.vn * 0.03); a.hitT = 0.1; spark(e.x + res.nx * er, e.z + res.nz * er, -res.nx, -res.nz, 4, [3, 2, 1]); }
+      }
+    }
+    // drifting asteroids bump each other (only the moving ones initiate)
+    for (const a of this.field.list) {
+      if (!a.alive || !(Math.abs(a.vx || 0) + Math.abs(a.vz || 0) > 0.15)) continue;
+      this.hashR.query(a.x, a.z, a.r, cand);
+      for (const b of cand) {
+        if (b === a || !b.alive) continue;
+        this.body(A, a, a.x, a.z, a.vx, a.vz, a.m, a.r * 0.85, 0); this.body(Bb, b, b.x, b.z, b.vx || 0, b.vz || 0, b.m, b.r * 0.85, 0);
+        const res = collideCircles(A, Bb, 0.4); if (!res) continue;
+        a.x = A.x; a.z = A.z; a.vx = A.vx; a.vz = A.vz; b.x = Bb.x; b.z = Bb.z; b.vx = Bb.vx; b.vz = Bb.vz;
+        if (res.vn > 4) { a.hitT = b.hitT = 0.1; if (res.e > 30) { this.damageRock(a, res.e * 0.02); this.damageRock(b, res.e * 0.02); } }
+      }
+    }
+  }
+  // RCS / retro thruster jets driven by the flight model's real force outputs
+  thrusterFx(dt) {
+    const p = this.player; const t = this.thr; const bud = this.fx.budget; if (bud <= 0) return;
+    const hx = Math.sin(p.yaw), hz = Math.cos(p.yaw); const rx = hz, rz = -hx; const R = p.radius; const y = 0.5;
+    const jet = (lx, lz, dx, dz, k) => { // local offset (right, forward) and exhaust direction (local)
+      if (Math.random() > Math.min(1, k * 1.6) * bud) return;
+      const wx = p.x + rx * lx + hx * lz, wz = p.z + rz * lx + hz * lz; const ex = rx * dx + hx * dz, ez = rz * dx + hz * dz; const v = 9 + R * 2;
+      this.fx.emit(wx, y, wz, ex * v + p.vx, 0, ez * v + p.vz, 0.16, 0.45 + R * 0.12, 0.05, 1.6, 2.2, 3.2, 3);
+      if (Math.random() < 0.4) this.fx.emit(wx, y, wz, ex * v * 0.5 + p.vx, 0.2, ez * v * 0.5 + p.vz, 0.4, 0.3, 0.9, 0.9, 1, 1.2, 3, 0.5);
+    };
+    // yaw torque: nose jet one side, tail jet the other side
+    if (t.rcsR > 0.15) { jet(-R * 0.35, R * 0.75, -1, 0, t.rcsR); jet(R * 0.35, -R * 0.6, 1, 0, t.rcsR); }
+    if (t.rcsL > 0.15) { jet(R * 0.35, R * 0.75, 1, 0, t.rcsL); jet(-R * 0.35, -R * 0.6, -1, 0, t.rcsL); }
+    if (t.latR > 0.15) jet(R * 0.45, 0, 1, 0, t.latR);
+    if (t.latL > 0.15) jet(-R * 0.45, 0, -1, 0, t.latL);
+    if (t.brake > 0.1) { jet(-R * 0.3, R * 0.85, -0.3, 1, t.brake); jet(R * 0.3, R * 0.85, 0.3, 1, t.brake); }
+    if (t.boost > 0 && Math.random() < 0.7 * bud) this.fx.emit(p.x - hx * R * 1.4 + rand(-0.4, 0.4), 0.4, p.z - hz * R * 1.4 + rand(-0.4, 0.4), -hx * 30, 0, -hz * 30, 0.25, 0.9, 0.2, 1.2, 2.4, 3.6, 0);
+  }
+  // swept projectile query against a hash: earliest hit in [0,1] along x0,z0 -> x1,z1
+  sweepHash(hash, x0, z0, x1, z1, pad, filter, radiusOf) {
+    const cand = hash.queryBox(x0 - pad, z0 - pad, x1 + pad, z1 + pad, this._cand); let best = null, bt = 2;
+    for (const o of cand) { if (!filter(o)) continue; const t = sweptCircle(x0, z0, x1, z1, o.x, o.z, radiusOf(o)); if (t >= 0 && t < bt) { bt = t; best = o; } }
+    return best ? { o: best, t: bt } : null;
   }
 
   // ---------- hp bars ----------
@@ -1100,36 +1232,24 @@ export class Game {
     if (this.overT > 0) { this.shieldMat.uniforms.uT.value = Math.max(this.shieldMat.uniforms.uT.value, 0.55 + 0.15 * Math.sin(this.time * 12)); }
     if (!this.dead) {
       if (this.dashT > 0) { // quantum dash: fixed-velocity blink, then carry top speed
-        const ddt = Math.min(dt, this.dashT); this.dashT -= dt; p.x += this.dashV.x * ddt; p.z += this.dashV.z * ddt;
+        const ddt = Math.min(dt, this.dashT); this.dashT -= dt; p.x += this.dashV.x * ddt; p.z += this.dashV.z * ddt; p.vx = this.dashV.x; p.vz = this.dashV.z; p.yawVel *= 0.5;
         if (Math.random() < 0.9) this.fx.emit(p.x, 0.6, p.z, 0, 0, 0, 0.35, p.radius * 1.4, 0.4, 0.4, 2.6, 1.4, 0);
         if (this.dashT <= 0) { const m = Math.hypot(this.dashV.x, this.dashV.z) || 1; p.vx = this.dashV.x / m * st.speed; p.vz = this.dashV.z / m * st.speed; this.rings.spawn(p.x, 0.3, p.z, 4 + p.radius, [0.5, 3, 1.4], 0.3); }
       } else {
-      p.vx += ix * st.accel * dt; p.vz += iz * st.accel * dt;
-      const drag = im > 0.05 ? 0.6 : 1.8; const k = Math.exp(-drag * dt); p.vx *= k; p.vz *= k;
-      const sp = Math.hypot(p.vx, p.vz); const max = st.speed * (this.autopilot ? 1.15 * (1 + (st.fx.hyper || 0)) : 1) * (this.time - this.emergThrustT < 4 ? 1.5 : 1);
-      if (sp > max) { p.vx *= max / sp; p.vz *= max / sp; }
-      p.x += p.vx * dt; p.z += p.vz * dt;
+      const boost = this.time - this.emergThrustT < 4; const maxMul = (this.autopilot ? 1.15 * (1 + (st.fx.hyper || 0)) : 1) * (boost ? 1.5 : 1);
+      p.mass = TIER_MASS[this.s.tier - 1];
+      this.thr = this.flight.step(p, st, { x: ix, z: iz }, dt, { assist: this.autopilot ? 1 : assistValue(this.s.settings.assist), maxMul, boost: boost || (this.autopilot && (st.fx.hyper || 0) > 0) });
       }
     }
-    p.thrust = damp(p.thrust, im, 6, dt);
-    // collisions with rocks & station core
-    for (const a of this.field.list) {
-      if (!a.alive) continue; const dx = p.x - a.x, dz = p.z - a.z; const min = a.r * 0.85 + p.radius * 0.7;
-      if (Math.abs(dx) > min || Math.abs(dz) > min) continue;
-      const d = Math.hypot(dx, dz); if (d < min && d > 0.001) { const nx = dx / d, nz = dz / d; p.x = a.x + nx * min; p.z = a.z + nz * min; const vn = p.vx * nx + p.vz * nz; if (vn < 0) { p.vx -= vn * 1.4 * nx; p.vz -= vn * 1.4 * nz;
-        if (vn < -11 && !st.fx.collision && !this.docked && this.dashT <= 0) this.hurtPlayer((-vn - 11) * 0.6 * this.s.tier, a.x, a.z, { energy: false }); } } // high-speed impacts hurt (Impact Dampers negate)
-    }
+    if (this.dead || this.dashT > 0) { const t = this.thr; t.main = this.dashT > 0 ? 1.6 : 0; t.brake = t.rcsL = t.rcsR = t.latL = t.latR = 0; t.boost = this.dashT > 0 ? 1 : 0; }
+    p.thrust = damp(p.thrust, this.thr.main, 8, dt);
+    // station core (asteroid / ship collisions are resolved in physicsStep)
     { const d = Math.hypot(p.x, p.z); const min = 8 + p.radius * 0.5; if (d < min && d > 0.001) { p.x = p.x / d * min; p.z = p.z / d * min; } }
-    // heading & banking
-    const sp = Math.hypot(p.vx, p.vz);
-    if (sp > 0.8 || im > 0.1) {
-      const want = im > 0.1 ? Math.atan2(ix, iz) : Math.atan2(p.vx, p.vz);
-      const turnRate = st.turn; const dy = angleDiff(p.yaw, want); const step = clamp(dy, -turnRate * dt, turnRate * dt);
-      p.yaw += step; p.yawVel = step / Math.max(dt, 1e-4);
-    } else p.yawVel = 0;
+    // banking follows the real angular velocity
     p.bank = damp(p.bank, clamp(p.yawVel * 0.22, -0.65, 0.65), 6, dt);
     p.group.position.set(p.x, Math.sin(this.time * 1.6) * 0.12, p.z);
-    p.group.rotation.set(Math.sin(this.time * 1.1) * 0.02 - p.thrust * 0.05, p.yaw, -p.bank);
+    p.group.rotation.set(Math.sin(this.time * 1.1) * 0.02 - p.thrust * 0.05 + this.thr.brake * 0.04, p.yaw, -p.bank);
+    if (!this.dead) this.thrusterFx(dt);
     // flames + trails
     const pw = 0.25 + p.thrust * 1.1; p.flames.mat.uniforms.uPower.value = pw; p.flames.mat.uniforms.uTime.value = this.time;
     for (const f of p.flames.flames) { const L = f.r * (1.2 + p.thrust * 5.5) * (0.9 + Math.random() * 0.2); f.mesh.scale.set(1, 1, L); f.core.scale.set(1, 1, L * 0.55); f.mesh.visible = f.core.visible = !this.dead; f.sprite.scale.setScalar(f.r * (2.2 + p.thrust * 2.2) * (0.92 + Math.random() * 0.16)); }
@@ -1181,6 +1301,7 @@ export class Game {
     this.field.update(p.x, p.z, this.time, dt);
     this.director(dt);
     this.updateEnemies(dt);
+    this.physicsStep(dt);
     this.updateWeapons(dt);
     this.updateBolts(dt);
     this.updateLoot(dt); this.updateCaches(dt); this.updateAllies(dt);
@@ -1233,6 +1354,7 @@ export class Game {
     this.camPos.x = damp(this.camPos.x, tx, 6, dt); this.camPos.y = damp(this.camPos.y, ty, 2.5, dt); this.camPos.z = damp(this.camPos.z, tz, 6, dt);
     this.camera.position.copy(this.camPos);
     this.camera.lookAt(this.camLook.x, 0, this.camLook.z);
+    { const kk = this.kick; this.camera.position.x += kk.x; this.camera.position.z += kk.z; const d = Math.exp(-10 * dt); kk.x *= d; kk.z *= d; }
     if (this.shake > 0) {
       const s = this.shake * this.shake * 1.2; this.camera.position.x += rand(-s, s); this.camera.position.y += rand(-s, s) * 0.5; this.camera.position.z += rand(-s, s);
       this.shake = Math.max(0, this.shake - dt * 1.8);
