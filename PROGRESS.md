@@ -46,3 +46,12 @@ Branch `v8-wip` holds local WIP commits. `main` stays at v7 (45689c9) until v8 p
   - Turrets look oversized on the Frigate and Destroyer.
   - Carrier fighters are hard to see at full zoom-out.
   - Gameplay balance for capital hulls has not been checked on real devices.
+
+## v9 — Cinematic Explosion & Destruction System 2.0 (in progress, branch v9-wip)
+Plan:
+- [ ] src/explosions.js: ExplosionManager, PROFILES, PlasmaSystem (instanced noise/temperature billboards), ArcSystem, DebrisPhysics (momentum inheritance, hit-side impulse, wreck slabs w/ cap), ExplosionLighting (light budget), DestructionSequence (6 stages, per-class, dreadnought/station 8 steps), ExplosionAudio (layered, voice limit)
+- [ ] Hooks: killEnemy, damageEnemy (hit dir / shield hit / collapse), impactFx (weapon signatures), playerDie, structures (modules/HQ)
+- [ ] Quality budgets + exposure clamp
+- [ ] ?v=9 bump, About v9, README/CREDITS
+- [ ] tests/v9.js (10 scenarios + leaks) + rerun old suites; shots/v9
+- [ ] merge to main, push, verify Pages
