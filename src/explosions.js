@@ -82,9 +82,9 @@ void main() {
   float rim = 0.5 + 0.45 * n;
   float body = 1.0 - smoothstep(rim * 0.55, rim, r);
   float hollow = mix(1.0, smoothstep(0.0, 0.75, r + n * 0.35), smoothstep(0.3, 1.0, age) * 0.75); // core cools first, shell thins
-  float T = clamp(vP.z * (1.0 - age * 0.9) * (1.05 - r * 0.95) + (n - 0.5) * 0.4, 0.0, 1.0);
-  vec3 col = ramp(T) * mix(vec3(1.0), vC, 0.3) * (0.45 + 1.9 * T * T) * (0.6 + 0.55 * n);
-  float a = body * hollow * pow(1.0 - age, 1.4) * vP.w * uGain;
+  float T = clamp(vP.z * (1.0 - age * 0.6) * (1.25 - r * 0.85) + (n - 0.5) * 0.4, 0.0, 1.0);
+  vec3 col = ramp(T) * mix(vec3(1.0), vC, 0.3) * (0.8 + 2.4 * T * T) * (0.6 + 0.55 * n);
+  float a = body * hollow * pow(1.0 - age, 0.9) * vP.w * uGain;
   gl_FragColor = vec4(min(col, vec3(2.6)) * a, a * 0.45); // premultiplied: partly occludes (soft internal shadow), mostly adds
 }`;
 class PlasmaSystem {
@@ -243,9 +243,9 @@ export class ExplosionManager {
     // 2: localized flash (short, white-hot, small) — sized so a fighter never rivals a capital ship
     this.plasma.spawn(x, y + 0.4, z, 0.6 * s, 2.6 * s, 0.12 + 0.03 * s, 1, 1.2, null, vx * 0.5, vz * 0.5);
     // 3: plasma expansion: main lobe + offset lobes drifting with the wreck
-    this.plasma.spawn(x, y + 0.3, z, 1.0 * s, 4.2 * s, 0.45 + 0.16 * s, heat * 0.9, 1, o.tint, vx * 0.6, vz * 0.6);
+    this.plasma.spawn(x, y + 0.3, z, 1.2 * s, 5.2 * s, 0.6 + 0.2 * s, heat * 0.95, 1, o.tint, vx * 0.6, vz * 0.6);
     const lobes = near > 0.4 ? Math.min(4, Math.round(s * 1.2)) : 1;
-    for (let k = 0; k < lobes; k++) { const a = rand(0, TAU), d = rand(0.4, 1) * s; this.plasma.spawn(x + Math.cos(a) * d, y + 0.2, z + Math.sin(a) * d, 0.6 * s, rand(2, 3.2) * s, rand(0.4, 0.7) + 0.1 * s, heat * rand(0.55, 0.8), 0.8, o.tint, vx * 0.6 + Math.cos(a) * s, vz * 0.6 + Math.sin(a) * s); }
+    for (let k = 0; k < lobes; k++) { const a = rand(0, TAU), d = rand(0.4, 1) * s; this.plasma.spawn(x + Math.cos(a) * d, y + 0.2, z + Math.sin(a) * d, 0.6 * s, rand(2.6, 3.8) * s, rand(0.5, 0.8) + 0.15 * s, heat * rand(0.55, 0.8), 0.8, o.tint, vx * 0.6 + Math.cos(a) * s, vz * 0.6 + Math.sin(a) * s); }
     // hot streaks / sparks (existing pooled particles)
     g.fx.burst(x, y, z, Math.ceil((4 + 4 * s) * B.spark * near), 9 + 5 * s, 0.6, 0.35, 0.05, [3.0, 1.6, 0.5], 0.6, 0.5);
     // 4: fragments
@@ -253,7 +253,7 @@ export class ExplosionManager {
     for (let k = 0; k < nf; k++) this.debris.spawn(x, y, z, vx, vz, o.ix || 0, o.iz || 0, 5 + 3 * s, 0.25 + 0.12 * Math.min(s, 4) * rand(0.6, 1.3), Math.random() < 0.3 ? 'plate' : 'chip', heat);
     if (o.light !== false) this.lights.light(x, y, z, o.light ?? s, 0xff9a4a, 0.25 + 0.08 * s, 14 + 9 * s);
     if (s >= 2.5 && near > 0.3) g.ripple && g.ripple(x, z, 6 * s, 0.005 + 0.0015 * Math.min(4, s), 0.5);
-    if (o.ring !== false && s >= 1.2) g.rings.spawn(x, y - 0.2, z, 6 * s, o.tint ? o.tint.map((v) => v * 0.7) : [3, 1.2, 0.5], 0.45 + 0.05 * s);
+    if (o.ring !== false && s >= 1.2) g.rings.spawn(x, y - 0.2, z, 4.5 * s, o.tint ? o.tint.map((v) => v * 0.35) : [1.5, 0.6, 0.25], 0.4 + 0.05 * s);
     if (o.sound !== false && g.audio && g.audio.blast) g.audio.blast(s, x, z, { electric: o.electric, reactor: o.reactor });
     if (o.shake !== false) this.shake(o.shake ?? 0.12 * Math.min(4, s), x, z);
     // 6: dissipation — a few cooling embers, no smoke
@@ -318,17 +318,17 @@ export class ExplosionManager {
     const S = { e, P, t: 0, dur, x: e.x, z: e.z, y: 0.5, vx: Number.isFinite(e.vx) ? e.vx : 0, vz: Number.isFinite(e.vz) ? e.vz : 0, yaw, hx: Math.sin(yaw), hz: Math.cos(yaw), ix, iz, tint: o.tint || [3, 1.2, 0.45],
       grp: keep ? e.group : null, broke: !keep, breakT: keep ? dur * P.keep : 0, ev: [], step: P.steps ? 0 : -1, spin: (ix * Math.cos(yaw) - iz * Math.sin(yaw)) * 0.25 / Math.sqrt(Math.max(1, (e.hullLen || 4) / 10)) + rand(-0.03, 0.03),
       len: e.hullLen || (e.radius || 1) * 2 * k, beam: (e.beam || e.radius || 1) * k, z0: e.segs ? e.segs[0].z * k : -(e.radius || 1) * 0.8, z1: e.segs ? e.segs[e.segs.length - 1].z * k : (e.radius || 1) * 0.8, y0: e.group ? e.group.position.y : 0, shield: (e.shieldMax || e.maxShield || 0) > 0 };
-    if (keep) { g.lod && g.lod.release(e.group); S.D = ensureDamage(e.group); }
+    S.top = 0.8; if (keep) { g.lod && g.lod.release(e.group); S.D = ensureDamage(e.group); const bb = (this._bb || (this._bb = new THREE.Box3())).setFromObject(e.group); if (Number.isFinite(bb.max.y)) S.top = Math.max(0.8, Math.min(bb.max.y, 12) * 0.9 + 0.3); } // effects sit on the deck, not inside it
     const at = (t, fn) => S.ev.push({ t, fn });
     const sz = P.size; const t1 = P === PROFILES.fighter || P === PROFILES.module ? 0.04 : keep ? Math.min(dur * 0.18, 1.6) : dur * 0.08; // end of stage 1
     // 1: structural failure at a few real hull points, hit side first
-    const nFail = P.fail; for (let i = 0; i < nFail; i++) at(i * t1 / Math.max(1, nFail), () => { const q = this.hullPt(S, i === 0 ? -0.6 : rand(-1, 1), i === 0 ? 1 : rand(-1, 1)); this.failPoint(q.x, 0.8, q.z, Math.min(2.2, 0.6 + sz * 0.3), S.ix, S.iz); });
+    const nFail = P.fail; for (let i = 0; i < nFail; i++) at(i * t1 / Math.max(1, nFail), () => { const q = this.hullPt(S, i === 0 ? -0.6 : rand(-1, 1), i === 0 ? 1 : rand(-1, 1)); this.failPoint(q.x, S.top, q.z, Math.min(2.2, 0.6 + sz * 0.3), S.ix, S.iz); });
     // 2+3+4: primary detonation (for kept hulls: the breach section; the core goes at break-up)
-    at(t1, () => { const q = keep ? this.hullPt(S, -0.4, 0.8) : S; this.blast(q.x, 0.5, q.z, keep ? Math.min(2.2, sz * 0.5) : sz, { vx: S.vx, vz: S.vz, tint: S.tint, ix: S.ix, iz: S.iz, light: P.light * (keep ? 0.6 : 1), shake: P.shake * (keep ? 0.5 : 1), frags: keep ? Math.round(P.frags * 0.3) : P.frags, electric: keep }); });
+    at(t1, () => { const q = keep ? this.hullPt(S, -0.4, 0.8) : S; this.blast(q.x, S.grp ? S.top : 0.5, q.z, keep ? Math.min(2.2, sz * 0.5) : sz, { vx: S.vx, vz: S.vz, tint: S.tint, ix: S.ix, iz: S.iz, light: P.light * (keep ? 0.6 : 1), shake: P.shake * (keep ? 0.5 : 1), frags: keep ? Math.round(P.frags * 0.3) : P.frags, electric: keep }); });
     // 5: staggered secondaries at real positions along the keel, bow/stern alternating out from the breach
     const nSec = Math.round(P.sec * B.sec * (busy ? 0.5 : 1)); const t5a = t1 + 0.1, t5b = keep ? S.breakT * 0.98 : dur * 0.8;
     for (let i = 0; i < nSec; i++) { const u = (i + rand(0.1, 0.9)) / Math.max(1, nSec); at(t5a + (t5b - t5a) * u, () => { this.stats0.secondaries++; const q = this.hullPt(S, rand(-1, 1), rand(-0.8, 0.8)); if (this.log) this.log.push({ k: 'sec', x: q.x, z: q.z, cx: S.x, cz: S.z, hx: S.hx, hz: S.hz, z0: S.z0, z1: S.z1, beam: S.beam, t: g.time });
-      this.blast(q.x, 0.6, q.z, Math.max(0.7, sz * rand(0.22, 0.36)), { vx: S.vx, vz: S.vz, tint: S.tint, ix: q.ox, iz: q.oz, light: P.light * 0.45, shake: 0.05 * Math.min(4, sz), sound: i % 2 === 0, frags: Math.round(4 + sz), ring: false });
+      this.blast(q.x, S.grp ? S.top : 0.6, q.z, Math.max(0.7, sz * rand(0.3, 0.48)), { vx: S.vx, vz: S.vz, tint: S.tint, ix: q.ox, iz: q.oz, light: P.light * 0.45, shake: 0.05 * Math.min(4, sz), sound: i % 2 === 0, frags: Math.round(4 + sz), ring: false });
       if (S.grp && i % 2 === 1) { const q2 = this.hullPt(S, rand(-1, 1), 1); this.debris.spawn(q2.x, 0.7, q2.z, S.vx, S.vz, q2.ox, q2.oz, 3 + sz, 0.25 + 0.05 * sz, 'plate', 0.8); } }); }
     if (keep) {
       if (P.steps) this.dreadSteps(S, at);
@@ -351,7 +351,7 @@ export class ExplosionManager {
       this.blast(this.hullPt(S, -0.9, 0).x, 0.6, this.hullPt(S, -0.9, 0).z, sz * 0.4, { vx: S.vx, vz: S.vz, tint: S.tint, sound: true, ring: false }); });
     // 4 reactor destabilises: pulsing blue-white core, arcs, rising hum
     at(D * 0.55, () => { set(4)(); g.audio && g.audio.play && g.audio.play('xReactor', { x: S.x, z: S.z, vol: 1 }); });
-    for (let i = 0; i < 6; i++) at(D * (0.55 + i * 0.025), () => { this.plasma.spawn(S.x, 1, S.z, 2 + i, 5 + i * 1.6, 0.45, 0.95, 0.5 + i * 0.08, [1, 1.8, 3.4], S.vx, S.vz); const a = rand(0, TAU); this.arcs.spawn(S.x, 1, S.z, S.x + Math.cos(a) * S.len * 0.3, 1, S.z + Math.sin(a) * S.len * 0.3, 0.3, [1.6, 2.6, 4], 1.2); });
+    for (let i = 0; i < 6; i++) at(D * (0.55 + i * 0.025), () => { this.plasma.spawn(S.x, S.top + 0.5, S.z, 2 + i, 5 + i * 1.6, 0.45, 0.95, 0.5 + i * 0.08, [1, 1.8, 3.4], S.vx, S.vz); const a = rand(0, TAU); this.arcs.spawn(S.x, 1, S.z, S.x + Math.cos(a) * S.len * 0.3, 1, S.z + Math.sin(a) * S.len * 0.3, 0.3, [1.6, 2.6, 4], 1.2); });
     // 5 central discharge -> 6 hull breaks up (breakUp at keep fraction) -> 7 debris drifts
     at(S.breakT - 0.05, () => { set(5)(); });
     at(S.breakT + 0.6, set(6)); at(S.breakT + 1.8, set(7));
@@ -378,7 +378,11 @@ export class ExplosionManager {
       if (S.grp) { S.yaw += S.spin * dt; S.hx = Math.sin(S.yaw); S.hz = Math.cos(S.yaw); const f = Math.min(1, S.t / Math.max(0.1, S.breakT));
         S.grp.position.set(S.x, S.y0, S.z); S.grp.rotation.y = S.yaw; S.grp.rotation.z = Math.sin(S.t * 0.7) * 0.04 * f;
         if (S.D) { S.D.U.uDmg.value = Math.min(1, 0.6 + f * 0.5); S.D.U.uFlick.value = Math.random() < 0.2 + f * 0.6 ? rand(0, 0.3) : Math.max(0, 0.9 - f); }
-        if (Math.random() < dt * (2 + S.P.size) * g.vfx.near(S.x, S.z)) { const q = this.hullPt(S, rand(-1, 1), rand(-1, 1)); this.failPoint(q.x, 0.8, q.z, 0.6 + S.P.size * 0.15, q.ox, q.oz); } }
+        const nr = g.vfx.near(S.x, S.z);
+        if (Math.random() < dt * (2 + S.P.size) * nr) { const q = this.hullPt(S, rand(-1, 1), rand(-1, 1)); this.failPoint(q.x, S.top, q.z, 0.6 + S.P.size * 0.15, q.ox, q.oz); }
+        if (Math.random() < dt * (0.8 + S.P.size * 0.7) * nr * (0.4 + f)) { const q = this.hullPt(S, rand(-1, 1), rand(-0.7, 0.7)); const u = 0.5 + 0.25 * S.P.size; // burning breaches along the failing hull
+          this.plasma.spawn(q.x, S.top, q.z, u * 0.6, u * rand(2, 3), rand(0.45, 0.7), rand(0.6, 0.8), 0.8, S.tint, S.vx, S.vz); }
+        if (S.step === 4 && Math.random() < dt * 7) { const R = S.len * rand(0.05, 0.11); this.plasma.spawn(S.x, S.top + 0.5, S.z, R * 0.5, R, 0.3, 1, 0.6, [1, 1.8, 3.4], S.vx, S.vz); } } // reactor destabilising
       this.seqStep(S, dt);
       if (!S.ev.length && S.t >= S.dur) { if (S.grp) this.breakUp(S); this.seqs.splice(i, 1); this.stats0.finished++; }
     }
