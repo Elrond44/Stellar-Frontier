@@ -1,11 +1,11 @@
 // v6 physics: Newtonian-hybrid flight model, impulse collisions, broadphase spatial hash and swept projectile tests.
 // Pure math (no three.js) so it can be unit-tested headlessly.
-import { clamp, angleDiff } from './util.js?v=7';
+import { clamp, angleDiff } from './util.js?v=8';
 
 // ---------------------------------------------------------------- masses
 export const TIER_MASS = [1.2, 2.8, 6, 13, 30];
-export const ENEMY_MASS = { drone: 0.5, interceptor: 1, sentinel: 1.3, sniper: 1.4, support: 1.6, ew: 1.4, gunship: 3.5, freighter: 7, capital: 32, commander: 45, flagship: 500, boss: 500 };
-export function massOf(e) { if (e.D && (e.D.inst || e.D.part)) return Infinity; return ENEMY_MASS[e.type] ?? 2; }
+export const ENEMY_MASS = { drone: 0.5, interceptor: 1, sentinel: 1.3, sniper: 1.4, support: 1.6, ew: 1.4, gunship: 3.5, freighter: 7, capital: 32, frigate: 30, destroyer: 59, commander: 45, flagship: 500, boss: 500 };
+export function massOf(e) { if (e.D && (e.D.inst || e.D.part)) return Infinity; return e.mass || (ENEMY_MASS[e.type] ?? 2); } // v8: hull-based ships carry their true-scale mass
 export function rockMass(r, rich) { return (rich ? 1.6 : 1) * 0.55 * r * r * r; } // density ~ rock, mass grows with volume
 
 // ---------------------------------------------------------------- flight model

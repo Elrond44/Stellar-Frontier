@@ -2,8 +2,8 @@
 // craters, rings with shadows), distant asteroid layer and a foreground debris layer. Everything is world-anchored at a
 // real depth below the play plane, so parallax comes from the actual perspective camera (no fake scrolling).
 import * as THREE from 'three';
-import { mulberry, hash2, clamp } from './util.js?v=7';
-import { makeRockGeometry } from './models.js?v=7';
+import { mulberry, hash2, clamp } from './util.js?v=8';
+import { makeRockGeometry } from './models.js?v=8';
 
 // ---------------------------------------------------------------- tileable nebula texture (CPU, once)
 // R: large gas  G: ridged filaments  B: fine particulate  A: dark dust

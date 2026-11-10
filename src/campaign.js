@@ -2,15 +2,18 @@
 // flagship bosses (phases, telegraphed attacks, destructible components), autonomous faction warfare with visible
 // skirmishes, friendly activity in liberated space and the dynamic mission runtime.
 import * as THREE from 'three';
-import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=7';
-import { ENEMIES } from './data.js?v=7';
-import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=7';
-import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=7';
-import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=7';
-import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=7';
-import { makeItem, RARITIES, rollTemplate } from './items.js?v=7';
-import { INV_CAP } from './save.js?v=7';
-import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=7';
+import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=8';
+import { ENEMIES } from './data.js?v=8';
+import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=8';
+import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=8';
+import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=8';
+import { HULLS, buildHull } from './hulls.js?v=8';
+const BS = 2; // installation build scale (v8)
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=8';
+import { makeItem, RARITIES, rollTemplate } from './items.js?v=8';
+import { INV_CAP } from './save.js?v=8';
+import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=8';
 
 const TAU = Math.PI * 2; const rand = (a, b) => a + Math.random() * (b - a); const randInt = (a, b) => Math.floor(rand(a, b + 1));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -101,31 +104,31 @@ export class Campaign {
       for (const o of installations(sec)) {
         if (G.inst[o.id]) continue; const d = Math.hypot(o.x - p.x, o.z - p.z);
         if (!G.spot[o.id] && (d < 130 || (det && d < 260))) { G.spot[o.id] = 1; const it = libStages(sec, G).steps[0].items[0]; g.toast(`◎ Identified: ${instName(o)} (${it.have}/${it.need} in ${sec.name})`, 'good'); this.checkStage(sec); }
-        if (!this.live.has(o.id) && d < 150) this.spawnInst(o, sec);
+        if (!this.live.has(o.id) && d < 180) this.spawnInst(o, sec);
       }
     }
-    for (const [, L] of this.live) if (Math.hypot(L.o.x - p.x, L.o.z - p.z) > 230 || L.sec.faction !== L.fac) this.despawnInst(L);
+    for (const [, L] of this.live) if (Math.hypot(L.o.x - p.x, L.o.z - p.z) > 270 || L.sec.faction !== L.fac) this.despawnInst(L);
     for (const [id, c] of g.liveCaches) if (Math.hypot(c.c.x - p.x, c.c.z - p.z) > 160) { g.freeCache(c); g.liveCaches.delete(id); }
   }
   despawnInst(L) { for (const part of L.parts) if (!part.dead) { this.instHp.set(part.partId, part.hp); this.g.removeEnemy(part); } else this.instHp.set(part.partId, 0); this.live.delete(L.o.id); }
   spawnInst(o, sec) {
     const g = this.g; const fac = sec.faction; const spec = PARTS[o.kind]; const L = { o, sec, fac, parts: [], gens: [], reactors: [], hangars: [], hangarSpec: spec.hangar || 0, core: null, callT: 12, buildT: 10, summonT: 8, reinf: 0, unstT: 3, powerDown: this.instHp.get(o.id + ':r0') === 0 };
-    const add = (type, x, z, partId, extra = {}) => { const hp0 = this.instHp.get(partId); if (hp0 === 0) return null; const e = g.spawnEnemy(type, x, z, { faction: fac, inst: o.id, partId, state: 'attack', ...extra }); e.yaw = type === 'inst_gen' || type === 'inst_turret' ? 0 : rand(0, TAU); if (hp0 > 0) e.hp = Math.min(e.maxHp, hp0); e.vx = e.vz = 0; L.parts.push(e); return e; };
+    const add = (type, x, z, partId, extra = {}) => { const hp0 = this.instHp.get(partId); if (hp0 === 0) return null; const e = g.spawnEnemy(type, x, z, { faction: fac, inst: o.id, partId, state: 'attack', scale: BS, ...extra }); e.radius *= BS; e.bound = e.radius; e.group.scale.setScalar(BS); e.yaw = type === 'inst_gen' || type === 'inst_turret' ? 0 : rand(0, TAU); if (hp0 > 0) e.hp = Math.min(e.maxHp, hp0); e.vx = e.vz = 0; L.parts.push(e); return e; };
     L.core = add('inst_' + o.kind, o.x, o.z, o.id + ':core', { variant: o.kind, kind: o.kind });
-    const R0 = L.core ? L.core.radius : 5;
-    for (let k = 0; k < spec.gens; k++) { const a = k / spec.gens * TAU + 0.4; const ge = add('inst_gen', o.x + Math.cos(a) * (R0 + 7), o.z + Math.sin(a) * (R0 + 7), o.id + ':g' + k); if (ge) L.gens.push(ge); }
-    const nt = spec.tur + (sec.ringI >= 3 ? 1 : 0); for (let k = 0; k < nt; k++) { const a = k / nt * TAU; add('inst_turret', o.x + Math.cos(a) * (R0 + 14), o.z + Math.sin(a) * (R0 + 14), o.id + ':t' + k); }
-    { const a = 0.4 + Math.PI / Math.max(1, spec.gens); const re = add('inst_reactor', o.x + Math.cos(a) * (R0 + 6), o.z + Math.sin(a) * (R0 + 6), o.id + ':r0'); if (re) L.reactors.push(re); }
-    for (let k = 0; k < (spec.hangar || 0); k++) { const a = 0.4 + Math.PI / Math.max(1, spec.gens) + (k + 1) * TAU / ((spec.hangar || 0) + 2); const hx = o.x + Math.cos(a) * (R0 + 7.5), hz = o.z + Math.sin(a) * (R0 + 7.5); const he = add('inst_hangar', hx, hz, o.id + ':h' + k); if (he) { he.yaw = Math.atan2(hx - o.x, hz - o.z); L.hangars.push(he); } }
+    const R0 = L.core ? L.core.radius : 5 * BS; // v8: bases are built at twice the old size so they read correctly next to capital hulls
+    for (let k = 0; k < spec.gens; k++) { const a = k / spec.gens * TAU + 0.4; const ge = add('inst_gen', o.x + Math.cos(a) * (R0 + 7 * BS), o.z + Math.sin(a) * (R0 + 7 * BS), o.id + ':g' + k); if (ge) L.gens.push(ge); }
+    const nt = spec.tur + (sec.ringI >= 3 ? 1 : 0); for (let k = 0; k < nt; k++) { const a = k / nt * TAU; add('inst_turret', o.x + Math.cos(a) * (R0 + 14 * BS), o.z + Math.sin(a) * (R0 + 14 * BS), o.id + ':t' + k); }
+    { const a = 0.4 + Math.PI / Math.max(1, spec.gens); const re = add('inst_reactor', o.x + Math.cos(a) * (R0 + 6 * BS), o.z + Math.sin(a) * (R0 + 6 * BS), o.id + ':r0'); if (re) L.reactors.push(re); }
+    for (let k = 0; k < (spec.hangar || 0); k++) { const a = 0.4 + Math.PI / Math.max(1, spec.gens) + (k + 1) * TAU / ((spec.hangar || 0) + 2); const hx = o.x + Math.cos(a) * (R0 + 7.5 * BS), hz = o.z + Math.sin(a) * (R0 + 7.5 * BS); const he = add('inst_hangar', hx, hz, o.id + ':h' + k); if (he) { he.yaw = Math.atan2(hx - o.x, hz - o.z); L.hangars.push(he); } }
     if (!L.core) { this.G.inst[o.id] = 1; for (const part of L.parts) g.removeEnemy(part); return; }
-    const F = FACTIONS[fac]; L.dome = makeDome(F ? F.rgb : [3, 0.4, 0.4]); const ds = R0 + 3.5; L.dome.scale.set(ds, ds * 0.75, ds); L.core.group.add(L.dome);
-    if (o.kind === 'hq') { L.sdome = makeDome([1.6, 2.4, 3.6]); const s2 = R0 + 8; L.sdome.scale.set(s2, s2 * 0.7, s2); L.core.group.add(L.sdome); }
+    const F = FACTIONS[fac]; L.dome = makeDome(F ? F.rgb : [3, 0.4, 0.4]); const ds = R0 / BS + 3.5; L.dome.scale.set(ds, ds * 0.75, ds); L.core.group.add(L.dome);
+    if (o.kind === 'hq') { L.sdome = makeDome([1.6, 2.4, 3.6]); const s2 = R0 / BS + 8; L.sdome.scale.set(s2, s2 * 0.7, s2); L.core.group.add(L.sdome); }
     L.core.outpost = L; this.live.set(o.id, L);
   }
   hqShield(L) { return L.o.kind === 'hq' && !libStages(L.sec, this.G).hqOpen; }
   updateInst(e, dt, dist, dx, dz) { // every installation part, from Game.updateEnemies
     const g = this.g; if (!g.enemyStatus(e, dt)) return;
-    const L = this.live.get(e.inst); e.group.position.set(e.x, 0, e.z); const pulse = e.hitT > 0 ? 1 + e.hitT * 0.25 : 1; e.group.scale.setScalar(pulse);
+    const L = this.live.get(e.inst); e.group.position.set(e.x, 0, e.z); const pulse = e.hitT > 0 ? 1 + e.hitT * 0.25 : 1; e.group.scale.setScalar(pulse * (e.scale || 1));
     if (e.type === 'inst_gen') { e.group.rotation.y += dt * 0.6; return; }
     if (e.type === 'inst_reactor') return this.reactorAI(e, dt, L);
     if (e.type === 'inst_hangar') { e.group.rotation.y = e.yaw; if (e.doorT > 0) e.doorT -= dt; return; }
@@ -171,9 +174,9 @@ export class Campaign {
   turretAI(e, dt, dist, dx, dz) {
     const g = this.g; const yaw = Math.atan2(dx, dz);
     for (const tu of e.turrets) { tu.rotation.y = THREE.MathUtils.damp(tu.rotation.y, yaw - e.yaw, e.stunT > 0 ? 0 : 3, dt); if (tu.userData.rec > 0) tu.userData.rec = Math.max(0, tu.userData.rec - dt * 4); tu.userData.barrel.position.z = -(tu.userData.rec || 0) * 0.3; }
-    if (!g.dead && dist < e.D.range && e.cd <= 0 && e.stunT <= 0) {
+    if (!g.dead && dist < e.D.range * 1.3 + g.player.radius && e.cd <= 0 && e.stunT <= 0) {
       const L0 = this.live.get(e.inst); e.cd = 1 / e.D.fireRate * rand(0.8, 1.2) * (L0 && L0.powerDown ? 1.7 : 1); g.curShooter = e; const a = g.aimLead(e, e.x, e.z, g.player, 26); const ux = a.ux, uz = a.uz; // v7: predictive fire from the barrel tips
-      for (const off of [-0.06, 0.06]) { const c = Math.cos(off), s2 = Math.sin(off); g.enemyShot(e.x + ux * 2.2 - uz * off * 6, e.z + uz * 2.2 + ux * off * 6, ux * c - uz * s2, uz * c + ux * s2, 26, e.D.dmg * e.dmgMul, [3.5, 1.2, 0.3]); }
+      for (const off of [-0.06, 0.06]) { const c = Math.cos(off), s2 = Math.sin(off); g.enemyShot(e.x + ux * 4.4 - uz * off * 12, e.z + uz * 4.4 + ux * off * 12, ux * c - uz * s2, uz * c + ux * s2, 26, e.D.dmg * e.dmgMul, [3.5, 1.2, 0.3]); }
       for (const tu of e.turrets) tu.userData.rec = 1; g.audio.enemyShoot('gunship', e.x, e.z);
     }
   }
@@ -283,7 +286,9 @@ export class Campaign {
     e.group.visible = true; e.yaw = Math.atan2(g.player.x - x, g.player.z - z);
     e.bc = { def, phase: keep ? keep.phase : 0, atkT: 3, atkI: 0, sumT: 6, invT: 0, gens: [], parts: [], anchor: { x, z }, chargeT: 0, distAcc: 0, distN: 0, mode: null, modeT: 6, home: !!o.home, sec: o.sec };
     const php = Math.round(hp * (def.commander ? 0.12 : 0.06));
-    for (const pd of def.parts) { if (keep && keep.lost && keep.lost.includes(pd.name)) continue; const pe = g.spawnEnemy('bpart', x + pd.x, z + pd.z, { faction: fk, variant: pd.k, D: { ...ENEMIES.bpart, name: pd.name }, hp: php, maxHp: php, shield: 0, maxShield: 0, armor: 0.15, dmgMul: 1, cloaked: false, parent: e, off: pd, partK: pd.k, weak: pd.weak, threat: 5 }); pe.group.visible = true; e.bc.parts.push(pe); }
+    // v8: flagships fly true-scale capital hulls; destructible components are spread over the real deck and scaled up to match
+    const H = HULLS[e.hullId]; const kx = H ? Math.max(1, H.beam / 2 / 5.2) : 1, kz = H ? Math.max(1, H.len / 2 / 9) : 1, ky = H ? H.len * 0.06 : 1.4, ks = H ? clamp(H.len / 32, 1, 3.4) : 1;
+    for (const pd0 of def.parts) { const pd = { ...pd0, x: pd0.x * kx, z: pd0.z * kz, y: ky }; if (keep && keep.lost && keep.lost.includes(pd.name)) continue; const pe = g.spawnEnemy('bpart', x + pd.x, z + pd.z, { faction: fk, variant: pd.k, D: { ...ENEMIES.bpart, name: pd.name }, hp: php, maxHp: php, shield: 0, maxShield: 0, armor: 0.15, dmgMul: 1, cloaked: false, parent: e, off: pd, partK: pd.k, weak: pd.weak, threat: 5, scale: ks, radius: (ENEMIES.bpart.radius || 2) * ks }); pe.group.visible = true; e.bc.parts.push(pe); }
     if (def.commander) this.cmdE = e; else this.bossE[fk] = e;
     if (o.wake) this.wake(e);
     return e;
@@ -309,10 +314,10 @@ export class Campaign {
     if (e.orbitR) { e.orbitA += dt * 0.35; e.x = P.x + Math.cos(e.orbitA) * e.orbitR; e.z = P.z + Math.sin(e.orbitA) * e.orbitR; e.group.position.set(e.x, 1 + Math.sin(g.time * 2 + e.orbitA) * 0.4, e.z); e.group.rotation.y += dt;
       if (Math.random() < 0.5 * g.fx.budget) { const t = Math.random(); g.fx.emit(e.x + (P.x - e.x) * t, 1.2, e.z + (P.z - e.z) * t, 0, 0, 0, 0.25, 0.8, 0.2, 0.6, 2, 3.6, 1); } return; }
     const o = e.off; const c = Math.cos(P.yaw), s = Math.sin(P.yaw);
-    e.x = P.x + c * o.x + s * o.z; e.z = P.z - s * o.x + c * o.z; e.group.position.set(e.x, 1.4, e.z); e.group.rotation.y = P.yaw; e.group.visible = P.group.visible;
-    const pulse = e.hitT > 0 ? 1 + e.hitT * 0.5 : 1; e.group.scale.setScalar(pulse);
+    e.x = P.x + c * o.x + s * o.z; e.z = P.z - s * o.x + c * o.z; e.group.position.set(e.x, o.y || 1.4, e.z); e.group.rotation.y = P.yaw; e.group.visible = P.group.visible;
+    const pulse = e.hitT > 0 ? 1 + e.hitT * 0.5 : 1; e.group.scale.setScalar(pulse * (e.scale || 1));
     for (const tu of e.turrets) tu.rotation.y = THREE.MathUtils.damp(tu.rotation.y, Math.atan2(dx, dz) - P.yaw, 4, dt);
-    if (P.state === 'attack' && e.partK === 'cannon' && e.cd <= 0 && dist < 40 && !g.dead && e.stunT <= 0 && P.group.visible) { e.cd = rand(1.6, 2.4); g.curShooter = P; const ux = dx / dist, uz = dz / dist; g.enemyShot(e.x + ux * 1.5, e.z + uz * 1.5, ux, uz, 28, P.D.dmg * 0.55, [3.5, 0.6, 0.3]); g.audio.enemyShoot('gunship', e.x, e.z); }
+    if (P.state === 'attack' && e.partK === 'cannon' && e.cd <= 0 && dist < 40 + P.radius && !g.dead && e.stunT <= 0 && P.group.visible) { e.cd = rand(1.6, 2.4); g.curShooter = P; const ux = dx / dist, uz = dz / dist; g.enemyShot(e.x + ux * 1.5, e.z + uz * 1.5, ux, uz, 28, P.D.dmg * 0.55, [3.5, 0.6, 0.3]); g.audio.enemyShoot('gunship', e.x, e.z); }
   }
   partDestroyed(e) {
     const g = this.g; const P = e.parent; if (!P || P.dead) return; const bc = P.bc;
@@ -352,12 +357,12 @@ export class Campaign {
         for (let i = 0; i < 6; i++) g.fx.emit(e.x, 2, e.z, rand(-6, 6), 8, rand(-6, 6), 0.6, 1, 0.2, 3.4, 1.4, 0.4, 2); g.audio.enemyShoot('gunship', e.x, e.z); break; }
       case 'spread': { const n = bc.phase >= 2 ? 24 : 16; g.curShooter = e; for (let i = 0; i < n; i++) { const a2 = i / n * TAU + g.time; g.enemyShot(e.x, e.z, Math.cos(a2), Math.sin(a2), 15, B * 0.7, fcol); } g.audio.enemyShoot('boss', e.x, e.z); break; }
       case 'nova': { const r = (22 + e.radius) * (0.75 + 0.25 * k); this.teleCircle(e.x, e.z, r, 2.1, (T) => { g.rings.spawn(T.x, 0.5, T.z, T.r, fcol, 0.7); g.flashes.spawn(T.x, 3, T.z, T.r * 2, 0xffaa66, 0.5, 40); g.addShake(0.5); if (this.inCircle(T)) g.hurtPlayer(B * 3, T.x, T.z, { energy: true }); }, [3.6, 0.9, 0.5], { follow: e }); break; }
-      case 'charge': { const len = 60; this.teleLine(e.x, e.z, ang, len, e.radius * 1.6, 1.3, () => { if (e.dead) return; bc.chargeT = 1.0; bc.chargeHit = false; bc.cvx = Math.sin(ang) * len; bc.cvz = Math.cos(ang) * len; g.audio.ability('dash', e.x, e.z); }, [3.6, 0.5, 0.3], { follow: e }); break; }
+      case 'charge': { const len = 60 + (e.bound || 0) * 0.5; this.teleLine(e.x, e.z, ang, len, e.radius * 1.6, 1.3, () => { if (e.dead) return; bc.chargeT = 1.0; bc.chargeHit = false; bc.cvx = Math.sin(ang) * len; bc.cvz = Math.cos(ang) * len; g.audio.ability('dash', e.x, e.z); }, [3.6, 0.5, 0.3], { follow: e }); break; }
       case 'lance': { this.teleLine(e.x, e.z, ang, 75, 2.8, 1.15, (T) => { this.beam(T, fcol); if (this.inLine(T)) g.hurtPlayer(B * 2.6, e.x, e.z, { energy: true }); }, [2.6, 0.6, 3.6], { follow: e }); break; }
       case 'sweep': { const n = bc.phase >= 3 ? 5 : 3; for (let i = 0; i < n; i++) { const a = ang + (i - (n - 1) / 2) * 0.38 * (0.6 + 0.4 * k); this.teleLine(e.x, e.z, a, 70, 2.4, 1.1 + i * 0.25, (T) => { this.beam(T, fcol); if (this.inLine(T)) g.hurtPlayer(B * 2, e.x, e.z, { energy: true }); }, [3.6, 2.6, 0.6], { follow: e }); } break; }
       case 'cloak': { bc.cloaked = true; bc.cloakT = 2.2; e.group.visible = false; const a = rand(0, TAU); bc.cx = p.x + Math.cos(a) * 24; bc.cz = p.z + Math.sin(a) * 24; g.fx.burst(e.x, 1, e.z, 40, 14, 0.5, 1.4, 0.1, [1.8, 0.6, 3.6], 2); break; }
       case 'drain': { const r = 21; this.teleCircle(e.x, e.z, r, 6, null, WARN_COL.drain, { follow: e }); bc.drainT = 6; bc.drainR = r; this.drainBoss = e; break; }
-      case 'gravity': { this.teleCircle(e.x, e.z, 34, 2.6, (T) => { const r2 = 13; g.rings.spawn(T.x, 0.5, T.z, r2, [0.5, 2.4, 3.6], 0.6); if (!g.dead && Math.hypot(p.x - T.x, p.z - T.z) < r2 + p.radius) g.hurtPlayer(B * 2.8, T.x, T.z, { energy: true }); }, WARN_COL.gravity, { follow: e }); bc.gravT = 2.6; this.gravBoss = e; break; }
+      case 'gravity': { this.teleCircle(e.x, e.z, 34 + e.radius * 0.4, 2.6, (T) => { const r2 = 13; g.rings.spawn(T.x, 0.5, T.z, r2, [0.5, 2.4, 3.6], 0.6); if (!g.dead && Math.hypot(p.x - T.x, p.z - T.z) < r2 + p.radius) g.hurtPlayer(B * 2.8, T.x, T.z, { energy: true }); }, WARN_COL.gravity, { follow: e }); bc.gravT = 2.6; this.gravBoss = e; break; }
       case 'mines': { for (let i = 0; i < 7; i++) { const a = rand(0, TAU), r = rand(6, 24); this.teleCircle(p.x + Math.cos(a) * r, p.z + Math.sin(a) * r, 2.6, 0, null, WARN_COL.mine, { mine: true, arm: 1.2, life: 16, dmg: B * 1.6 }); } break; }
     }
   }
@@ -464,16 +469,16 @@ export class Campaign {
     for (let i = this.friends.length - 1; i >= 0; i--) {
       const f = this.friends[i]; if (f.dead) { this.friends.splice(i, 1); continue; }
       if (f.kind !== 'patrol') continue;
-      f.a += dt * 0.5; let tgt = null, bd = 38; for (const e of g.enemies) { if (e.dead || e.cloaked || e.battle || e.D.inst || e.D.part || e.bc) continue; const d = Math.hypot(e.x - f.x, e.z - f.z); if (d < bd) { bd = d; tgt = e; } }
+      f.a += dt * 0.5; let tgt = null, bd = 38 + f.radius; for (const e of g.enemies) { if (e.dead || e.cloaked || e.battle || e.D.inst || e.D.part || e.bc) continue; const d = Math.hypot(e.x - f.x, e.z - f.z); if (d < bd) { bd = d; tgt = e; } }
       const home = L && Math.hypot(L.c.x - p.x, L.c.z - p.z) > 300; const ax = home ? L.c.x : p.x, az = home ? L.c.z : p.z;
-      const gx = tgt ? tgt.x + Math.cos(f.a * 2 + f.slot) * 10 : ax + Math.cos(f.a + f.slot * Math.PI) * 26, gz = tgt ? tgt.z + Math.sin(f.a * 2 + f.slot) * 10 : az + Math.sin(f.a + f.slot * Math.PI) * 26;
+      const oR = 10 + f.radius + (tgt ? tgt.radius : 0), aR = 26 + f.radius + p.radius; const gx = tgt ? tgt.x + Math.cos(f.a * 2 + f.slot) * oR : ax + Math.cos(f.a + f.slot * Math.PI) * aR, gz = tgt ? tgt.z + Math.sin(f.a * 2 + f.slot) * oR : az + Math.sin(f.a + f.slot * Math.PI) * aR;
       const dx = gx - f.x, dz = gz - f.z, dd = Math.hypot(dx, dz) || 1; const sp = Math.min(26, dd * 1.5); f.vx = THREE.MathUtils.damp(f.vx, dx / dd * sp, 3, dt); f.vz = THREE.MathUtils.damp(f.vz, dz / dd * sp, 3, dt); f.x += f.vx * dt; f.z += f.vz * dt;
       const yaw = tgt ? Math.atan2(tgt.x - f.x, tgt.z - f.z) : Math.atan2(f.vx, f.vz); f.obj.position.set(f.x, 0.4, f.z); f.obj.rotation.y = yaw;
-      f.cd -= dt; if (tgt && f.cd <= 0 && bd < 32) { f.cd = 0.5; const d = Math.hypot(tgt.x - f.x, tgt.z - f.z) || 1; g.bolts.spawn({ x: f.x, z: f.z, y: 0.8, vx: (tgt.x - f.x) / d * 55, vz: (tgt.z - f.z) / d * 55, dmg: f.dmg * st.dmg * 0.6, owner: 'p', kind: 'cannon', S: { vsShip: 1, vsRock: 0, shieldMul: 1, pen: 0.1 }, life: 0.8, len: 1.3, w: 1, color: [0.5, 2.4, 3.6], ally: true }); }
+      f.cd -= dt; if (tgt && f.cd <= 0 && bd < 32 + f.radius) { f.cd = 0.5; const d = Math.hypot(tgt.x - f.x, tgt.z - f.z) || 1; g.bolts.spawn({ x: f.x, z: f.z, y: 0.8, vx: (tgt.x - f.x) / d * 55, vz: (tgt.z - f.z) / d * 55, dmg: f.dmg * st.dmg * 0.6, owner: 'p', kind: 'cannon', S: { vsShip: 1, vsRock: 0, shieldMul: 1, pen: 0.1 }, life: 0.8, len: 1.3, w: 1, color: [0.5, 2.4, 3.6], ally: true }); }
       if (Math.random() < 0.3 * g.fx.budget) g.fx.emit(f.x - Math.sin(yaw) * 1.5, 0.3, f.z - Math.cos(yaw) * 1.5, 0, 0, 0, 0.3, 0.6, 0.1, 0.5, 1.8, 3.4, 2);
     }
   }
-  makePatrol(L, slot) { const o = buildShip(2).group; o.scale.setScalar(0.62); const c = L.c; const hp = 260 + this.g.s.level * 18; return this.addFriend({ kind: 'patrol', obj: o, x: c.x + rand(-10, 10), z: c.z + rand(-10, 10), vx: 0, vz: 0, hp, maxHp: hp, radius: 1.6, a: rand(0, TAU), cd: 1, slot, dmg: 8, name: 'Frontier Patrol' }); }
+  makePatrol(L, slot) { const hid = slot % 2 ? 'frigate' : 'corvette'; const o = buildHull(hid, { scheme: 'federation', turrets: 'enemy' }).group; /* v8: Federation-blue escorts at true scale */ const c = L.c; const hp = 260 + this.g.s.level * 18; return this.addFriend({ kind: 'patrol', obj: o, x: c.x + rand(-10, 10), z: c.z + rand(-10, 10), vx: 0, vz: 0, hp, maxHp: hp, radius: HULLS[hid].radius, bound: HULLS[hid].bound, a: rand(0, TAU), cd: 1, slot, dmg: 8, name: hid === 'frigate' ? 'Federation Frigate' : 'Federation Corvette' }); }
   buildLib(sec) {
     this.teardownLib(); const c = sectorCenter(sec); const r = buildInstallationV5('relay'); r.group.position.set(c.x, 0, c.z); this.scene.add(r.group);
     const m = buildCivilian('merchant').group; this.scene.add(m);

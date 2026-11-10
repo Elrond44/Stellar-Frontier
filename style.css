@@ -468,3 +468,6 @@ ol.stages em span{font-size:9px;padding:1px 5px;border-radius:4px;background:rgb
 .card.gfx .row{display:flex;justify-content:space-between;align-items:center;gap:8px}.card.gfx p{margin:6px 0 0}.muted.small{font-size:11px}
 @media (max-height:700px){#notify{top:calc(var(--sat) + 250px)}#notify #banner{font-size:16px}}
 @media (min-width:700px){#notify{left:50%;right:auto;width:420px;transform:translateX(-50%);top:calc(var(--sat) + 250px)}}
+/* v8 shipyard: hull chips wrap; owned hulls get a marker */
+.pvSel.wrap{flex-wrap:wrap;gap:4px}.pvSel.wrap button{flex:0 0 auto;padding:6px 8px;font-size:11px;border-radius:8px}.pvSel.wrap button.own::after{content:' ✓';color:#5dff98}
+.card.tier .abilLine{font-size:11.5px;line-height:1.35;margin:4px 0;opacity:.92}.card.tier p.small,.pvCard p.small{font-size:11px}

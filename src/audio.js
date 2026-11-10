@@ -588,7 +588,7 @@ export class Audio {
     if (this.st && this.music.song) { this.st.tick(); this.st.setLevel(this.combat > 0.02 ? 0.85 : mode === 'dock' ? 0.78 : 1); }
     if (!this.sfxAudible) { this.engine.set(0); this.laserLoop.set(0); this.tractorLoop.set(0); return; }
     // engine: idles quietly, swells with joystick thrust; deeper, bigger and louder per ship tier
-    const k = (st.tier - 1) / 4, th = st.thrust;
+    const k = Math.min(1, (st.tier - 1) / 6), th = st.thrust; // v8: hull rank 1-7
     if (this.engine.set(live ? (0.07 + 0.2 * th) * (0.75 + 0.5 * k) : 0, 0.12)) { const n = this.engine.n;
       n.nlp.frequency.setTargetAtTime(220 + th * (1500 - 800 * k), t, 0.1);
       const f = (95 - 55 * k) * (1 + 0.35 * th); n.o.frequency.setTargetAtTime(f, t, 0.15); n.o2.frequency.setTargetAtTime(f * 1.009, t, 0.15); n.olp.frequency.setTargetAtTime(f * (2.5 + 3 * th), t, 0.1); n.og.gain.setTargetAtTime(0.15 + 0.2 * k, t, 0.1);
@@ -596,7 +596,7 @@ export class Audio {
       n.hbp.frequency.setTargetAtTime(1800 + 2500 * th - 1000 * k, t, 0.1); n.hg.gain.setTargetAtTime(0.12 * th, t, 0.1); }
     // mining laser
     const lw = live ? this.laserWant : 0;
-    if (this.laserLoop.set(lw > 0 ? 0.1 * Math.min(1.6, 0.7 + 0.3 * lw) : 0, 0.04)) { const n = this.laserLoop.n; const f = 180 - 12 * (st.tier - 1);
+    if (this.laserLoop.set(lw > 0 ? 0.1 * Math.min(1.6, 0.7 + 0.3 * lw) : 0, 0.04)) { const n = this.laserLoop.n; const f = 180 - 8 * (st.tier - 1);
       n.o1.frequency.setTargetAtTime(f + lw * 8, t, 0.1); n.o2.frequency.setTargetAtTime(f * 1.503, t, 0.1); n.sub.frequency.setTargetAtTime(f / 2, t, 0.1); n.lfo.frequency.setTargetAtTime(8 + rv(-1.5, 1.5), t, 0.2); }
     // docking tractor beam hum (quieter once settled, and under menus)
     this.tractorLoop.set(st.playing && st.docked ? (0.06 + 0.12 * Math.max(0, 1 - st.dockT / 1.5)) * (st.paused ? 0.6 : 1) : 0, 0.25);
@@ -605,7 +605,7 @@ export class Audio {
   }
   // ---------- game-facing helpers (positions are world x/z) ----------
   laser(on, intensity = 1) { this.laserWant = on ? intensity : 0; }
-  shoot(x, z, tier = 1) { this.play('cannon', { x, z, rate: 1.06 - 0.05 * (tier - 1) }); }
+  shoot(x, z, tier = 1) { this.play('cannon', { x, z, rate: 1.06 - 0.035 * (tier - 1) }); }
   missile(x, z) { this.play('missile', { x, z }); }
   pulse(x, z) { this.play('pulse', { x, z }); this.duck(0.75, 0.2); }
   pdFire(x, z) { this.play('pd', { x, z }); }

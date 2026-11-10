@@ -1,12 +1,13 @@
 // Save system: versioned state, migration, validation, manual slots, export/import codes
-import { MINERAL_KEYS, UPGRADES, TIERS } from './data.js?v=7';
-import { TEMPLATES, LEGACY, makeItem, RARITIES } from './items.js?v=7';
-import { SKILL_BY_ID } from './rpg.js?v=7';
-import { SECTOR_BY_ID, freshGalaxy, legacyOutpost, FACTION_KEYS } from './galaxy.js?v=7';
-import { freshWar } from './war.js?v=7';
-import { MTYPES, freshMissions } from './missions.js?v=7';
+import { MINERAL_KEYS, UPGRADES, TIERS } from './data.js?v=8';
+import { HULLS, LEGACY_TIER_HULL } from './hulls.js?v=8';
+import { TEMPLATES, LEGACY, makeItem, RARITIES } from './items.js?v=8';
+import { SKILL_BY_ID } from './rpg.js?v=8';
+import { SECTOR_BY_ID, freshGalaxy, legacyOutpost, FACTION_KEYS } from './galaxy.js?v=8';
+import { freshWar } from './war.js?v=8';
+import { MTYPES, freshMissions } from './missions.js?v=8';
 
-export const SAVE_VERSION = 7; // v7 = shake level (full/reduced/off), frame cap, notification settings; v6 = flight-assist setting (physics overhaul); v3 builds still wrote v2 (audio settings were additive); v5 = campaign (stages, war, missions, bosses)
+export const SAVE_VERSION = 8; // v8 = hull classes (s.hull + owned s.hulls replace the 5 tiers; T1..T5 map to Scout/Strike Fighter/Gunship/Cruiser/Battlecruiser); v7 = shake level (full/reduced/off), frame cap, notification settings; v6 = flight-assist setting (physics overhaul); v3 builds still wrote v2 (audio settings were additive); v5 = campaign (stages, war, missions, bosses)
 export const INV_CAP = 48;
 export const AUTO_KEY = 'stellar-frontier-save-v1'; // kept so v1 autosaves keep loading
 export const SLOT_COUNT = 3;
@@ -17,7 +18,7 @@ export function freshState() {
   const up = {}; for (const u of UPGRADES) up[u.key] = 0;
   return {
     v: SAVE_VERSION, credits: 50, xp: 0, level: 1, cargo: { ...z }, vault: { ...z }, upgrades: up,
-    tier: 1, stationLvl: 1, factory: { inc: 0, cap: 0, stored: 0, last: Date.now() },
+    tier: 1, hull: 'scout', hulls: ['scout'], stationLvl: 1, factory: { inc: 0, cap: 0, stored: 0, last: Date.now() },
     // v4 item system: inventory of weapon items + equipped item ids per hardpoint
     inv: [], equip: [], parts: 0, skills: {}, respecs: 0, galaxy: freshGalaxy(), abilityBar: [],
     story: 0, storyProg: 0, contracts: [], maxSector: 1,
@@ -25,7 +26,7 @@ export function freshState() {
     war: freshWar(), missions: freshMissions(), blueprints: {},
     stats: { mined: 0, rocks: 0, kills: 0, sold: 0, bosses: 0, deaths: 0, playTime: 0, outposts: 0, liberated: 0, caches: 0, items: 0 },
     settings: { music: true, sfx: true, shake: 'full', fpsCap: 60, quality: 'auto', fps: false, masterVol: 0.8, musicVol: 0.6, sfxVol: 0.85, mute: false, musicMode: 'soundtrack', trackIdx: 0, trackPos: 0, war: 'normal', assist: 'normal' },
-    pos: { x: 0, z: 34 }, hp: null, tutorialDone: false, savedAt: Date.now(), created: Date.now(),
+    pos: { x: 0, z: 62 }, hp: null, tutorialDone: false, savedAt: Date.now(), created: Date.now(),
   };
 }
 export function starterKit(s) { const it = makeItem('mining_laser', 0, 1, 'Starter kit', { seed: 7 }); s.inv = [it]; s.equip = [it.id]; return s; }
@@ -59,6 +60,8 @@ export function migrate(d) {
   // v4 -> v5: the three generic outposts per sector become typed installations (o0 comm, o1 resource, o2 shipyard);
   // destroyed ones stay destroyed and count as identified. Liberated sectors stay liberated.
   if (v < 5) { const g = d.galaxy && typeof d.galaxy === 'object' ? { ...d.galaxy } : null; if (g) { const inst = {}, spot = {}; for (const k in (g.inst || {})) { const n = legacyOutpost(k); if (n) { inst[n] = 1; spot[n] = 1; } else if (!/-o\d$/.test(k)) inst[k] = 1; } g.inst = inst; g.spot = { ...(g.spot || {}), ...spot }; d.galaxy = g; } d.v5From = v; v = 5; }
+  // v7 -> v8: the five tiers become hull classes from the concept sheet; you keep an equivalent hull (and the Scout)
+  if (v < 8) { const t = int(d.tier, 1, 1, TIERS.length); const h = LEGACY_TIER_HULL[t] || 'scout'; d.hull = h; d.hulls = [...new Set(['scout', h])]; d.migratedTier = t; v = 8; }
   d.v = v;
   return d;
 }
@@ -69,7 +72,9 @@ export function sanitize(raw) {
   s.credits = num(d.credits, f.credits, 0, 1e15); s.xp = num(d.xp, 0, 0, 1e15); s.level = int(d.level, 1, 1, 999);
   for (const k of MINERAL_KEYS) { s.cargo[k] = int(d.cargo && d.cargo[k], 0, 0, 1e9); s.vault[k] = int(d.vault && d.vault[k], 0, 0, 1e9); }
   for (const u of UPGRADES) s.upgrades[u.key] = int(d.upgrades && d.upgrades[u.key], 0, 0, u.max);
-  s.tier = int(d.tier, 1, 1, TIERS.length); s.stationLvl = int(d.stationLvl, 1, 1, 6);
+  s.hulls = [...new Set((Array.isArray(d.hulls) ? d.hulls : []).filter((h) => typeof h === 'string' && HULLS[h]))]; if (!s.hulls.includes('scout')) s.hulls.unshift('scout');
+  s.hull = typeof d.hull === 'string' && HULLS[d.hull] ? d.hull : 'scout'; if (!s.hulls.includes(s.hull)) s.hulls.push(s.hull);
+  s.tier = HULLS[s.hull].rank; s.stationLvl = int(d.stationLvl, 1, 1, 6); if (d.migratedTier) s.migratedTier = int(d.migratedTier, 1, 1, 5);
   const fa = d.factory || {}; s.factory = { inc: int(fa.inc, 0, 0, 200), cap: int(fa.cap, 0, 0, 200), stored: num(fa.stored, 0, 0, 1e15), last: num(fa.last, Date.now(), 0, Date.now() + 1) };
   // items
   const seen = new Set();
@@ -147,7 +152,7 @@ export function writeKey(key, s) {
 export function deleteKey(key) { try { localStorage.removeItem(key); } catch (e) { /* ignore */ } }
 export function meta(s) {
   if (!s) return null;
-  return { tier: s.tier, tierName: TIERS[s.tier - 1].name, level: s.level, credits: s.credits, station: s.stationLvl, sector: s.maxSector, playTime: s.stats.playTime, savedAt: s.savedAt, liberated: Object.keys(s.galaxy.liberated).length, items: s.inv.length };
+  return { tier: s.tier, hull: s.hull, tierName: HULLS[s.hull].name, hullCls: HULLS[s.hull].cls, level: s.level, credits: s.credits, station: s.stationLvl, sector: s.maxSector, playTime: s.stats.playTime, savedAt: s.savedAt, liberated: Object.keys(s.galaxy.liberated).length, items: s.inv.length };
 }
 
 // ---- export / import codes ----
@@ -169,7 +174,7 @@ export function importCode(input) {
     let payload;
     if (text[0] === '{') { // raw JSON (e.g. a hand-copied save)
       payload = JSON.parse(text);
-      if (payload && !payload.game) { if (typeof payload.credits !== 'number' || typeof payload.tier !== 'number') return { ok: false, error: 'That JSON is not a Stellar Frontier save' }; payload = { game: 'stellar-frontier', data: payload }; }
+      if (payload && !payload.game) { if (typeof payload.credits !== 'number' || (typeof payload.tier !== 'number' && typeof payload.hull !== 'string')) return { ok: false, error: 'That JSON is not a Stellar Frontier save' }; payload = { game: 'stellar-frontier', data: payload }; }
     } else {
       const parts = text.replace(/\s+/g, '').split('.');
       if (parts.length !== 3 || !/^SF\d+$/.test(parts[0])) return { ok: false, error: 'That is not a Stellar Frontier save code' };

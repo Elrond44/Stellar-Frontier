@@ -21,6 +21,7 @@ export function sectorAt(dist) {
 }
 export const BOSS_LAIR = { x: 520, z: -560 }; // ~763 from origin, inside sector 4
 
+// legacy v1-v7 tiers: only used to migrate old saves (v8 hulls live in hulls.js)
 export const TIERS = [
   { tier: 1, name: 'Mote Scout',          cls: 'Mining Scout',          slots: 1, hp: 100,  cargo: 40,  dmg: 1.0, speed: 1.0,  accel: 1.0,  scale: 1.0, cam: 1.0,  radius: 1.8, cost: 0,      station: 1, mats: null },
   { tier: 2, name: 'Packmule',            cls: 'Frigate Hauler',        slots: 2, hp: 230,  cargo: 90,  dmg: 1.3, speed: 1.02, accel: 0.95, scale: 1.0, cam: 1.15, radius: 2.6, cost: 1200,   station: 2, mats: null },
@@ -31,11 +32,11 @@ export const TIERS = [
 
 export const STATION_LEVELS = [
   { lvl: 1, name: 'Outpost Refinery',  mult: 1.0, cost: 0, mats: null, desc: 'A lone refinery bolted to an asteroid.' },
-  { lvl: 2, name: 'Solar Refinery',    mult: 1.5, cost: 600, mats: null, desc: 'Solar arrays power a second smelter. Unlocks Tier 2 ships.' },
-  { lvl: 3, name: 'Factory Station',   mult: 2.2, cost: 3000, mats: { viridium: 15 }, desc: 'Factory modules and a docking ring. Unlocks Tier 3.' },
-  { lvl: 4, name: 'Orbital Works',     mult: 3.2, cost: 12000, mats: { crimsonite: 20 }, desc: 'Cranes and assembly bays. Unlocks Tier 4.' },
-  { lvl: 5, name: 'Industrial Hub',    mult: 4.6, cost: 40000, mats: { crimsonite: 30, voidstone: 10 }, desc: 'Drone bays and mining drones. Unlocks Tier 5.' },
-  { lvl: 6, name: 'Frontier Citadel',  mult: 6.5, cost: 120000, mats: { voidstone: 40 }, desc: 'A sprawling industrial empire.' },
+  { lvl: 2, name: 'Solar Refinery',    mult: 1.5, cost: 600, mats: null, desc: 'Solar arrays power a second smelter. Unlocks fighters: Interceptor and Strike Fighter.' },
+  { lvl: 3, name: 'Factory Station',   mult: 2.2, cost: 3000, mats: { viridium: 15 }, desc: 'Factory modules and a docking ring. Unlocks Corvette, Gunship, Bomber, Engineer and Explorer.' },
+  { lvl: 4, name: 'Orbital Works',     mult: 3.2, cost: 12000, mats: { crimsonite: 20 }, desc: 'Cranes and assembly bays. Unlocks Frigate, Destroyer and Intercept Carrier.' },
+  { lvl: 5, name: 'Industrial Hub',    mult: 4.6, cost: 40000, mats: { crimsonite: 30, voidstone: 10 }, desc: 'Drone bays and a capital slipway. Unlocks Cruiser, Battlecruiser and Fleet Carrier.' },
+  { lvl: 6, name: 'Frontier Citadel',  mult: 6.5, cost: 120000, mats: { voidstone: 40 }, desc: 'A sprawling industrial empire with a titan drydock. Unlocks the Dreadnought.' },
 ];
 
 export const WEAPONS = {
@@ -82,7 +83,9 @@ export const ENEMIES = {
   sniper:      { name: 'Rail Sniper', hp: 80, speed: 18, dmg: 20, fireRate: 0.32, range: 46, radius: 1.6, xp: 22, credits: 50, armor: 0, role: 'sniper' },
   support:     { name: 'Repair Tender', hp: 150, speed: 15, dmg: 3, fireRate: 0.6, range: 16, radius: 1.8, xp: 26, credits: 60, armor: 0.1, role: 'support' },
   ew:          { name: 'EW Jammer', hp: 120, speed: 17, dmg: 4, fireRate: 0.8, range: 20, radius: 1.7, xp: 26, credits: 60, armor: 0.05, role: 'ew' },
-  capital:     { name: 'Fleet Carrier', hp: 1900, speed: 4.5, dmg: 9, fireRate: 0.9, range: 30, radius: 6, xp: 220, credits: 500, armor: 0.35, role: 'capital' },
+  frigate:     { name: 'Pirate Frigate', hp: 950, speed: 7.5, dmg: 9, fireRate: 0.8, range: 34, radius: 5, xp: 130, credits: 280, armor: 0.3, role: 'line' },
+  destroyer:   { name: 'Pirate Destroyer', hp: 1350, speed: 7, dmg: 13, fireRate: 0.7, range: 38, radius: 6, xp: 180, credits: 400, armor: 0.35, role: 'line' },
+  capital:     { name: 'Intercept Carrier', hp: 1900, speed: 4.5, dmg: 9, fireRate: 0.9, range: 30, radius: 6, xp: 220, credits: 500, armor: 0.35, role: 'capital' },
   freighter:   { name: 'Supply Freighter', hp: 520, speed: 7, dmg: 0, fireRate: 0, range: 0, radius: 3, xp: 40, credits: 160, armor: 0.25, role: 'freighter' },
   commander:   { name: 'Sector Commander', hp: 2600, speed: 8, dmg: 10, fireRate: 1.0, range: 30, radius: 4.2, xp: 500, credits: 1500, armor: 0.25, boss: true },
   flagship:    { name: 'Faction Flagship', hp: 15000, speed: 5, dmg: 16, fireRate: 1.2, range: 34, radius: 10, xp: 3000, credits: 12000, armor: 0.3, boss: true },

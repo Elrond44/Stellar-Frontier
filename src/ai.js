@@ -1,7 +1,7 @@
 // v5 enemy AI roles. Each returns movement intent {tx, tz, spd, wantFire} (or null for the default behaviour).
 // dx/dz/dist point from the ship to its current target T (the player, an escorted civilian, or a rival ship).
-import { ABILITY_ORDER, ABILITIES } from './rpg.js?v=7';
-import { FACTIONS } from './galaxy.js?v=7';
+import { ABILITY_ORDER, ABILITIES } from './rpg.js?v=8';
+import { FACTIONS } from './galaxy.js?v=8';
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function roleAI(G, e, dt, dist, dx, dz, T) {
@@ -12,6 +12,7 @@ export function roleAI(G, e, dt, dist, dx, dz, T) {
   if (role === 'ew') return ew(G, e, dt, dist, dx, dz, T, spd0);
   if (role === 'capital') return capital(G, e, dt, dist, dx, dz, T, spd0);
   if (role === 'freighter') return freighter(G, e, dt, dist, dx, dz, T, spd0);
+  if (role === 'line') return line(G, e, dt, dist, dx, dz, T, spd0);
   return null;
 }
 // Snipers hold long range, paint the target with a visible targeting laser, then fire one hypervelocity slug.
@@ -65,15 +66,24 @@ function ew(G, e, dt, dist, dx, dz, T, spd) {
 }
 // Capital ships hold at range, launch drones, buff nearby allies' fire rate and hand out flanking orders.
 function capital(G, e, dt, dist, dx, dz, T, spd) {
-  e.orbit += dt * 0.12; const r = 28; const tx = T.x + Math.cos(e.orbit) * r, tz = T.z + Math.sin(e.orbit) * r;
+  e.orbit += dt * 0.12; const r = 28 + (e.radius || 0) + (T.radius || 0); const tx = T.x + Math.cos(e.orbit) * r, tz = T.z + Math.sin(e.orbit) * r;
   e.cmdT = (e.cmdT || 0) - dt;
   if (e.cmdT <= 0) { e.cmdT = 1; let side = 1; for (const o of G.enemies) { if (o.dead || o === e || o.faction !== e.faction || o.D.inst || Math.hypot(o.x - e.x, o.z - e.z) > 45) continue; o.buffT = G.time + 1.5; if (o.type === 'interceptor') { o.flank = side; side = -side; } } }
   e.launchT = (e.launchT ?? 6) - dt;
-  if (e.launchT <= 0 && e.stunT <= 0 && dist < 60) { e.launchT = 16; const n = G.enemies.filter((o) => !o.dead && o.mother === e).length; if (n < 4) for (let k = 0; k < 2; k++) { const d = G.spawnEnemy('drone', e.x + rand(-3, 3), e.z + rand(-3, 3), { faction: e.faction, mother: e, battle: e.battle, side: e.side }); d.tgt = e.tgt; } G.rings.spawn(e.x, 0.5, e.z, 8, (FACTIONS[e.faction] || { rgb: [3, 0.5, 0.4] }).rgb, 0.4); }
+  if (e.launchT <= 0 && e.stunT <= 0 && dist < 60) { e.launchT = 16; const n = G.enemies.filter((o) => !o.dead && o.mother === e).length; if (n < 4) for (let k = 0; k < 2; k++) { const d = G.spawnEnemy('drone', ...launchPt(e), { faction: e.faction, mother: e, battle: e.battle, side: e.side }); d.tgt = e.tgt; } G.rings.spawn(e.x, 0.5, e.z, 8, (FACTIONS[e.faction] || { rgb: [3, 0.5, 0.4] }).rgb, 0.4); }
   return { tx, tz, spd, wantFire: dist < e.D.range };
 }
 // Supply freighters run their route and try to slip away from attackers.
 function freighter(G, e, dt, dist, dx, dz, T, spd) {
   const d = e.dest || { x: e.x, z: e.z }; if (dist < 18) spd *= 1.35;
   return { tx: d.x, tz: d.z, spd, wantFire: false };
+}
+
+// v8: hangar-bay launch point for carriers (falls back to the hull centre)
+function launchPt(e) { const b = e.bays && e.bays.length ? e.bays[(e.bayI = ((e.bayI || 0) + 1)) % e.bays.length] : null; if (!b) return [e.x + rand(-3, 3), e.z + rand(-3, 3)]; const c = Math.cos(e.yaw || 0), s = Math.sin(e.yaw || 0); const k = e.scale || 1; return [e.x + (c * b.x + s * b.z) * k, e.z + (-s * b.x + c * b.z) * k]; }
+// v8 line warships (frigates / destroyers): hold a broadside orbit at gun range outside the target's hull and keep every battery on it
+function line(G, e, dt, dist, dx, dz, T, spd) {
+  e.flank ??= Math.random() < 0.5 ? 1 : -1; e.orbit += dt * 0.1 * e.flank; const r = e.D.range * 0.72 + (T.radius || 0) + (e.radius || 0) * 0.5;
+  const tx = T.x + Math.cos(e.orbit) * r, tz = T.z + Math.sin(e.orbit) * r;
+  return { tx, tz, spd: dist > r * 1.4 ? spd * 1.2 : spd * 0.7, wantFire: dist < e.D.range + (T.radius || 0) + (e.radius || 0) };
 }

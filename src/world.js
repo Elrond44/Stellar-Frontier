@@ -1,8 +1,8 @@
 // Background (nebula skybox, wrapped star layers, dust), asteroid chunk streaming, mineral pickups
 import * as THREE from 'three';
-import { mulberry, hash2, rand, TAU } from './util.js?v=7';
-import { MINERALS, sectorAt } from './data.js?v=7';
-import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=7';
+import { mulberry, hash2, rand, TAU } from './util.js?v=8';
+import { MINERALS, sectorAt } from './data.js?v=8';
+import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=8';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
 
 export function makeSky() {
@@ -176,7 +176,7 @@ export class AsteroidField {
       const rich = sec.rich > 0 && rng() < sec.rich; const type = weightedPick(rng, sec.minerals);
       const r = rich ? 3.0 + rng() * 1.2 : sc.r0 + rng() * (sc.r1 - sc.r0);
       const variant = Math.floor(rng() * 100), rx = rng() * 6, ry = rng() * 6;
-      if (!ok || Math.hypot(x, z) < 42) continue;
+      if (!ok || Math.hypot(x, z) < 70) continue;
       pts.push([x, z]);
       const dep = this.depleted.get(id); if (dep && now < dep) continue; if (dep) this.depleted.delete(id);
       if (rich && sec.danger >= 1) this.guardRequests.push({ id: 'g' + id, x, z, danger: sec.danger, chunk: key, count: sec.danger >= 3 ? 2 : 1 });

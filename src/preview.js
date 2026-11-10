@@ -1,7 +1,8 @@
 // Rotating 3D previews (shipyard + station) rendered by one small, lazily created WebGL renderer.
 // Its canvas is moved into whichever menu slot needs it and only renders while visible.
 import * as THREE from 'three';
-import { buildShip, buildStation, makeFlames, makeTurret, animateNavLights, animateStation, makeRockMaterial } from './models.js?v=7';
+import { HULLS, HULL_IDS, buildHull } from './hulls.js?v=8';
+import { buildShip, buildStation, makeFlames, makeTurret, animateNavLights, animateStation, makeRockMaterial } from './models.js?v=8';
 
 const KIT = ['laser', 'cannon', 'missile', 'cannon', 'missile', 'pulse'];
 export class Preview {
@@ -28,12 +29,14 @@ export class Preview {
   model(kind, arg) {
     const key = kind + arg; if (this.cache.has(key)) return this.cache.get(key);
     const g = new THREE.Group(); let anim = null;
-    if (kind === 'ship') {
-      const b = buildShip(arg); g.add(b.group);
-      b.hardpoints.forEach((h, i) => { const t = makeTurret(KIT[i % KIT.length], (h.size || 1) * 1.05); t.position.set(h.x, h.y, h.z); t.rotation.y = (i % 2 ? 0.4 : -0.4); b.group.add(t); });
-      for (const h of b.pointDefense || []) { const t = makeTurret('cannon', h.size); t.position.set(h.x, h.y, h.z); b.group.add(t); }
-      const fl = makeFlames(b.engines); fl.mat.uniforms.uPower.value = 0.8; for (const f of fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.7); f.sprite.scale.setScalar(f.r * 3); }
+    if (kind === 'ship') { // v8: arg = hull index; the hull is shown at true scale next to a ghosted Scout for reference
+      const id = HULL_IDS[arg] || 'scout'; const H = HULLS[id]; const b = buildHull(id); g.add(b.group);
+      b.hardpoints.slice(0, H.slots).forEach((h, i) => { const t = makeTurret(KIT[i % KIT.length], (h.size || 1) * 1.05, 'player'); t.position.set(h.x, h.y, h.z); t.rotation.y = (i % 2 ? 0.4 : -0.4); b.group.add(t); });
+      for (const h of b.pointDefense || []) { const t = makeTurret('cannon', h.size, 'player'); t.position.set(h.x, h.y, h.z); b.group.add(t); }
+      const fl = makeFlames(b.engines, b.engColor); fl.mat.uniforms.uPower.value = 0.8; for (const f of fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.7); f.sprite.scale.setScalar(f.r * 3); }
       b.group.add(fl.group); g.userData.flames = fl; g.userData.nav = b.group;
+      if (id !== 'scout') { const gh = buildHull('scout').group; const gm = new THREE.MeshBasicMaterial({ color: 0x6fd8ff, transparent: true, opacity: 0.35, depthWrite: false });
+        gh.traverse((c) => { if (c.isMesh) c.material = gm; if (c.isSprite) c.visible = false; }); gh.position.set(H.beam * 0.5 + 3.2, 0, -H.len * 0.3); gh.name = 'scaleGhost'; b.group.add(gh); }
     } else {
       const st = buildStation(arg, this.rockMat); g.add(st); anim = st; g.userData.nav = st.userData.main;
     }

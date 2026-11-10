@@ -1,7 +1,7 @@
 // Procedural models v2: detailed ships, turrets, pirates, station, asteroid geometry + materials.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
-import { mulberry, fbm3 } from './util.js?v=7';
+import { mulberry, fbm3 } from './util.js?v=8';
 
 // ================= Procedural textures =================
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -142,10 +142,11 @@ export function materials() {
   return MATS;
 }
 export const glowTexture = () => textures().glow;
+export const hullTextures = () => textures();
 export const starTexture = () => textures().star;
 
 // ================= Kit: collect parts, merge per material =================
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
+const _sm = new THREE.Matrix4(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
 function scaleUV(geo, su, sv) { const uv = geo.attributes.uv; if (!uv) return; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv); }
 function boxGeo(w, h, d) {
   const g = new THREE.BoxGeometry(w, h, d); const uv = g.attributes.uv; const k = 1 / 4;
@@ -154,19 +155,36 @@ function boxGeo(w, h, d) {
   return g;
 }
 export class Kit {
-  constructor() { this.parts = {}; this.engines = []; this.extras = []; this.lights = []; }
+  // v8: S = uniform build scale (hulls are designed at a normalised length of 10 and built at their true length);
+  // parts added while det=true go to a separately toggled 'detail' layer (mid LOD); core parts can be captured for the far LOD
+  constructor(S = 1) { this.S = S; this.parts = {}; this.dparts = {}; this.det = false; this.core = null; this.engines = []; this.extras = []; this.lights = []; }
   add(mat, geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
-    _e.set(rx, ry, rz); _q.setFromEuler(_e); _p.set(x, y, z); _s.set(sx, sy, sz); _m.compose(_p, _q, _s); geo.applyMatrix4(_m);
+    if (typeof mat === 'string' && this.pal && this.pal[mat]) mat = this.pal[mat];
+    _e.set(rx, ry, rz); _q.setFromEuler(_e); _p.set(x, y, z); _s.set(sx, sy, sz); _m.compose(_p, _q, _s); if (this.S !== 1) _m.premultiply(_sm.makeScale(this.S, this.S, this.S)); geo.applyMatrix4(_m);
     if (geo.index) geo = geo.toNonIndexed();
     for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(k)) geo.deleteAttribute(k);
     if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
     if (!geo.attributes.normal) geo.computeVertexNormals();
+    if (this.S !== 1) { const k = Math.min(5, Math.max(0.7, this.S)); scaleUV(geo, k, k); } // keep panel texel density sane on huge hulls
     if (typeof mat !== 'string') { (this.mo ||= {})[mat.uuid] = mat; mat = mat.uuid; }
-    (this.parts[mat] ||= []).push(geo); return this;
+    ((this.det ? this.dparts : this.parts)[mat] ||= []).push(geo); if (this.core && !this.det) this.core.push([geo, mat]); return this;
+  }
+  matOf(key) { return materials()[key] || (this.mo && this.mo[key]); }
+  // far LOD: every core (non-detail) part merged into one vertex-coloured geometry (one draw per instanced batch)
+  buildLo() {
+    const geos = [];
+    for (const [g0, key] of this.core || []) {
+      const m = this.matOf(key); if (!m || m.visible === false) continue; const c = (m.color || new THREE.Color(1, 1, 1)).clone(); const em = m.isMeshBasicMaterial;
+      if (em) { const mx = Math.max(c.r, c.g, c.b, 1); c.multiplyScalar(1 / mx); } else c.multiplyScalar(m.map ? 0.8 : 1);
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', g0.attributes.position); g.setAttribute('normal', g0.attributes.normal);
+      const n = g0.attributes.position.count; const col = new Float32Array(n * 3); for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3)); geos.push(g);
+    }
+    return geos.length ? mergeGeometries(geos, false) : null;
   }
   box(mat, w, h, d, x, y, z, rx, ry, rz) { return this.add(mat, boxGeo(w, h, d), x, y, z, rx, ry, rz); }
   // bevelled armour plate (chamfered box)
-  plate(mat, w, h, d, x, y, z, ry = 0, ch = 0.25) {
+  plate(mat, w, h, d, x, y, z, ry = 0, ch = this.ch ?? 0.25) {
     const c = Math.min(w, d) * ch; const s = new THREE.Shape();
     s.moveTo(-w / 2 + c, -d / 2); s.lineTo(w / 2 - c, -d / 2); s.lineTo(w / 2, -d / 2 + c); s.lineTo(w / 2, d / 2 - c); s.lineTo(w / 2 - c, d / 2); s.lineTo(-w / 2 + c, d / 2); s.lineTo(-w / 2, d / 2 - c); s.lineTo(-w / 2, -d / 2 + c); s.closePath();
     const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: true, bevelThickness: h * 0.25, bevelSize: Math.min(h * 0.35, c * 0.5), bevelSegments: 1 });
@@ -190,7 +208,7 @@ export class Kit {
     const ring = new THREE.TorusGeometry(r * 1.12, r * 0.12, 6, 16); this.add('orange', ring, x, y, z + len * 0.85);
     this.zcyl('hull', r * 1.25, r * 1.25, len * 0.18, 14, x, y, z + len * 0.4);
     this.zcyl('glow', r * 0.82, r * 0.82, 0.06, 14, x, y, z - 0.02);
-    this.engines.push({ x, y, z: z - 0.05, r });
+    const S = this.S; this.engines.push({ x: x * S, y: y * S, z: (z - 0.05) * S, r: r * S });
   }
   vent(x, y, z, w, d, n = 4, ry = 0) {
     this.box('dark', w, 0.08, d, x, y, z, 0, ry, 0);
@@ -231,12 +249,13 @@ export class Kit {
   build() {
     const M = materials(); const g = new THREE.Group();
     for (const [mat, geos] of Object.entries(this.parts)) { const merged = mergeGeometries(geos, false); g.add(new THREE.Mesh(merged, M[mat] || (this.mo && this.mo[mat]))); }
+    if (Object.keys(this.dparts).length) { const dg = new THREE.Group(); dg.name = 'detail'; for (const [mat, geos] of Object.entries(this.dparts)) dg.add(new THREE.Mesh(mergeGeometries(geos, false), M[mat] || (this.mo && this.mo[mat]))); g.add(dg); }
     for (const e of this.extras) g.add(e);
     if (this.lights.length) {
       const lg = new THREE.Group(); lg.name = 'navLights'; const T = textures();
       for (const l of this.lights) {
         const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.glow, color: l.color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-        sp.position.set(l.x, l.y, l.z); sp.scale.setScalar(l.size); sp.userData = { mode: l.mode, phase: (l.x * 1.7 + l.z * 0.3) % 6 }; lg.add(sp);
+        sp.position.set(l.x * this.S, l.y * this.S, l.z * this.S); sp.scale.setScalar(l.size * (l.abs ? 1 : this.S <= 3 ? this.S : 3 + (this.S - 3) * 0.35)); sp.userData = { mode: l.mode, phase: (l.x * 1.7 + l.z * 0.3) % 6 }; lg.add(sp);
       }
       g.add(lg);
     }
@@ -263,7 +282,8 @@ export function disposeObject(obj, keepMaterials = true) {
 // ================= Turrets =================
 export function makeTurret(kind = 'cannon', size = 1, palette = 'player') {
   const s = size; const base = new Kit(), bar = new Kit();
-  const H = palette === 'player' ? 'dark' : 'pirateDark', A = palette === 'player' ? 'orange' : 'pirateAccent', P = palette === 'player' ? 'hull' : 'pirate';
+  const obj = typeof palette === 'object'; // v8: hull paint scheme materials { D, A, H }
+  const H = obj ? palette.D : palette === 'player' ? 'dark' : 'pirateDark', A = obj ? palette.A : palette === 'player' ? 'orange' : 'pirateAccent', P = obj ? palette.H : palette === 'player' ? 'hull' : 'pirate';
   base.cyl(H, 0.42 * s, 0.5 * s, 0.14 * s, 14, 0, 0.07 * s, 0);
   base.add(A, new THREE.TorusGeometry(0.44 * s, 0.035 * s, 4, 16), 0, 0.15 * s, 0, Math.PI / 2);
   let muzzle;

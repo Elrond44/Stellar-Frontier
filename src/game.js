@@ -1,25 +1,29 @@
 // Core game: state, player ship, weapons, enemies, economy, quests, saving
 import * as THREE from 'three';
-import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=7';
-import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=7';
-import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=7';
-import { Campaign, FLEET } from './campaign.js?v=7';
-import { roleAI } from './ai.js?v=7';
-import { BOSS_BY_BP } from './bosses.js?v=7';
-import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=7';
-import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=7';
-import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=7';
-import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=7';
-import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=7';
-import { AsteroidField, Minerals } from './world.js?v=7';
-import { Particles, Debris, Rings, Bolts, Flashes, BOLT_TIME } from './fx.js?v=7';
-import { FXManager, Sequencer, EnergyShells, MetalDebris, makeShieldMaterial, ShieldFX, ShieldBubbles, prepareDamage, ensureDamage, releaseDamage, DMG_TIME, DMG_STATS, plasmaMaterial } from './vfx.js?v=7';
-import { STORY, makeContract } from './quests.js?v=7';
-import { Phenomena } from './phenomena.js?v=7';
-import { Wrecks } from './structures.js?v=7';
-import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=7';
+import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=8';
+import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=8';
+import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=8';
+import { Campaign, FLEET } from './campaign.js?v=8';
+import { roleAI } from './ai.js?v=8';
+import { BOSS_BY_BP } from './bosses.js?v=8';
+import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=8';
+import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=8';
+import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, ROLE_ABILITIES, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=8';
+import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=8';
+import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=8';
+import { AsteroidField, Minerals } from './world.js?v=8';
+import { Particles, Debris, Rings, Bolts, Flashes, BOLT_TIME } from './fx.js?v=8';
+import { FXManager, Sequencer, EnergyShells, MetalDebris, makeShieldMaterial, ShieldFX, ShieldBubbles, prepareDamage, ensureDamage, releaseDamage, DMG_TIME, DMG_STATS, plasmaMaterial } from './vfx.js?v=8';
+import { STORY, makeContract } from './quests.js?v=8';
+import { Phenomena } from './phenomena.js?v=8';
+import { Wrecks } from './structures.js?v=8';
+import { HULLS, HULL_IDS, buildHull, ENEMY_HULL, FLAGSHIP_HULL, FACTION_PAINT, hullSegs, MAIN_PATH } from './hulls.js?v=8';
+import { HullLOD } from './lod.js?v=8';
+import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=8';
 
-const DOCK_R = 28;
+export const STATION_SCALE = 2; // v8: the home station is built at capital-ship scale
+const DOCK_R = 54;
+const TIER_COMPAT = { 1: 'scout', 2: 'strike', 3: 'gunship', 4: 'destroyer', 5: 'cruiser', 6: 'battlecruiser', 7: 'dreadnought' };
 const BEH_TURRET = { beam: 'laser', bolt: 'cannon', missile: 'missile', pulse: 'pulse' };
 const INST_XP = { inst_turret: 15, inst_gen: 40, inst_core: 120, inst_reactor: 45, inst_hangar: 40 };
 const ENERGY_DMG = { drone: 1, interceptor: 1, sentinel: 1, inst_turret: 0, gunship: 0, boss: 1, sniper: 0, support: 1, ew: 1, capital: 0, commander: 1, flagship: 1, bpart: 0, inst_def: 0 };
@@ -48,7 +52,7 @@ export class Game {
     this.bolts = new Bolts(scene, 600, plasmaMaterial(BOLT_TIME));
     this.vfx = new FXManager(this); this.seq = new Sequencer(); this.shells = new EnergyShells(scene, 10); this.metal = new MetalDebris(scene, 160); this.bubbles = new ShieldBubbles(scene, 6); this.ghosts = []; this.DMG_STATS = DMG_STATS;
     this.engineLight = new THREE.PointLight(0x5ab4ff, 0, 16, 2); this.engineLight.position.set(0, -999, 0); scene.add(this.engineLight);
-    this.flight = new FlightModel(); this.thr = this.flight.out; this.hashE = new SpatialHash(14); this.hashR = new SpatialHash(12); this._cand = []; this._bA = {}; this._bB = {}; this.kick = { x: 0, z: 0 };
+    this.lod = new HullLOD(scene); this._lodItems = []; this.flight = new FlightModel(); this.thr = this.flight.out; this.hashE = new SpatialHash(14); this.hashR = new SpatialHash(12); this._cand = []; this._bA = {}; this._bB = {}; this.kick = { x: 0, z: 0 };
     this.field = new AsteroidField(scene); this.field.camera = camera;
     this.minerals = new Minerals(scene);
     this.enemies = []; this.protos = {};
@@ -129,25 +133,27 @@ export class Game {
   // ---------- derived stats ----------
   skillFx() { return this.fxCache || (this.fxCache = skillFx(this.s.skills)); }
   stats() {
-    const u = this.s.upgrades, T = TIERS[this.s.tier - 1]; const fx = this.skillFx(); const surge = this.surgeT > 0;
+    const u = this.s.upgrades, T = this.hull(); const fx = this.skillFx(); const surge = this.surgeT > 0; const R = this.roleT || {}; const now = this.time;
+    const strike = R.strike > now, burn = R.burn > now, shift = R.shift > now, cmd = R.cmd > now;
     const hp = Math.round(T.hp * (1 + 0.12 * u.hull));
     return {
-      dmg: T.dmg * (1 + 0.12 * u.damage) * (1 + 0.02 * (this.s.level - 1)) * (surge ? 1.5 : 1),
-      rate: (1 + 0.06 * u.firerate) * (1 + (fx.fireRate || 0)) * (surge ? 1.3 : 1),
+      dmg: T.dmg * (1 + 0.12 * u.damage) * (1 + 0.02 * (this.s.level - 1)) * (surge ? 1.5 : 1) * (strike ? 1.4 : 1) * (cmd ? 1.2 : 1),
+      rate: (1 + 0.06 * u.firerate) * (1 + (fx.fireRate || 0)) * (surge ? 1.3 : 1) * (strike ? 1.25 : 1),
       proj: (1 + 0.08 * u.projspeed) * (1 + (fx.projSpeed || 0)),
       range: (1 + 0.04 * u.range) * (1 + 0.1 * (this.s.tier - 1)) * (1 + (fx.range || 0)),
       crit: Math.min(0.75, 0.05 + 0.015 * u.crit + (fx.crit || 0)),
-      mining: (1 + 0.1 * u.mining) * (1 + (fx.ore || 0)),
-      speed: 15 * T.speed * (1 + 0.05 * u.engine) * (1 + (fx.speed || 0)),
-      accel: 38 * T.accel * (1 + (fx.accel || 0)),
-      turn: 4.2 * T.accel * (1 + (fx.turn || 0)),
-      magnet: (10 + this.s.tier * 2) * (1 + 0.1 * u.magnet),
+      mining: (1 + 0.1 * u.mining) * (1 + (fx.ore || 0)) * (T.mining || 1),
+      speed: 15 * T.speed * (1 + 0.05 * u.engine) * (1 + (fx.speed || 0)) * (burn ? 1.6 : shift ? 1.4 : 1),
+      accel: 38 * T.accel * (1 + (fx.accel || 0)) * (burn || shift ? 1.5 : 1),
+      turn: 4.2 * T.turn * (1 + (fx.turn || 0)),
+      magnet: (10 + this.s.tier * 2) * (1 + 0.1 * u.magnet) + T.radius,
       cargo: Math.round(T.cargo * (1 + 0.15 * u.cargo)),
       hp,
-      shield: Math.round(hp * 0.35 * (1 + (fx.shieldCap || 0))),
+      shield: Math.round(hp * 0.35 * (1 + (fx.shieldCap || 0)) * (T.shieldK || 1)),
+      armor: (T.armor || 0) + (burn ? 0.35 : 0) + (cmd ? 0.4 : 0), regen: T.regen || 0, vsBase: T.vsBase || 1, vsBig: T.vsBig || 1,
       shieldRegen: 0.12 * (1 + (fx.shieldRegen || 0)), shieldDelay: Math.max(0.8, 3 + (fx.shieldDelay || 0)),
       energyMax: Math.round(100 * (1 + (fx.energyMax || 0))), energyRegen: 14 * (1 + (fx.energyRegen || 0)),
-      radar: 1 + (fx.radar || 0), luck: fx.luck || 0, pen: fx.pen || 0,
+      radar: (1 + (fx.radar || 0)) * (T.radar || 1) * (R.radar > now ? R.radarK || 1.5 : 1), luck: fx.luck || 0, pen: fx.pen || 0,
       slots: Math.min(8, T.slots + (fx.slots || 0)),
       fx,
     };
@@ -157,7 +163,8 @@ export class Game {
   // ---------- station ----------
   buildStationModel() {
     if (this.stationRoot) { this.scene.remove(this.stationRoot); disposeObject(this.stationRoot); }
-    this.stationRoot = buildStation(this.s.stationLvl, this.field.stationMat);
+    this.stationRoot = buildStation(this.s.stationLvl, this.field.stationMat); this.stationRoot.scale.setScalar(STATION_SCALE); // v8: sized against capital hulls
+    const ud = this.stationRoot.userData; ud.dockPortW = ud.dockPort.clone().multiplyScalar(STATION_SCALE); for (const v of ud.anim.stacks || []) v.multiplyScalar && v.multiplyScalar(STATION_SCALE);
     this.scene.add(this.stationRoot);
   }
   factoryRates() {
@@ -248,8 +255,8 @@ export class Game {
     this.s.credits -= inf.cost; this.s.skills = {}; this.s.respecs++; this.fxCache = null; this.abil.cd = {};
     this.ensureEquipSlots(); this.buildPlayerShip(); this.audio.upgrade(); this.toast(`Skills reset: ${inf.spent} SP refunded`, 'good'); this.save(); return true;
   }
-  abilityUnlocked(id) { const sk = SKILLS.find((x) => x.ability === id); return !!(sk && this.s.skills[sk.id]); }
-  abilities() { return ABILITY_ORDER.filter((id) => this.abilityUnlocked(id)); }
+  abilityUnlocked(id) { if (ROLE_ABILITIES[id]) return this.hull().ability === id; const sk = SKILLS.find((x) => x.ability === id); return !!(sk && this.s.skills[sk.id]); }
+  abilities() { const out = ABILITY_ORDER.filter((id) => this.abilityUnlocked(id)); const r = this.hull().ability; if (r && ROLE_ABILITIES[r]) out.push(r); return out; } // the hull's role ability always rides in the last slot
   abilityCd(id) { const fx = this.skillFx(); return ABILITIES[id].cd * (1 - (fx.cdr || 0)) * (id === 'dash' ? 1 + (fx.dashCd || 0) : 1); }
   abilityCost(id) { const fx = this.skillFx(); return ABILITIES[id].energy * (id === 'dash' ? 1 + (fx.dashCost || 0) : 1); }
   abilityState(id) { const rem = Math.max(0, (this.abil.cd[id] || 0) - this.time); const cd = this.abilityCd(id); return { rem, frac: cd ? rem / cd : 0, ready: rem <= 0 && this.player.energy >= this.abilityCost(id), cost: this.abilityCost(id), energyOk: this.player.energy >= this.abilityCost(id) }; }
@@ -309,35 +316,50 @@ export class Game {
     if (key === 'hull') { this.player.maxHp = st.hp; this.player.hp = Math.min(st.hp, this.player.hp + st.hp * 0.12); }
     this.audio.upgrade(); this.emit('upgrade', { key }); this.save(); return true;
   }
-  tierInfo(t) {
-    const T = TIERS[t - 1]; if (!T) return null;
-    const reasons = []; let ok = true;
-    if (this.s.stationLvl < T.station) { ok = false; reasons.push(`Station level ${T.station}`); }
-    if (this.s.credits < T.cost) ok = false;
-    for (const k in (T.mats || {})) if (this.s.vault[k] < T.mats[k]) ok = false;
-    return { T, ok, reasons };
+  // ---------- v8 hull classes ----------
+  hull() { // current hull definition (tests and old code may still set s.tier directly: map the rank to the main-line hull)
+    let H = HULLS[this.s.hull]; if (!H || H.rank !== this.s.tier) { const id = H && H.rank === this.s.tier ? this.s.hull : (TIER_COMPAT[this.s.tier] || 'scout'); this.s.hull = id; if (!this.s.hulls.includes(id)) this.s.hulls.push(id); H = HULLS[id]; }
+    return H;
   }
-  buyTier(t) {
-    const inf = this.tierInfo(t); if (!inf || !inf.ok || t !== this.s.tier + 1 || !this.docked) return false;
+  maxRank() { return Math.max(1, ...this.s.hulls.map((h) => (HULLS[h] ? HULLS[h].rank : 1))); }
+  hullInfo(id) {
+    const T = HULLS[id]; if (!T) return null; const s = this.s; const owned = s.hulls.includes(id);
+    const reasons = []; let ok = !owned;
+    const prereq = !T.from.length || T.from.some((h) => s.hulls.includes(h)); if (!prereq) { ok = false; reasons.push('Own a ' + T.from.map((h) => HULLS[h].name).join(' or ')); }
+    if (s.stationLvl < T.station) { ok = false; reasons.push(`Station level ${T.station}`); }
+    const cash = s.credits >= T.cost; if (!cash) ok = false; let mats = true;
+    for (const k in (T.mats || {})) if (s.vault[k] < T.mats[k]) { ok = false; mats = false; }
+    return { T, ok, owned, prereq, cash, mats, reasons, active: s.hull === id };
+  }
+  tierInfo(t) { const id = TIER_COMPAT[t]; return id ? this.hullInfo(id) : null; } // legacy shim
+  buyTier(t) { return this.buyHull(TIER_COMPAT[t]); }
+  buyHull(id) {
+    const inf = this.hullInfo(id); if (!inf || !inf.ok || !this.docked) { this.audio.denied(); return false; }
     this.s.credits -= inf.T.cost; for (const k in (inf.T.mats || {})) this.s.vault[k] -= inf.T.mats[k];
-    this.s.tier = t; this.ensureEquipSlots();
+    this.s.hulls.push(id); this.flyHull(id, true);
+    this.toast(`New ship: ${inf.T.name} · ${inf.T.role} (${inf.T.len * 5} m)!`, 'level'); this.emit('tier', { hull: id }); this.save(); return true;
+  }
+  flyHull(id, fresh) { // switch to an owned hull (docked)
+    const T = HULLS[id]; if (!T || !this.s.hulls.includes(id) || (!this.docked && !fresh)) return false;
+    this.s.hull = id; this.s.tier = T.rank; this.ensureEquipSlots();
     // new hulls ship with stock armament: fill empty hardpoints with spare inventory first, else a common stock weapon
     const used = this.equippedIds(); const spare = this.s.inv.filter((it) => !used.has(it.id) && it.il <= this.s.level).sort((a, b) => itemPower(b) - itemPower(a));
     for (let i = 0; i < this.s.equip.length; i++) if (!this.s.equip[i]) {
-      let it = spare.shift(); if (!it && this.s.inv.length < INV_CAP) { it = makeItem(i % 2 ? 'autocannon' : 'mining_laser', 0, Math.max(1, Math.min(this.s.level, 5)), 'Shipyard stock'); this.s.inv.push(it); }
+      let it = spare.shift(); if (!it && fresh && this.s.inv.length < INV_CAP) { it = makeItem(i % 2 ? 'autocannon' : 'mining_laser', 0, Math.max(1, Math.min(this.s.level, 5)), 'Shipyard stock'); this.s.inv.push(it); }
       if (it) this.s.equip[i] = it.id;
     }
     this.buildPlayerShip(); this.player.hp = this.player.maxHp;
-    this.audio.tierUp(); this.rings.spawn(this.player.x, 0, this.player.z, 18 * inf.T.cam, [0.6, 2, 3], 1);
-    this.fx.burst(this.player.x, 1, this.player.z, 90, 20, 1.2, 1.5, 0.1, [0.5, 2.2, 3.2], 1.5);
-    this.toast(`New ship: ${inf.T.name} (${inf.T.cls})!`, 'level'); this.emit('tier', {}); this.save(); return true;
+    this.audio.tierUp(); this.rings.spawn(this.player.x, 0, this.player.z, 18 * T.cam, [0.6, 2, 3], 1);
+    this.fx.burst(this.player.x, 1, this.player.z, 90, 20 * Math.sqrt(T.cam), 1.2, 1.5, 0.1, [0.5, 2.2, 3.2], 1.5);
+    if (!fresh) { this.toast(`Now flying the ${T.name}`, 'good'); this.save(); }
+    return true;
   }
   // ---------- quests ----------
   currentStory() { return STORY[this.s.story] || null; }
   newContract() { return { ...makeContract(this.s.level, this.s.maxSector), prog: 0 }; }
   questState(q, prog) {
     if (['station', 'tier', 'sector', 'level'].includes(q.kind)) {
-      const v = q.kind === 'station' ? this.s.stationLvl : q.kind === 'tier' ? this.s.tier : q.kind === 'sector' ? this.s.maxSector : this.s.level;
+      const v = q.kind === 'station' ? this.s.stationLvl : q.kind === 'tier' ? this.maxRank() : q.kind === 'sector' ? this.s.maxSector : this.s.level;
       return Math.min(q.need, v);
     }
     return Math.min(q.need, prog);
@@ -373,21 +395,21 @@ export class Game {
 
   // ---------- player ship ----------
   buildPlayerShip() {
-    const p = this.player; const T = TIERS[this.s.tier - 1]; const st = this.stats();
+    const p = this.player; const T = this.hull(); const st = this.stats();
     if (p.group) {
       this.scene.remove(p.group); disposeObject(p.group);
       if (p.flames) { p.flames.mat.dispose(); p.flames.coreMat.dispose(); p.flames.spriteMat.dispose(); }
       for (const w of p.weapons) if (w.beam) { this.scene.remove(w.beam); this.disposeBeam(w.beam); }
     }
     if (p.model) releaseDamage(p.model); this.clearGhosts();
-    const built = buildShip(this.s.tier); prepareDamage(built.group); ensureDamage(built.group);
-    const g = new THREE.Group(); g.add(built.group); g.rotation.order = 'YXZ'; built.group.scale.setScalar(1.25);
-    const fl = makeFlames(built.engines); built.group.add(fl.group);
+    const built = buildHull(T.id); prepareDamage(built.group); ensureDamage(built.group);
+    const g = new THREE.Group(); g.add(built.group); g.rotation.order = 'YXZ';
+    const fl = makeFlames(built.engines, built.engColor); built.group.add(fl.group);
     p.flames = fl; p.weapons = [];
     this.ensureEquipSlots();
     // hardpoints: hull mounts plus auxiliary mounts unlocked by the skill tree
     const hps = [...built.hardpoints]; const h0 = hps[0] || { x: 0, y: 0.3, z: 1, size: 0.8 };
-    for (let k = 0; hps.length < st.slots; k++) hps.push({ x: (k % 2 ? 1 : -1) * (0.5 + 0.35 * this.s.tier) * (k >> 1 ? 0.6 : 0), y: h0.y + 0.12, z: -(built.length || 4) * (0.18 + 0.1 * k), size: (h0.size || 1) * 0.85, aux: true });
+    for (let k = 0; hps.length < st.slots; k++) hps.push({ x: (k % 2 ? 1 : -1) * T.beam * 0.18 * (k >> 1 ? 0.6 : 1), y: h0.y + 0.12, z: -(built.length || 4) * (0.12 + 0.08 * k), size: (h0.size || 1) * 0.85, aux: true });
     hps.forEach((h, i) => {
       if (i >= st.slots) return;
       const it = this.item(this.s.equip[i]);
@@ -400,23 +422,16 @@ export class Game {
     });
     // T5 point-defence turrets (track and plink nearby pirates)
     p.pd = [];
-    for (const h of built.pointDefense || []) { const tu = makeTurret('cannon', h.size, 'player'); tu.position.set(h.x, h.y, h.z); built.group.add(tu); p.pd.push({ turret: tu, cd: rand(0, 1), recoil: 0, bz0: tu.userData.barrel.position.z }); }
+    for (const h of built.pointDefense || []) { const tu = makeTurret('cannon', h.size, 'player'); tu.userData.pdRange = 16 + T.radius; tu.position.set(h.x, h.y, h.z); built.group.add(tu); p.pd.push({ turret: tu, cd: rand(0, 1), recoil: 0, bz0: tu.userData.barrel.position.z }); }
     // shield bubble (hit ripple)
     if (p.shield) { p.shield.geometry.dispose(); }
-    p.shield = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), this.shieldMat); p.shield.scale.set(T.radius * 1.7, T.radius * 0.9, T.radius * 1.9); p.shield.visible = false; p.shield.renderOrder = 6; g.add(p.shield);
+    p.shield = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), this.shieldMat); p.shield.scale.set(T.beam * 0.62 + 0.6, Math.max(1.2, T.beam * 0.28), T.len * 0.6 + 0.6); p.shield.visible = false; p.shield.renderOrder = 6; g.add(p.shield);
     p.model = built.group;
-    // T4/T5 escort drones (visual + light auto-fire)
-    p.escorts = [];
-    if (this.s.tier >= 4) {
-      const n = this.s.tier === 5 ? 4 : 2;
-      for (let i = 0; i < n; i++) {
-        const dg = buildShip(1).group; dg.scale.setScalar(0.45); this.scene.add(dg);
-        p.escorts.push({ obj: dg, a: (i / n) * TAU, cd: rand(0, 1) });
-      }
-    }
+    // v8: no more tier escorts; carriers keep a persistent wing in the air instead (launched from the hangar bays)
     if (p.escortsOld) for (const e of p.escortsOld) { this.scene.remove(e.obj); disposeObject(e.obj); }
-    p.escortsOld = p.escorts;
-    p.group = g; p.length = built.length; p.radius = T.radius; p.maxHp = st.hp; p.hp = Math.min(p.hp ?? st.hp, st.hp);
+    p.escorts = []; p.escortsOld = p.escorts; p.bays = built.bays || []; p.hullId = T.id;
+    p.group = g; p.length = built.length; p.radius = T.radius; p.bound = T.bound; p.beam = T.beam; p.segs = built.segs; p.mass = T.mass;
+    this.resetWing(); this.camFx && (this.camFx.hullK = T.cam); p.maxHp = st.hp; p.hp = Math.min(p.hp ?? st.hp, st.hp);
     p.energy = Math.min(p.energy ?? st.energyMax, st.energyMax); p.sh = Math.min(p.sh ?? st.shield, st.shield);
     this.scene.add(g);
   }
@@ -460,12 +475,14 @@ export class Game {
     const key = type + ':' + (fac || '') + ':' + variant;
     if (!this.protos[key]) {
       const D = ENEMIES[type]; const F = FACTIONS[fac]; let b;
-      if (type === 'flagship') b = buildFlagship(variant || fac || 'crimson', F ? factionMats(fac, F.rgb, F.hull) : factionMats('crimson', [3.4, 0.4, 0.4], 0x3a1e22));
+      const hid = type === 'flagship' ? FLAGSHIP_HULL[variant || fac || 'crimson'] : ENEMY_HULL[type];
+      if (hid) b = buildHull(hid, { scheme: type === 'sentinel' ? FACTION_PAINT.sentinel : FACTION_PAINT[fac] || 'pirate', turrets: 'enemy' }); // v8: enemies fly the concept-sheet hulls at true scale in faction paint
+      else if (type === 'flagship') b = buildFlagship(variant || fac || 'crimson', F ? factionMats(fac, F.rgb, F.hull) : factionMats('crimson', [3.4, 0.4, 0.4], 0x3a1e22));
       else if (type === 'bpart') { b = buildBossPart(variant || 'core'); if (F) retint(b.group, fac, F.rgb, F.hull); }
       else if (D.inst && !['inst_core', 'inst_gen', 'inst_turret', 'inst_reactor', 'inst_hangar'].includes(type)) { b = buildInstallationV5(type.slice(5)); if (F) retint(b.group, fac, F.rgb, F.hull); }
       else { b = D.inst ? buildInstallation(type.slice(5)) : buildPirate(type); if (F && type !== 'boss') tintPirate(b.group, fac, F.rgb, F.hull, b.radius); }
-      const fl = makeFlames(b.engines || [], F ? new THREE.Color(F.rgb[0], F.rgb[1] * 0.8 + 0.3, F.rgb[2]) : new THREE.Color(3.4, 0.8, 0.4)); b.group.add(fl.group);
-      this.protos[key] = { ...b, hardpoints: b.hardpoints || [], flameMat: fl.mat, flames: fl };
+      const fl = makeFlames(b.engines || [], b.engColor || (F ? new THREE.Color(F.rgb[0], F.rgb[1] * 0.8 + 0.3, F.rgb[2]) : new THREE.Color(3.4, 0.8, 0.4))); b.group.add(fl.group);
+      this.protos[key] = { ...b, hardpoints: b.hardpoints || [], flameMat: fl.mat, flames: fl, hullId: b.hull || null };
     }
     return this.protos[key];
   }
@@ -491,7 +508,7 @@ export class Game {
     if (!P.dmgReady) { prepareDamage(P.group); P.dmgReady = true; }
     const g = P.group.clone(); g.rotation.order = 'YXZ'; this.scene.add(g); if (elite) g.scale.setScalar(1.25);
     const e = { type, D, x, z, vx: 0, vz: 0, yaw: rand(0, TAU), bank: 0, hp, maxHp: hp, dmgMul: (1 + 0.5 * Math.max(0, danger - 1)) * easy * M.dmg * (elite ? 1.4 : 1) * dmgK(lv, L0),
-      group: g, turrets: [], cd: rand(0.5, 2), state: 'attack', t: rand(0, 10), radius: P.radius * (elite ? 1.2 : 1), hard: P.hardpoints, hitT: 0, orbit: rand(0, TAU),
+      group: g, turrets: [], cd: rand(0.5, 2), state: 'attack', t: rand(0, 10), radius: P.radius * (elite ? 1.2 : 1), hard: P.hardpoints, hitT: 0, hullId: P.hullId, bays: P.bays, segs: P.segs, bound: (P.bound || P.radius) * (elite ? 1.25 : 1), mass: P.mass, lo: P.lo, scheme: P.scheme, hullLen: P.length || 0, orbit: rand(0, TAU),
       faction: fac, M, armor: Math.min(0.8, D.armor + M.armor), speedMul: M.speed, shield: hp * M.shield, maxShield: hp * M.shield, shieldT: 0, stunT: 0, burnT: 0, burnDps: 0, shredT: 0, elite, threat: gs.threat, sector: gs.id,
       cloaked: !!M.cloak && !D.inst && !D.part && !D.boss && type !== 'sentinel' && type !== 'freighter', aiAcc: 0, aiTick: 0, scale: elite ? 1.25 : 1, ...opts };
     delete e.variant; e.D = D; e.uid = this.uidN = (this.uidN || 0) + 1; e.yawVel = 0;
@@ -504,7 +521,7 @@ export class Game {
   // pirate wave: composition follows the sector faction's fleet doctrine (roles unlock with danger)
   spawnWave(danger, big = false, near, msg) {
     const p = this.player; const a = rand(0, TAU); const fac = FACTIONS[this.gsec.faction] && !this.s.galaxy.liberated[this.gsec.id] ? this.gsec.faction : null;
-    const d = near ? rand(14, 22) : fac === 'void' ? rand(22, 28) : rand(48, 60);
+    const d = (near ? rand(14, 22) : fac === 'void' ? rand(22, 28) : rand(48, 60)) + (near ? 0 : p.radius * 1.5 + Math.max(0, (this.camDist || 42) - 42) * 0.5);
     const bx = near ? near.x : p.x, bz = near ? near.z : p.z;
     const cx = bx + Math.cos(a) * d, cz = bz + Math.sin(a) * d;
     const list = [];
@@ -514,6 +531,7 @@ export class Game {
     // faction specialists (support / sniper / EW / capital) join from danger 2
     if (fac && danger >= 2) { const pool = FLEET[fac].filter((t) => t !== 'interceptor' && t !== 'drone' && t !== 'gunship' && (t !== 'capital' || (danger >= 3 && big))); if (pool.length) { list.push(pick(pool)); if (danger >= 3 && Math.random() < 0.5) list.push(pick(pool.filter((t) => t !== 'capital')) || 'gunship'); } }
     if (fac === 'crimson' && danger >= 2) list.push('gunship');
+    if (danger >= 3 && (big || Math.random() < 0.3 + 0.1 * Math.max(0, this.hull().rank - 3))) list.push(Math.random() < 0.6 ? 'frigate' : 'destroyer'); // v8: line warships (true-scale 100-140 m hulls) join deep-space raids
     const eliteP = 0.18 + (big ? 0.2 : 0) + this.camp.eliteBoost();
     const eliteI = danger >= 1 && this.gsec.threat >= 2 && Math.random() < eliteP ? randInt(0, list.length - 1) : -1;
     list.forEach((t, i) => {
@@ -575,7 +593,7 @@ export class Game {
       let dx = p.x - e.x, dz = p.z - e.z, dist = Math.hypot(dx, dz) || 0.001;
       if (e.D.inst) { camp.updateInst(e, dt, dist, dx, dz); continue; }
       if (e.D.part) { camp.updatePart(e, dt, dist, dx, dz); continue; }
-      const far = e.D.boss ? 400 : 170;
+      const far = (e.D.boss ? 400 : 170) + (this.camDist || 42) * 0.8 + (e.bound || 0);
       if (dist > far && !e.guard) { this.removeEnemy(e); E.splice(i, 1); camp.onRemove(e); continue; }
       if (e.guard && e.state === 'idle' && Math.hypot(e.guard.x - p.x, e.guard.z - p.z) > 110) { this.removeEnemy(e); E.splice(i, 1); if (e.guardId && this.guards.has(e.guardId)) { this.guards.delete(e.guardId); this.pendingGuards.set(e.guardId, { id: e.guardId, x: e.guard.x, z: e.guard.z, count: 1 }); } continue; }
       if (e.guard && Math.hypot(e.guard.x - p.x, e.guard.z - p.z) > 220) { this.removeEnemy(e); E.splice(i, 1); if (e.guardId) this.guards.delete(e.guardId); continue; }
@@ -606,8 +624,10 @@ export class Game {
     if (e.cloaked) { if (dist < 26 || e.hitT > 0 || !isP) { e.cloaked = false; e.group.visible = true; this.fx.burst(e.x, 0.6, e.z, 18, 8, 0.4, 1.0, 0.1, [1.8, 0.6, 3.6], 3); }
       else if (Math.random() < 0.25 * this.fx.budget) this.fx.emit(e.x + rand(-1, 1), 0.5, e.z + rand(-1, 1), 0, 0.3, 0, 0.5, 1.2, 0.3, 0.5, 0.2, 0.9, 1); }
     // v7 sensors: dense nebulae shorten detection and weapon ranges for everyone inside
-    const senseK = this.phen ? 1 - 0.35 * this.phen.sample(e.x, e.z).neb : 1; const range = e.D.range * senseK;
-    let tx = T.x, tz = T.z, spd = e.D.speed * (e.speedMul || 1), wantFire = !(isP && this.dead) && !T.hold && dist < range && !e.cloaked, raw = false, face = false;
+    const senseK = this.phen ? 1 - 0.35 * this.phen.sample(e.x, e.z).neb : 1; const range = e.D.range * senseK + (e.radius || 1) * 0.5;
+    // v8 true scale: range is measured to the target's hull surface (a 720 m titan is in range long before its centre is)
+    const tc = T.segs ? this.capsulePt(T, e.x, e.z, this._aiC || (this._aiC = {})) : null; const sDist = tc ? Math.hypot(e.x - tc.x, e.z - tc.z) - tc.r : dist - Math.max(0, (T.radius || 1) - 1.5);
+    let tx = T.x, tz = T.z, spd = e.D.speed * (e.speedMul || 1), wantFire = !(isP && this.dead) && !T.hold && sDist < range && !e.cloaked, raw = false, face = false;
     const D = e.D; const tvx = T.vx || 0, tvz = T.vz || 0;
     const r = e.bc ? this.camp.bossAI(e, dt, dist, dx, dz) : roleAI(this, e, dt, dist, dx, dz, T);
     // tactical retreat: badly damaged light/medium ships fall back to regenerate, then return
@@ -637,6 +657,9 @@ export class Game {
       else { e.orbit += dt * 0.8; tx = p.x + Math.cos(e.orbit) * 11; tz = p.z + Math.sin(e.orbit) * 11; }
     }
     if (T.hold) { spd *= 0.45; }
+    if (!raw && (T.radius || 0) > 2.5) { // keep steering points outside big hulls: orbit the hull surface, not its centre
+      const c = T.segs ? this.capsulePt(T, tx, tz, this._aiC2 || (this._aiC2 = {})) : { x: T.x, z: T.z, r: T.radius }; const ddx = tx - c.x, ddz = tz - c.z, dd = Math.hypot(ddx, ddz); const need = c.r + (e.radius || 1) + 5;
+      if (dd < need) { const ux = dd > 0.01 ? ddx / dd : -dx / (dist || 1), uz = dd > 0.01 ? ddz / dd : -dz / (dist || 1); tx = c.x + ux * need; tz = c.z + uz * need; } }
     if (e.stunT > 0) { wantFire = false; spd *= 0.15; }
     const heavy = D.boss || e.type === 'capital' || e.type === 'freighter';
     const F = EFLIGHT[e.type] || EFLIGHT.drone; e.yawVel ??= 0;
@@ -773,6 +796,8 @@ export class Game {
     const rival = src === 'rival'; e.lastHit = rival ? 'rival' : 'p'; if (!rival) this.camp.playerHit(e);
     const fx = rival ? {} : this.skillFx(); const st = this.stats();
     if ((e.elite || e.D.inst || e.D.boss || e.D.part) && fx.eliteDmg) dmg *= 1 + fx.eliteDmg;
+    if (!rival) { const inst = !!(e.D.inst || (e.D.part && !e.parent)); const big = !!(e.segs || e.D.boss || (e.parent && e.parent.D.boss) || inst); // v8 hull roles: bombers crack bases, destroyers kill capitals
+      if (inst) dmg *= (st.vsBase || 1) * ((S && S.vsInst) || 1); if (big) dmg *= (st.vsBig || 1) * ((S && S.vsCap) || 1); }
     if (e.shredT > 0) dmg *= 1.15;
     if (!rival && fx.overcharge && this.player.energy > st.energyMax * 0.7) dmg *= 1 + fx.overcharge;
     const [mul, label] = this.camp.dmgMod(e); let shielded = !!label; dmg *= mul;
@@ -877,22 +902,76 @@ export class Game {
         this.seq.at(k * 0.045, () => { if (this.dead) return; const side = k % 2 ? 1 : -1; const lx = Math.cos(p.yaw) * side * p.radius * 0.6, lz = -Math.sin(p.yaw) * side * p.radius * 0.6; this.fx.emit(p.x + lx, 1.2, p.z + lz, 0, 0, 0, 0.1, 1.2, 0.3, 3.4, 1.8, 0.6, 0); this.bolts.spawn({ x: p.x + lx, z: p.z + lz, y: 1.2, vx: Math.sin(a) * sp * 0.6, vz: Math.cos(a) * sp * 0.6, speed: sp, dmg: 16 * pst.dmg, owner: 'p', kind: 'missile', S, target: t, life: 3.4, len: 1.1, w: 1.6, color: k % 2 ? [3.4, 1.4, 0.4] : [3.6, 2.2, 0.6], splash: 3.5, turn: 7 }); }); }
     } else if (id === 'surge') {
       this.surgeT = 6; this.rings.spawn(p.x, 0.5, p.z, p.radius * 5, [3.4, 2.6, 0.5], 0.7); this.fx.burst(p.x, 1, p.z, 50, 10, 0.6, 1.2, 0.1, [3.4, 2.6, 0.5], 2);
+    } else if (ROLE_ABILITIES[id]) { this.roleAbility(id, p, pst);
     } else if (id === 'drones') {
-      this.clearAllies(); for (let k = 0; k < 3; k++) { const b = buildShip(1); const o = b.group; o.scale.setScalar(0.42); const fl = makeFlames(b.engines, new THREE.Color(2.2, 0.8, 3.4)); o.add(fl.group); this.scene.add(o); const a0 = k / 3 * TAU; this.allies.push({ obj: o, fl, a: a0, cd: rand(0, 0.5), t: 20, x: p.x + Math.cos(a0) * 3, z: p.z + Math.sin(a0) * 3, vx: p.vx + Math.cos(a0) * 12, vz: p.vz + Math.sin(a0) * 12, yaw: a0, thr: 1 }); }
+      this.clearAllies(true); for (let k = 0; k < 3; k++) { const b = buildShip(1); const o = b.group; o.scale.setScalar(0.42); const fl = makeFlames(b.engines, new THREE.Color(2.2, 0.8, 3.4)); o.add(fl.group); this.scene.add(o); const a0 = k / 3 * TAU; this.allies.push({ obj: o, fl, a: a0, cd: rand(0, 0.5), t: 20, x: p.x + Math.cos(a0) * 3, z: p.z + Math.sin(a0) * 3, vx: p.vx + Math.cos(a0) * 12, vz: p.vz + Math.sin(a0) * 12, yaw: a0, thr: 1 }); }
       this.fx.burst(p.x, 1, p.z, 30, 10, 0.5, 1, 0.1, [2.2, 0.8, 3.4], 2);
     }
     this.audio.ability(id, p.x, p.z); this.emit('ability', { id }); return true;
   }
-  clearAllies() { for (const a of this.allies) this.dropAlly(a); this.allies.length = 0; }
+  clearAllies(keepWing) { for (let i = this.allies.length - 1; i >= 0; i--) { const a = this.allies[i]; if (keepWing && a.wing) continue; this.dropAlly(a); this.allies.splice(i, 1); } }
+  // ---------- v8 hull role abilities ----------
+  roleAbility(id, p, st) {
+    const R = this.roleT || (this.roleT = {}); const now = this.time; const T = this.hull(); const hx = Math.sin(p.yaw), hz = Math.cos(p.yaw);
+    const reveal = (rad) => { let n = 0; for (const e of this.enemies) if (!e.dead && e.cloaked && Math.hypot(e.x - p.x, e.z - p.z) < rad) { e.cloaked = false; e.group.visible = true; e.revealT = now + 6; n++; } return n; };
+    const ring = (r, c, t = 0.7) => { this.rings.spawn(p.x, 0.5, p.z, r, c, t); this.fx.burst(p.x, 1, p.z, 30, Math.min(30, r * 0.4), 0.5, 1, 0.1, c, 2); };
+    switch (id) {
+      case 'recon': { R.radar = now + 8; R.radarK = 1.5; const n = reveal(70 + p.radius); ring(70, [0.5, 2.4, 3.6]); this.ui && this.ui.float(p.x, 3, p.z, n ? `PING · ${n} revealed` : 'PING', '#6fd8ff', true); break; }
+      case 'scan': { R.radar = now + 10; R.radarK = 1.6; const n = reveal(130 + p.radius); ring(130, [0.5, 2.8, 3.6], 1.1); let rich = 0; for (const a of this.field.list) if (a.alive && a.rich && Math.hypot(a.x - p.x, a.z - p.z) < 130) { rich++; a.hitT = 0.4; this.rings.spawn(a.x, a.y || 0.5, a.z, a.r * 2, [3.4, 2.6, 0.6], 1.2); }
+        this.ui && this.ui.float(p.x, 3, p.z, `SCAN · ${rich} rich ore${n ? ` · ${n} cloaked` : ''}`, '#7fe7ff', true); break; }
+      case 'afterburn': R.burn = now + 4; for (let i = 0; i < 20; i++) this.fx.emit(p.x - hx * p.radius, 0.6, p.z - hz * p.radius, -hx * 40 + rand(-4, 4), 0, -hz * 40 + rand(-4, 4), 0.4, 1.2, 0.2, 3.4, 1.2, 0.5, 0); break;
+      case 'strikerun': R.strike = now + 5; ring(p.radius * 4, [3.4, 2.6, 0.5]); break;
+      case 'tactical': p.sh = st.shield; R.shift = now + 4; ring(p.radius * 3, [0.5, 1.8, 3.6]); break;
+      case 'command': R.cmd = now + 6; ring(p.radius * 3 + 20, [0.6, 1.4, 3.6], 0.9); break;
+      case 'flak': R.flak = now + 4; ring(16 + p.radius, [0.8, 2.6, 3.4]); break;
+      case 'repair': { R.repair = now + 5; ring(26 + p.radius, [0.4, 3.2, 1.2]); for (const f of this.camp.friends) if (!f.dead && Math.hypot(f.x - p.x, f.z - p.z) < 40 + p.radius) f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.3); break; }
+      case 'wing': this.launchWing(T.wing ? T.wing.n : 4, 20); break;
+      case 'broadside': case 'bombrun': case 'torpedo': case 'titanlance': this.heavyStrike(id, p, st); break;
+    }
+  }
+  heavyStrike(id, p, st) {
+    const hx = Math.sin(p.yaw), hz = Math.cos(p.yaw); const T = this.hull();
+    const near = (r) => this.enemies.filter((e) => !e.dead && !e.cloaked && Math.hypot(e.x - p.x, e.z - p.z) < r + (e.bound || e.radius)).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+    if (id === 'broadside') { // every battery fires a heavy shell at the nearest targets
+      const tg = near(46 + p.radius); p.group.updateMatrixWorld(true); let k = 0;
+      for (const w of p.weapons) for (let j = 0; j < 2; j++) { const t = tg[(k++) % Math.max(1, tg.length)]; const m = this.tmpV.copy(w.turret.userData.muzzle || w.turret.position); w.turret.localToWorld(m); const ax = t ? t.x - m.x : hx, az = t ? t.z - m.z : hz; const d = Math.hypot(ax, az) || 1;
+        this.seq.at(j * 0.12 + k * 0.03, () => { if (this.dead) return; this.bolts.spawn({ x: m.x, z: m.z, y: m.y, vx: ax / d * 70, vz: az / d * 70, dmg: 26 * st.dmg, owner: 'p', kind: 'cannon', S: { vsShip: 1.2, vsRock: 0.6, shieldMul: 1, pen: 0.35, splash: 3, splashK: 0.6 }, life: 1.1, len: 2.2, w: 1.6, color: [3.4, 1.6, 0.5] }); this.fx.emit(m.x, m.y, m.z, 0, 0, 0, 0.12, 1.6, 0.3, 3.4, 2, 0.6, 0); }); }
+      this.addShake(0.25);
+    } else if (id === 'bombrun') { // bombs ahead of the ship: triple damage to installations
+      for (let i = 0; i < 6; i++) this.seq.at(i * 0.12, () => { if (this.dead) return; const sx = (i % 2 ? 1 : -1) * T.beam * 0.25; this.bolts.spawn({ x: p.x + Math.cos(p.yaw) * sx, z: p.z - Math.sin(p.yaw) * sx, y: 0.6, vx: hx * 34 + p.vx, vz: hz * 34 + p.vz, dmg: 60 * st.dmg, owner: 'p', kind: 'missile', speed: 40, turn: 0.5, splash: 7, S: { vsShip: 1, vsRock: 1, shieldMul: 1, pen: 0.4, beh: 'missile', vsInst: 3 }, life: 1.6, len: 1.4, w: 1.6, color: [3.4, 0.9, 0.4] }); });
+    } else if (id === 'torpedo') {
+      const tg = near(90 + p.radius); for (let i = 0; i < 2; i++) { const t = tg[0] || null; this.seq.at(i * 0.25, () => { if (this.dead) return; const sx = (i ? 1 : -1) * T.beam * 0.3; this.bolts.spawn({ x: p.x + Math.cos(p.yaw) * sx + hx * T.len * 0.4, z: p.z - Math.sin(p.yaw) * sx + hz * T.len * 0.4, y: 0.8, vx: hx * 20, vz: hz * 20, dmg: 140 * st.dmg, owner: 'p', kind: 'missile', speed: 46, turn: 2.2, splash: 6, target: t ? { kind: 'ship', o: t } : null, S: { vsShip: 1, vsRock: 0.5, shieldMul: 1.5, pen: 0.6, beh: 'missile', vsCap: 2 }, life: 3.2, len: 2.4, w: 2, color: [3.6, 0.6, 0.5] }); }); }
+    } else if (id === 'titanlance') { // spinal main battery: a 140-unit (700 m) beam down the keel
+      const L = 140, x0 = p.x + hx * T.len * 0.5, z0 = p.z + hz * T.len * 0.5; let n = 0;
+      this.seq.at(0.35, () => { if (this.dead) return;
+        for (const e of [...this.enemies]) { if (e.dead) continue; const rx = e.x - x0, rz = e.z - z0; const along = rx * hx + rz * hz; const perp = Math.abs(rx * hz - rz * hx); if (along > -4 && along < L && perp < 4 + (e.radius || 1)) { n++; this.damageEnemy(e, 320 * st.dmg, false, { vsShip: 1, vsRock: 1, shieldMul: 2, pen: 0.8, vsCap: 1.5 }); } }
+        for (const a of this.field.list) { if (!a.alive) continue; const rx = a.x - x0, rz = a.z - z0; const along = rx * hx + rz * hz; if (along > 0 && along < L && Math.abs(rx * hz - rz * hx) < 4 + a.r) this.damageRock(a, 400); }
+        for (let i = 0; i < 70; i++) { const t = Math.random() * L; this.fx.emit(x0 + hx * t + rand(-1, 1), 1.2, z0 + hz * t + rand(-1, 1), rand(-2, 2), rand(0, 2), rand(-2, 2), 0.5, 2.2, 0.4, 3.6, 1.6, 0.5, 0); }
+        this.flashes.spawn(x0 + hx * L * 0.5, 2, z0 + hz * L * 0.5, 120, 0xff8833, 0.35, 90); this.addShake(0.7); this.ui && this.ui.float(p.x, 4, p.z, n ? `LANCE · ${n} hit` : 'LANCE', '#ff7a26', true); });
+      for (let i = 0; i < 30; i++) this.fx.emit(x0, 1.2, z0, rand(-3, 3), rand(0, 2), rand(-3, 3), 0.35, 1.6, 0.3, 3.6, 1.6, 0.5, 0);
+    }
+  }
+  // carriers: persistent wing launched from the hangar bays (true-scale small craft in the carrier's livery)
+  resetWing() { for (let i = this.allies.length - 1; i >= 0; i--) if (this.allies[i].wing) { this.dropAlly(this.allies[i]); this.allies.splice(i, 1); } this.wingQ = []; const T = HULLS[this.s.hull]; if (T && T.wing && !this.dead) this.launchWing(T.wing.n, Infinity); }
+  launchWing(n, life) { for (let i = 0; i < n; i++) (this.wingQ ||= []).push({ at: this.time + 0.5 + i * 0.45, life }); }
+  updateWing(dt) {
+    const p = this.player; const Q = this.wingQ; if (!Q || !Q.length || !p.group || this.dead) return; const T = this.hull(); if (!T.wing) { Q.length = 0; return; }
+    if (Q[0].at > this.time) return; const q = Q.shift(); const bays = p.bays && p.bays.length ? p.bays : [{ x: 0, y: 0, z: 0 }]; const bay = bays[(this.wingN = (this.wingN || 0) + 1) % bays.length];
+    const c = Math.cos(p.yaw), s = Math.sin(p.yaw); const bx = p.x + c * bay.x + s * bay.z, bz = p.z - s * bay.x + c * bay.z; const out = Math.sign(bay.x) || 1; const ox = c * out, oz = -s * out;
+    const b = buildHull(T.wing.hull, { scheme: T.paint }); const o = b.group; const fl = makeFlames(b.engines, b.engColor); o.add(fl.group); this.scene.add(o);
+    this.allies.push({ obj: o, fl, a: rand(0, TAU), cd: rand(0.3, 1), t: q.life, x: bx, z: bz, vx: p.vx + ox * 24 + Math.sin(p.yaw) * 10, vz: p.vz + oz * 24 + Math.cos(p.yaw) * 10, yaw: Math.atan2(ox, oz), wing: true, slot: this.wingN, hullId: T.wing.hull, lo: b.lo, scheme: T.paint, len: b.length });
+    this.wingLaunches = (this.wingLaunches || 0) + 1;
+    this.rings.spawn(bx, 0.5, bz, 4, [0.6, 2.2, 3.4], 0.4); for (let i = 0; i < 14; i++) this.fx.emit(bx, 0.6, bz, ox * rand(10, 26), rand(0, 2), oz * rand(10, 26), 0.35, 0.9, 0.2, 0.8, 2.2, 3.4, 0); this.audio.droneFire && this.audio.droneFire(bx, bz);
+  }
   dropAlly(a) { this.scene.remove(a.obj); disposeObject(a.obj); if (a.fl) { a.fl.mat.dispose(); a.fl.coreMat.dispose(); a.fl.spriteMat.dispose(); } }
   updateAllies(dt) {
     const p = this.player; const st = this.stats();
     for (let i = this.allies.length - 1; i >= 0; i--) {
       const a = this.allies[i]; a.t -= dt; if (a.t <= 0 || this.dead) { this.fx.burst(a.x, 1, a.z, 10, 6, 0.4, 0.6, 0.1, [2.2, 0.8, 3.4], 3); this.dropAlly(a); this.allies.splice(i, 1); continue; }
-      a.a += dt * 1.6; const t = this.findTarget(a.x, a.z, 26, true); const tgt = t && t.kind === 'ship' ? t.o : null;
-      const gx = tgt ? tgt.x + Math.cos(a.a) * 8 : p.x + Math.cos(a.a) * (p.radius + 6), gz = tgt ? tgt.z + Math.sin(a.a) * 8 : p.z + Math.sin(a.a) * (p.radius + 6);
+      a.a += dt * (a.wing ? 0.9 : 1.6); const t = this.findTarget(a.x, a.z, a.wing ? 40 : 26, true); const tgt = t && t.kind === 'ship' ? t.o : null;
+      const oR = a.wing ? p.radius + 8 + (a.slot % 3) * 3 : p.radius + 6; const tR = tgt ? 8 + (tgt.radius || 1) : 0; const gx = tgt ? tgt.x + Math.cos(a.a) * tR : p.x + Math.cos(a.a) * oR, gz = tgt ? tgt.z + Math.sin(a.a) * tR : p.z + Math.sin(a.a) * oR;
       { // steer with real thrust: accelerate toward the slot, limited speed, nose follows thrust (or the target when firing)
-        const dx = gx - a.x, dz = gz - a.z, d = Math.hypot(dx, dz) || 1; const want = Math.min(26, d * 2.5); const ax = (dx / d * want - a.vx) * 3, az = (dz / d * want - a.vz) * 3; const am = Math.hypot(ax, az); const lim = 60; const kk = am > lim ? lim / am : 1;
+        const dx = gx - a.x, dz = gz - a.z, d = Math.hypot(dx, dz) || 1; const want = Math.min(26 + Math.hypot(p.vx, p.vz) * 0.8, d * 2.5); const ax = (dx / d * want - a.vx) * 3, az = (dz / d * want - a.vz) * 3; const am = Math.hypot(ax, az); const lim = 60; const kk = am > lim ? lim / am : 1;
         a.vx += ax * kk * dt; a.vz += az * kk * dt; a.x += a.vx * dt; a.z += a.vz * dt; a.thr = damp(a.thr || 0, Math.min(1, am * kk / lim + 0.2), 8, dt);
         const face = tgt && Math.hypot(tgt.x - a.x, tgt.z - a.z) < 20 ? Math.atan2(tgt.x - a.x, tgt.z - a.z) : Math.atan2(a.vx + ax * 0.05, a.vz + az * 0.05); a.yaw = (a.yaw || 0) + clamp(angleDiff(a.yaw || 0, face), -8 * dt, 8 * dt);
         a.obj.position.set(a.x, 1.6, a.z); a.obj.rotation.y = a.yaw;
@@ -909,6 +988,7 @@ export class Game {
     if (sk.evade && p.thrust > 0.3 && Math.random() < sk.evade) { this.ui && this.ui.float(p.x, 2.2, p.z, 'EVADED', '#5dff98'); return; }
     dmg *= 1 - (o.energy ? (sk.resEnergy || 0) : (sk.resKinetic || 0));
     if (this.overT > 0) dmg *= 0.25;
+    if (st.armor) dmg *= 1 - Math.min(0.7, st.armor);
     if (o.drain) p.energy = Math.max(0, p.energy - o.drain);
     // shield layer
     const hadSh = p.sh > 0;
@@ -938,7 +1018,7 @@ export class Game {
     this.s.stats.deaths++;
     this.toast(`Hull breached! Lost ${lost} cargo units. Respawning at station…`, 'warn');
     setTimeout(() => {
-      p.x = 0; p.z = 34; p.vx = p.vz = 0; p.hp = p.maxHp; p.sh = this.stats().shield; p.energy = this.stats().energyMax; p.group.visible = true; this.dead = false; this.heat = 0; this.clearAllies();
+      p.x = 0; p.z = 62; p.vx = p.vz = 0; p.hp = p.maxHp; p.sh = this.stats().shield; p.energy = this.stats().energyMax; p.group.visible = true; this.dead = false; this.heat = 0; this.clearAllies();
       for (const e of this.enemies) if (e.type !== 'sentinel' && e.type !== 'boss' && !e.D.inst) this.removeEnemy(e);
       this.camPos.set(p.x, 40, p.z + 25);
     }, 2600);
@@ -1095,7 +1175,7 @@ export class Game {
     for (const pd of p.pd || []) {
       pd.cd -= dt; if (pd.recoil > 0) { pd.recoil = Math.max(0, pd.recoil - dt * 6); pd.turret.userData.barrel.position.z = pd.bz0 - pd.recoil * 0.25; }
       const mz = this.tmpV.copy(pd.turret.userData.muzzle); pd.turret.localToWorld(mz);
-      let tgt = null, bd = 22; for (const e of this.enemies) { if (e.dead || e.cloaked || (e.type === 'sentinel' && e.state === 'idle')) continue; const d = Math.hypot(e.x - mz.x, e.z - mz.z); if (d < bd) { bd = d; tgt = e; } }
+      let tgt = null, bd = pd.turret.userData.pdRange || 22; for (const e of this.enemies) { if (e.dead || e.cloaked || (e.type === 'sentinel' && e.state === 'idle')) continue; const d = Math.hypot(e.x - mz.x, e.z - mz.z); if (d < bd) { bd = d; tgt = e; } }
       const wy = tgt ? angleDiff(0, Math.atan2(tgt.x - mz.x, tgt.z - mz.z) - p.yaw) : Math.sin(this.time * 0.5 + pd.bz0 * 10) * 0.8;
       pd.turret.rotation.y = pd.turret.rotation.y + clamp(angleDiff(pd.turret.rotation.y, wy), -8 * dt, 8 * dt);
       if (tgt && pd.cd <= 0 && !this.dead) { pd.cd = 0.45 / st.rate; pd.recoil = 1; const d = bd || 1, sp = 60;
@@ -1209,7 +1289,7 @@ export class Game {
         if (!hit) for (const f of this.camp.friends) { if (f.dead) continue; const t = sweptCircle(x0, z0, x1, z1, f.x, f.z, f.radius + 0.3); if (t >= 0) { this.camp.hurtFriend(f, b.dmg); this.fx.burst(b.x, 0.5, b.z, 4, 8, 0.25, 0.6, 0.1, [0.6, 2.2, 3.4], 3); hit = true; break; } }
         if (hit) { b.dead = true; continue; }
         if (this.dead) { if (b.life <= 0) b.dead = true; continue; }
-        const tp = sweptCircle(x0, z0, x1, z1, p.x, p.z, p.radius);
+        const tp = p.segs ? this.sweepShip(p, x0, z0, x1, z1, p.radius) : sweptCircle(x0, z0, x1, z1, p.x, p.z, p.radius);
         if (tp >= 0) { b.x = x0 + (x1 - x0) * tp; b.z = z0 + (z1 - z0) * tp; const M = b.fac ? this.facMods(b.fac) : null; this.hurtPlayer(b.dmg, b.x - b.vx * 0.05, b.z - b.vz * 0.05, { energy: b.energy, drain: M && M.drain, shieldBreak: M && M.shieldBreak }); this.fx.burst(b.x, 0.5, b.z, 6, 8, 0.3, 0.8, 0.1, [3, 0.6, 0.4], 3); b.dead = true; continue; }
       }
       if (b.life <= 0) b.dead = true;
@@ -1235,7 +1315,7 @@ export class Game {
   // ---------- v6 physics: broadphase + impulse collisions (player / ships / asteroids) ----------
   buildHashes() {
     const hE = this.hashE, hR = this.hashR; hE.clear(); hR.clear();
-    for (const e of this.enemies) if (!e.dead) hE.insert(e, e.x, e.z, e.radius + 0.5);
+    for (const e of this.enemies) if (!e.dead) hE.insert(e, e.x, e.z, (e.segs ? Math.max(e.radius, e.bound * (e.scale || 1)) : e.radius) + 0.5);
     for (const a of this.field.list) if (a.alive) { if (a.m === undefined) a.m = rockMass(a.r, a.rich); hR.insert(a, a.x, a.z, a.r); }
   }
   impactDamage(vn, mSelf, mOther, thr = 9) { return Math.max(0, vn - thr) * 0.6 * clamp(2 * mOther / (mSelf + mOther), 0.15, 1.5); }
@@ -1246,27 +1326,30 @@ export class Game {
     this.collisions = this.collisions || { n: 0, maxJ: 0 };
     const spark = (x, z, nx, nz, n, col) => { if (this.fx.budget <= 0) return; for (let i = 0; i < n; i++) { const a = Math.atan2(nx, nz) + rand(-1.1, 1.1); const v = rand(6, 16); this.fx.emit(x, rand(0.3, 1), z, Math.sin(a) * v, rand(0, 3), Math.cos(a) * v, rand(0.2, 0.5), 0.35, 0.05, col[0], col[1], col[2], 4); } };
     if (!this.dead) {
-      const m = p.mass || TIER_MASS[tier - 1]; const pr = p.radius * 0.7;
-      // player vs asteroids
-      this.hashR.query(p.x, p.z, pr + 0.5, cand);
+      const m = p.mass || TIER_MASS[tier - 1]; const cp = this._pcp || (this._pcp = {}); const pr0 = p.radius * 0.7; let pr = pr0; const big = !!p.segs; const rk = Math.min(1, 4 * 1.2 / m) ; // big hulls plough through small rocks
+      // player vs asteroids (long hulls: closest point on the keel capsule)
+      this.hashR.query(p.x, p.z, (big ? p.bound : pr0) + 0.5, cand);
       for (const a of cand) {
         if (!a.alive) continue;
-        this.body(A, p, p.x, p.z, p.vx, p.vz, m, pr, p.yawVel); this.body(Bb, a, a.x, a.z, a.vx || 0, a.vz || 0, a.m, a.r * 0.85, 0);
+        let bx = p.x, bz = p.z; if (big) { this.capsulePt(p, a.x, a.z, cp); bx = cp.x; bz = cp.z; pr = cp.r * 0.85; }
+        this.body(A, p, bx, bz, p.vx, p.vz, m, pr, p.yawVel); this.body(Bb, a, a.x, a.z, a.vx || 0, a.vz || 0, a.m, a.r * 0.85, 0);
         const res = collideCircles(A, Bb, 0.3); if (!res) continue;
-        p.x = A.x; p.z = A.z; p.vx = A.vx; p.vz = A.vz; p.yawVel = clamp(A.yawVel, -6, 6); a.x = Bb.x; a.z = Bb.z; a.vx = Bb.vx; a.vz = Bb.vz; a.spin = clamp((a.spin || 0) + Bb.yawVel * 0.5, -3, 3);
+        p.x += A.x - bx; p.z += A.z - bz; p.vx = A.vx; p.vz = A.vz; p.yawVel = clamp(A.yawVel, -6, 6); a.x = Bb.x; a.z = Bb.z; a.vx = Bb.vx; a.vz = Bb.vz; a.spin = clamp((a.spin || 0) + Bb.yawVel * 0.5, -3, 3);
         if (res.vn > 1.5) { this.collisions.n++; this.collisions.maxJ = Math.max(this.collisions.maxJ, res.j); const cx = p.x + res.nx * pr, cz = p.z + res.nz * pr; spark(cx, cz, -res.nx, -res.nz, Math.min(10, Math.round(res.vn * 0.6)), [3, 2, 1]); a.hitT = Math.max(a.hitT, 0.12); if (res.vn > 5) this.audio.rockHit(cx, cz); }
         if (res.vn > 6) this.damageRock(a, res.e * 0.05);
         const dmg = this.impactDamage(res.vn, m, a.m) * tier;
         if (dmg > 0 && !st.fx.collision && !this.docked && this.dashT <= 0) this.hurtPlayer(dmg, a.x, a.z, { energy: false });
       }
-      // player vs ships (ramming): mass decides who gets shoved
-      this.hashE.query(p.x, p.z, pr + 0.5, cand);
+      // player vs ships (ramming): mass decides who gets shoved; capsule vs capsule for long hulls
+      this.hashE.query(p.x, p.z, (big ? p.bound : pr0) + 0.5, cand); const ce = this._ecp || (this._ecp = {});
       for (const e of cand) {
         if (e.dead || (e.type === 'sentinel' && e.state === 'idle' && e.cloaked)) continue;
-        const me = massOf(e); const er = e.radius * (e.D.inst ? 0.6 : 0.75);
-        this.body(A, p, p.x, p.z, p.vx, p.vz, m, pr, p.yawVel); this.body(Bb, e, e.x, e.z, e.vx || 0, e.vz || 0, me, er, 0);
+        const me = massOf(e); let er = e.radius * (e.D.inst ? 0.6 : 0.75); let ex = e.x, ez = e.z, bx = p.x, bz = p.z; pr = pr0;
+        if (e.segs) { this.capsulePt(e, p.x, p.z, ce); ex = ce.x; ez = ce.z; er = ce.r * 0.85; }
+        if (big) { this.capsulePt(p, ex, ez, cp); bx = cp.x; bz = cp.z; pr = cp.r * 0.85; if (e.segs) { this.capsulePt(e, bx, bz, ce); ex = ce.x; ez = ce.z; } }
+        this.body(A, p, bx, bz, p.vx, p.vz, m, pr, p.yawVel); this.body(Bb, e, ex, ez, e.vx || 0, e.vz || 0, me, er, 0);
         const res = collideCircles(A, Bb, 0.25); if (!res) continue;
-        p.x = A.x; p.z = A.z; p.vx = A.vx; p.vz = A.vz; p.yawVel = clamp(A.yawVel, -6, 6);
+        p.x += A.x - bx; p.z += A.z - bz; Bb.x += e.x - ex; Bb.z += e.z - ez; p.vx = A.vx; p.vz = A.vz; p.yawVel = clamp(A.yawVel, -6, 6);
         if (me !== Infinity) { e.x = Bb.x; e.z = Bb.z; e.vx = Bb.vx; e.vz = Bb.vz; if (res.vn > 2) { e.knockT = Math.min(0.7, res.vn * 0.04 * Math.min(1, m / me)); e.spinV = clamp(Bb.yawVel * 2 + (Math.random() - 0.5) * res.j / me, -4, 4); } }
         if (res.vn > 2) { this.collisions.n++; this.collisions.maxJ = Math.max(this.collisions.maxJ, res.j); spark(p.x + res.nx * pr, p.z + res.nz * pr, res.nx, res.nz, Math.min(14, Math.round(res.vn)), [3.4, 2.2, 1]); }
         if (res.vn > 6) { this.addShake(Math.min(0.4, res.vn * 0.02)); this.damageEnemy(e, (res.vn - 6) * m * 5 * st.dmg * (this.dashT > 0 ? 2 : 1), false, this.RAM_S || (this.RAM_S = { vsShip: 1, vsRock: 1, shieldMul: 1, pen: 0.3, ram: true })); }
@@ -1276,28 +1359,31 @@ export class Game {
     }
     // ships vs asteroids (near the player only)
     for (const e of this.enemies) {
-      if (e.dead || e.D.inst || e.D.part || Math.abs(e.x - p.x) > 110 || Math.abs(e.z - p.z) > 110) continue;
-      const me = massOf(e); const er = e.radius * 0.75;
-      this.hashR.query(e.x, e.z, er, cand);
+      if (e.dead || e.D.inst || e.D.part || Math.abs(e.x - p.x) > 110 + (e.bound || 0) || Math.abs(e.z - p.z) > 110 + (e.bound || 0)) continue;
+      const me = massOf(e); let er = e.radius * 0.75; const ce = this._ecp || (this._ecp = {});
+      this.hashR.query(e.x, e.z, e.segs ? e.bound * (e.scale || 1) : er, cand);
       for (const a of cand) {
         if (!a.alive) continue;
-        this.body(A, e, e.x, e.z, e.vx || 0, e.vz || 0, me, er, 0); this.body(Bb, a, a.x, a.z, a.vx || 0, a.vz || 0, a.m, a.r * 0.85, 0);
+        let ex = e.x, ez = e.z; if (e.segs) { this.capsulePt(e, a.x, a.z, ce); ex = ce.x; ez = ce.z; er = ce.r * 0.85; }
+        this.body(A, e, ex, ez, e.vx || 0, e.vz || 0, me, er, 0); this.body(Bb, a, a.x, a.z, a.vx || 0, a.vz || 0, a.m, a.r * 0.85, 0);
         const res = collideCircles(A, Bb, 0.3); if (!res) continue;
-        e.x = A.x; e.z = A.z; e.vx = A.vx; e.vz = A.vz; a.x = Bb.x; a.z = Bb.z; a.vx = Bb.vx; a.vz = Bb.vz;
+        e.x += A.x - ex; e.z += A.z - ez; e.vx = A.vx; e.vz = A.vz; a.x = Bb.x; a.z = Bb.z; a.vx = Bb.vx; a.vz = Bb.vz;
         if (res.vn > 4) { e.knockT = Math.min(0.5, res.vn * 0.03); a.hitT = 0.1; spark(e.x + res.nx * er, e.z + res.nz * er, -res.nx, -res.nz, 4, [3, 2, 1]); }
       }
     }
     // v7 ships vs ships: impulse collisions (mass-weighted; installations are immovable), replaces the old soft separation
     for (const e of this.enemies) {
-      if (e.dead || e.D.inst || e.D.part || Math.abs(e.x - p.x) > 130 || Math.abs(e.z - p.z) > 130) continue;
-      const me = massOf(e); const er = e.radius * 0.75;
-      this.hashE.query(e.x, e.z, er + 0.5, cand);
+      if (e.dead || e.D.inst || e.D.part || Math.abs(e.x - p.x) > 130 + (e.bound || 0) || Math.abs(e.z - p.z) > 130 + (e.bound || 0)) continue;
+      const me = massOf(e); let er = e.radius * 0.75; const c1 = this._c1 || (this._c1 = {}), c2 = this._c2 || (this._c2 = {});
+      this.hashE.query(e.x, e.z, (e.segs ? e.bound * (e.scale || 1) : er) + 0.5, cand);
       for (const o of cand) {
         if (o === e || o.dead || o.D.part || (!o.D.inst && o.uid <= e.uid) || (o.parent && o.parent === e) || (e.parent && e.parent === o)) continue;
-        const mo = massOf(o); const orr = o.radius * (o.D.inst ? 0.6 : 0.75);
-        this.body(A, e, e.x, e.z, e.vx || 0, e.vz || 0, me, er, e.yawVel || 0); this.body(Bb, o, o.x, o.z, o.vx || 0, o.vz || 0, mo, orr, o.yawVel || 0);
+        const mo = massOf(o); let orr = o.radius * (o.D.inst ? 0.6 : 0.75); let ox = o.x, oz = o.z, ex = e.x, ez = e.z;
+        if (o.segs) { this.capsulePt(o, e.x, e.z, c2); ox = c2.x; oz = c2.z; orr = c2.r * 0.85; }
+        if (e.segs) { this.capsulePt(e, ox, oz, c1); ex = c1.x; ez = c1.z; er = c1.r * 0.85; if (o.segs) { this.capsulePt(o, ex, ez, c2); ox = c2.x; oz = c2.z; } } else er = e.radius * 0.75;
+        this.body(A, e, ex, ez, e.vx || 0, e.vz || 0, me, er, e.yawVel || 0); this.body(Bb, o, ox, oz, o.vx || 0, o.vz || 0, mo, orr, o.yawVel || 0);
         const res = collideCircles(A, Bb, 0.3); if (!res) continue;
-        e.x = A.x; e.z = A.z; e.vx = A.vx; e.vz = A.vz; if (!e.D.boss) e.yawVel = clamp(A.yawVel, -4, 4);
+        e.x += A.x - ex; e.z += A.z - ez; Bb.x += o.x - ox; Bb.z += o.z - oz; e.vx = A.vx; e.vz = A.vz; if (!e.D.boss) e.yawVel = clamp(A.yawVel, -4, 4);
         if (mo !== Infinity) { o.x = Bb.x; o.z = Bb.z; o.vx = Bb.vx; o.vz = Bb.vz; if (!o.D.boss) o.yawVel = clamp(Bb.yawVel, -4, 4); }
         if (res.vn > 3) { this.collisions.n++; this.collisions.ships = (this.collisions.ships || 0) + 1; const lightE = me <= mo; const L = lightE ? e : o; L.knockT = Math.max(L.knockT || 0, Math.min(0.5, res.vn * 0.03));
           if (res.vn > 6) spark(e.x + res.nx * er, e.z + res.nz * er, res.nx, res.nz, Math.min(8, Math.round(res.vn * 0.5)), [3, 2, 1]); }
@@ -1337,9 +1423,22 @@ export class Game {
   // swept projectile query against a hash: earliest hit in [0,1] along x0,z0 -> x1,z1
   sweepHash(hash, x0, z0, x1, z1, pad, filter, radiusOf) {
     const cand = hash.queryBox(x0 - pad, z0 - pad, x1 + pad, z1 + pad, this._cand); let best = null, bt = 2;
-    for (const o of cand) { if (!filter(o)) continue; const t = sweptCircle(x0, z0, x1, z1, o.x, o.z, radiusOf(o)); if (t >= 0 && t < bt) { bt = t; best = o; } }
+    for (const o of cand) { if (!filter(o)) continue; const t = this.sweepShip(o, x0, z0, x1, z1, radiusOf(o)); if (t >= 0 && t < bt) { bt = t; best = o; } }
     return best ? { o: best, t: bt } : null;
   }
+  // v8 true-scale hitboxes: long hulls are a chain of circles along the keel (a capsule), not one huge bounding circle
+  sweepShip(o, x0, z0, x1, z1, r) {
+    const S = o.segs; if (!S) return sweptCircle(x0, z0, x1, z1, o.x, o.z, r);
+    const k = o.scale || 1, pad = r - o.radius; const hx = Math.sin(o.yaw || 0), hz = Math.cos(o.yaw || 0); let bt = -1;
+    for (const sg of S) { const t = sweptCircle(x0, z0, x1, z1, o.x + hx * sg.z * k, o.z + hz * sg.z * k, sg.r * k + Math.max(0, pad)); if (t >= 0 && (bt < 0 || t < bt)) bt = t; }
+    return bt;
+  }
+  capsulePt(o, qx, qz, out) { // closest point on the keel capsule to (qx,qz) -> out {x,z,r}
+    const S = o.segs; if (!S) { out.x = o.x; out.z = o.z; out.r = o.radius; return out; }
+    const k = o.scale || 1; const hx = Math.sin(o.yaw || 0), hz = Math.cos(o.yaw || 0); const t = clamp((qx - o.x) * hx + (qz - o.z) * hz, S[0].z * k, S[S.length - 1].z * k);
+    out.x = o.x + hx * t; out.z = o.z + hz * t; out.r = S[0].r * k; return out;
+  }
+  shipNear(o, x, z, extra = 0) { const c = this.capsulePt(o, x, z, this._cp || (this._cp = {})); return Math.hypot(x - c.x, z - c.z) < c.r + extra; }
 
   // ---------- v6 health-driven damage states (tied to real HP: regen/repairs heal the visuals too) ----------
   hullFx(x, z, yaw, vx, vz, R, lvl, D, k, fp) {
@@ -1407,7 +1506,7 @@ export class Game {
   // ---------- main update ----------
   update(dt) {
     this.time += dt; this.s.stats.playTime += dt; BOLT_TIME.value = DMG_TIME.value = this.time; this.vfx.frame(dt); this.vfx.update();
-    const p = this.player; const st = this.stats(); const T = TIERS[this.s.tier - 1];
+    const p = this.player; const st = this.stats(); const T = this.hull();
     this.field.setTime(this.time);
     // --- movement ---
     let ix = this.input.x, iz = this.input.z; const mag = Math.min(1, Math.hypot(ix, iz));
@@ -1422,6 +1521,10 @@ export class Game {
       if (this.docked) p.sh = Math.min(st.shield, p.sh + st.shield * 0.5 * dt);
       else if (this.time - this.lastShieldHit > st.shieldDelay && this.time - this.lastHurt > st.shieldDelay) p.sh = Math.min(st.shield, p.sh + st.shield * st.shieldRegen * dt);
       if (this.skillFx().autoRepair && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * this.skillFx().autoRepair * dt);
+      { const R = this.roleT || {}; // v8 hull roles: engineer self-repair, repair field, flak screen
+        if (st.regen && p.hp < p.maxHp && this.time - this.lastHurt > 2) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * st.regen * dt);
+        if (R.repair > this.time) { p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.06 * dt); if (Math.random() < 0.4 * this.fx.budget) this.fx.emit(p.x + rand(-1, 1) * p.radius, 1, p.z + rand(-1, 1) * p.radius, 0, 2, 0, 0.6, 0.7, 0.2, 0.5, 3.2, 1.2, 1); }
+        if (R.flak > this.time) { const fr = 16 + p.radius; for (const b of this.bolts.list) if (!b.dead && b.owner !== 'p' && Math.hypot(b.x - p.x, b.z - p.z) < fr) { b.dead = true; this.fx.emit(b.x, 0.8, b.z, 0, 1, 0, 0.25, 1, 0.2, 0.9, 2.6, 3.4, 3); this.flakKills = (this.flakKills || 0) + 1; } } }
     }
     if (!this.dead) {
       if (this.dashT > 0) { // quantum dash: fixed-velocity blink, then carry top speed
@@ -1430,14 +1533,14 @@ export class Game {
         if (this.dashT <= 0) { const m = Math.hypot(this.dashV.x, this.dashV.z) || 1; p.vx = this.dashV.x / m * st.speed; p.vz = this.dashV.z / m * st.speed; this.rings.spawn(p.x, 0.3, p.z, 4 + p.radius, [0.5, 3, 1.4], 0.3); this.shells.spawn(p.x, 0.6, p.z, p.radius * 2.6, [0.4, 2.6, 1.2], 0.3, { r0: p.radius * 0.5 }); }
       } else {
       const boost = this.time - this.emergThrustT < 4; const maxMul = (this.autopilot ? 1.15 * (1 + (st.fx.hyper || 0)) : 1) * (boost ? 1.5 : 1);
-      p.mass = TIER_MASS[this.s.tier - 1];
+      p.mass = T.mass;
       this.thr = this.flight.step(p, st, { x: ix, z: iz }, dt, { assist: this.autopilot ? 1 : assistValue(this.s.settings.assist), maxMul, boost: boost || (this.autopilot && (st.fx.hyper || 0) > 0) });
       }
     }
     if (this.dead || this.dashT > 0) { const t = this.thr; t.main = this.dashT > 0 ? 1.6 : 0; t.brake = t.rcsL = t.rcsR = t.latL = t.latR = 0; t.boost = this.dashT > 0 ? 1 : 0; }
     p.thrust = damp(p.thrust, this.thr.main, 8, dt);
     // station core (asteroid / ship collisions are resolved in physicsStep)
-    { const d = Math.hypot(p.x, p.z); const min = 8 + p.radius * 0.5; if (d < min && d > 0.001) { p.x = p.x / d * min; p.z = p.z / d * min; } }
+    { const d = Math.hypot(p.x, p.z); const min = 8 * STATION_SCALE + p.radius * 0.5; if (d < min && d > 0.001) { p.x = p.x / d * min; p.z = p.z / d * min; } }
     // banking follows the real angular velocity
     p.bank = damp(p.bank, clamp(p.yawVel * 0.22, -0.65, 0.65), 6, dt);
     p.group.position.set(p.x, Math.sin(this.time * 1.6) * 0.12, p.z);
@@ -1452,6 +1555,12 @@ export class Game {
     animateNavLights(p.model, this.time);
     for (const e of p.escorts || []) animateNavLights(e.obj, this.time);
     { const animated = {}; for (const e of this.enemies) if (!e.dead && !animated[e.type]) { animated[e.type] = 1; animateNavLights(e.group, this.time); } }
+    { // v8 LOD: far-away hulls collapse to instanced low-poly meshes, mid-range ones drop their greeble layer
+      const L = this._lodItems; L.length = 0;
+      for (const e of this.enemies) if (!e.dead && e.hullId) L.push({ g: e.group, lo: e.lo, key: e.hullId + ':' + e.scheme, len: e.hullLen, hidden: !e.group.visible || e.cloaked });
+      for (const a of this.allies) if (a.wing) L.push({ g: a.obj, lo: a.lo, key: a.hullId + ':' + a.scheme, len: a.len });
+      for (const f of this.camp.friends) if (!f.dead && f.kind === 'patrol') L.push({ g: f.obj, lo: null, key: '', len: f.bound * 2 });
+      this.lod.update(this.camera, L); }
     for (const k in this.protos) this.protos[k].flameMat.uniforms.uTime.value = this.time;
     // shield ripple
     { const frac = st.shield ? p.sh / st.shield : 0; if (this.prevSh <= 0.001 && p.sh > 0 && !this.dead) this.shieldFx.regen(); this.prevSh = p.sh;
@@ -1475,7 +1584,7 @@ export class Game {
     if (this.docked && !wasDocked) { this.audio.docked(); this.autopilot = false; this.dockT = 0; p.vx *= 0.35; p.vz *= 0.35; this.rings.spawn(p.x, 0, p.z, 6 + p.radius * 2, [0.4, 1.8, 2.8], 0.7); this.ui && this.ui.onDock(); }
     if (this.docked) {
       this.dockT += dt; if (this.dockT < 1.2) { const k = Math.exp(-2.5 * dt); p.vx *= k; p.vz *= k; }
-      const port = this.stationRoot.userData.dockPort; const tb = this.tractor; const hit = this.tmpV2.set(p.x, 0.3, p.z);
+      const port = this.stationRoot.userData.dockPortW || this.stationRoot.userData.dockPort; const tb = this.tractor; const hit = this.tmpV2.set(p.x, 0.3, p.z);
       tb.visible = true; tb.position.set(port.x, port.y + 0.5, port.z); tb.lookAt(hit); tb.scale.z = Math.max(0.5, tb.position.distanceTo(hit) - p.radius * 0.4);
       const a = 0.35 + 0.65 * Math.max(0, 1 - this.dockT / 1.5); const w = (0.18 + 0.05 * Math.sin(this.time * 9)) * (0.6 + a);
       tb.scale.x = tb.scale.y = w; tb.material.opacity = a; tb.children[0].material.opacity = 0.25 * a;
@@ -1494,7 +1603,7 @@ export class Game {
     // waypoint arrival
     { const wp = this.s.galaxy.wp; if (wp && Math.hypot(wp.x - p.x, wp.z - p.z) < 12 + p.radius) { this.toast(`Waypoint reached: ${wp.label}`, 'good'); this.audio.click(); this.s.galaxy.wp = null; this.save(); } }
     // world streaming
-    this.field.loadR = this.s.tier >= 4 ? 3 : 2;
+    this.field.loadR = clamp(Math.ceil((this.camDist || 42) * 0.62 / 44) + 1, 2, 5); // v8: wider streaming when a big hull pulls the camera back
     const P = this.prof; let pt = performance.now(); const lap = (k) => { const n = performance.now(); P.add(k, n - pt); pt = n; };
     this.field.update(p.x, p.z, this.time, dt); lap('world');
     this.director(dt);
@@ -1503,7 +1612,7 @@ export class Game {
     this.physicsStep(dt); lap('physics');
     this.updateWeapons(dt); lap('weapons');
     this.updateBolts(dt); lap('bolts');
-    this.updateLoot(dt); this.updateCaches(dt); this.updateAllies(dt); lap('world');
+    this.updateLoot(dt); this.updateCaches(dt); this.updateWing(dt); this.updateAllies(dt); lap('world');
     // minerals
     const cap = st.cargo;
     this.minerals.update(dt, p.x, p.z, st.magnet, p.radius + 1.0, () => !this.dead && this.cargoTotal() < cap, (o) => {
@@ -1526,7 +1635,7 @@ export class Game {
     lap('world'); this.fx.update(dt); this.debris.update(dt); this.rings.update(dt);
     animateStation(this.stationRoot, this.time, dt);
     if (this.smoke.budget > 0) for (const v of this.stationRoot.userData.anim.stacks) if (Math.random() < 0.25) {
-      this.smoke.emit(v.x + rand(-0.2, 0.2), v.y, v.z + rand(-0.2, 0.2), rand(-0.3, 0.3) + 0.4, rand(1.2, 2), rand(-0.3, 0.3) - 0.3, 2.6, 0.6, 3.2, 0.24, 0.23, 0.25, 0.3, 0.55);
+      this.smoke.emit(v.x + rand(-0.2, 0.2), v.y, v.z + rand(-0.2, 0.2), rand(-0.3, 0.3) + 0.4, rand(1.2, 2), rand(-0.3, 0.3) - 0.3, 2.6, 0.6 * STATION_SCALE, 3.2 * STATION_SCALE, 0.24, 0.23, 0.25, 0.3, 0.55);
       if (Math.random() < 0.3) this.fx.emit(v.x, v.y + 0.1, v.z, 0, 0.8, 0, 0.5, 0.9, 0.3, 1.6, 0.6, 0.15, 1);
     }
     this.smoke.update(dt); this.flashes.update(dt);
@@ -1553,15 +1662,15 @@ export class Game {
   // v7 camera: spring-damped follow with a velocity-aware lead, lag under boost, contextual zoom
   // (exploration / speed / combat fit / boss) and directional impulse springs instead of random shake.
   camContext() {
-    const p = this.player; let threats = 0, far = 0, boss = !!(this.boss && !this.boss.dead);
-    for (const e of this.enemies) { if (e.dead || !e.group.visible || e.ally) continue; const d = Math.hypot(e.x - p.x, e.z - p.z); if (d > 48) continue;
-      if (e.D.boss || e.type === 'flagship' || e.type === 'commander') boss = true; threats++; if (d > far && threats <= 6) far = d; }
+    const p = this.player; let threats = 0, far = 0, boss = !!(this.boss && !this.boss.dead), bossFar = 0; const K = this.hull().cam;
+    for (const e of this.enemies) { if (e.dead || !e.group.visible || e.ally) continue; const d = Math.hypot(e.x - p.x, e.z - p.z) - (e.bound || e.radius) * 0.5; if (d > 48 * K + (e.bound || 0)) continue;
+      if (e.D.boss || e.type === 'flagship' || e.type === 'commander') { boss = true; bossFar = Math.max(bossFar, d + (e.bound || e.radius)); } threats++; if (d > far && threats <= 6) far = d; }
     const env = this.phen && this.phen.env; const bh = env && (env.bh > 0.2 || env.grav > 0.4);
-    return { threats, far, boss, bh };
+    return { threats, far, boss, bossFar, bh };
   }
   updateCamera(dt, aspect) {
     if (this.camOverride) { const o = this.camOverride; this.camera.position.set(o.x, o.y, o.z); this.camera.lookAt(o.tx, o.ty, o.tz); return; }
-    const p = this.player; const T = TIERS[this.s.tier - 1]; const C = this.camFx; dt = Math.min(dt, 0.05);
+    const p = this.player; const T = this.hull(); const C = this.camFx; dt = Math.min(dt, 0.05);
     const portrait = aspect < 1;
     const base = portrait ? 42 : 34;
     // contextual zoom target
@@ -1569,13 +1678,13 @@ export class Game {
     const X = this._ctx || { threats: 0, far: 0 }; const sp = Math.hypot(p.vx, p.vz); const vmax = 15 * (T.speed || 1); const sf = clamp(sp / (vmax || 15), 0, 1.6);
     let zt = 0.94, ctx = 'explore';
     if (sf > 0.6) { zt = 0.98 + (sf - 0.6) * 0.16; ctx = 'speed'; }
-    if (X.threats) { const fit = clamp(X.far / (base * 0.58), 1, 1.28); zt = Math.max(zt, fit); ctx = 'combat'; }
-    if (X.boss) { zt = Math.max(zt, 1.2); ctx = 'boss'; }
+    if (X.threats) { const fit = clamp(X.far / (base * T.cam * 0.58), 1, 1.28); zt = Math.max(zt, fit); ctx = 'combat'; }
+    if (X.boss) { zt = Math.max(zt, 1.2, clamp(X.bossFar / (base * T.cam * 0.62), 1, 3)); ctx = 'boss'; } // true-scale capital bosses: pull back until the whole hull is in frame
     if (X.bh) { zt = Math.max(zt, 1.12); ctx = 'hazard'; }
     if (this.dashT > 0) zt += 0.05;
     C.punch = Math.max(0, C.punch - dt * 0.6); zt += C.punch; C.ctx = ctx;
     C.zoom = damp(C.zoom, zt, zt > C.zoom ? 1.6 : 0.9, dt);
-    const dist = base * T.cam * (portrait ? clamp(0.6 / aspect, 1, 1.2) : 1) * C.zoom;
+    const dist = base * T.cam * (portrait ? clamp(0.6 / aspect, 1, 1.2) : 1) * C.zoom; this.camDist = dist;
     const elev = 1.02; // radians (~58 deg)
     // look target leads the velocity (more at speed, capped), spring-follow lags behind boosts and dashes
     const leadK = 0.32 + 0.18 * clamp(sf, 0, 1); C.lead = leadK;

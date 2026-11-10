@@ -1,21 +1,24 @@
 // HUD, joystick, radar and menus (DOM overlay)
-import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=7';
-import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=7';
-import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=7';
-import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=7';
-import { factionStats, WAR_LEVELS, allied } from './war.js?v=7';
-import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=7';
-import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=7';
-import { INV_CAP } from './save.js?v=7';
-import { fmt, clamp } from './util.js?v=7';
-import { FloatText } from './fx.js?v=7';
-import { Preview } from './preview.js?v=7';
-import { PRESETS } from './quality.js?v=7';
-import { PHEN } from './phenomena.js?v=7';
+import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=8';
+import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=8';
+import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=8';
+import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=8';
+import { factionStats, WAR_LEVELS, allied } from './war.js?v=8';
+import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=8';
+import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=8';
+import { INV_CAP } from './save.js?v=8';
+import { fmt, clamp } from './util.js?v=8';
+import { FloatText } from './fx.js?v=8';
+import { Preview } from './preview.js?v=8';
+import { HULLS, HULL_IDS, UNIT_M } from './hulls.js?v=8';
+import { PRESETS } from './quality.js?v=8';
+import { PHEN } from './phenomena.js?v=8';
 
 const $ = (id) => document.getElementById(id);
-const TIER_CROPS = [[18, 368, 120, 100], [122, 305, 232, 190], [320, 228, 275, 255], [495, 220, 385, 310], [745, 105, 530, 490]];
-const ABIL_ICON = { dash: '⇶', emp: 'ϟ', overload: '⛨', barrage: '➹', surge: '✷', drones: '✣' };
+// v8: shipyard cards are cropped straight from the Stellar Odyssey concept sheet (art/ship-concepts.jpg, 1536x1024)
+const HULL_CROPS = { scout: [23, 135, 128, 86], interceptor: [165, 135, 135, 86], strike: [328, 131, 141, 90], corvette: [506, 131, 141, 90], gunship: [660, 131, 146, 90], engineer: [821, 131, 126, 90], frigate: [985, 124, 150, 98], destroyer: [1140, 124, 154, 98], cruiser: [1313, 109, 173, 113],
+  bomber: [19, 323, 203, 113], icarrier: [234, 319, 206, 116], explorer: [441, 311, 169, 124], battlecruiser: [656, 309, 422, 122], fleetcarrier: [1050, 285, 478, 143], dreadnought: [281, 491, 1219, 343] };
+const ABIL_ICON = { dash: '⇶', emp: 'ϟ', overload: '⛨', barrage: '➹', surge: '✷', drones: '✣', recon: '◎', afterburn: '»', strikerun: '✦', bombrun: '✹', flak: '❋', broadside: '≡', repair: '✚', scan: '⌖', tactical: '⇄', torpedo: '➤', wing: '⋔', command: '♛', titanlance: '⟿' };
 const STAT_ROWS = [['dps', 'DPS', 1], ['dmg', 'Damage', 1], ['rate', 'Fire rate', 2], ['range', 'Range', 1], ['energy', 'Energy use', 1, true], ['heat', 'Heat', 1, true], ['speed', 'Proj. speed', 0], ['shieldMul', 'vs Shields', 2], ['pen', 'Armor pen.', 'pct'], ['crit', 'Crit bonus', 'pct']];
 const CRYSTAL = '<svg viewBox="0 0 24 24" class="ico"><path d="M12 2l6 6-6 14-6-14z" fill="#bfe9ff" stroke="#7fd7ff" stroke-width="1"/><path d="M6 8h12M12 2v20" stroke="#6ab" stroke-width=".6"/></svg>';
 
@@ -27,7 +30,7 @@ export class UI {
     this.radar = $('radar'); this.rctx = this.radar.getContext('2d');
     this.joy = { active: false, id: null, ox: 0, oy: 0, x: 0, y: 0 };
     this.keys = {};
-    this.tiersImg = new Image(); this.tiersImg.src = 'art/tiers.jpg';
+    this.tiersImg = new Image(); this.tiersImg.src = 'art/ship-concepts.jpg';
     this.bind();
     this.hudT = 0; this.radarT = 0; this.liveT = 0; this.preview = new Preview(); this.pvTier = null; this.confirmKey = null;
     this.upTab = 'skills'; this.branch = 'weapons'; this.selSkill = null; this.selItem = null; this.invFilter = 'all'; this.mapView = null; this.mapSel = null; this.abilKey = ''; this.mTab = 'log'; this.mapPanel = 'sector';
@@ -238,7 +241,7 @@ export class UI {
   refreshHud(force) {
     const g = this.g, s = g.s, st = g.stats();
     $('lvlNum').textContent = s.level;
-    $('lvlTitle').textContent = LEVEL_TITLES[Math.min(LEVEL_TITLES.length - 1, Math.floor((s.level - 1) / 3))].toUpperCase();
+    $('lvlTitle').textContent = LEVEL_TITLES[Math.min(LEVEL_TITLES.length - 1, Math.floor((s.level - 1) / 3))].toUpperCase() + ' · ' + g.hull().name.toUpperCase(); // v8: hull class on the HUD
     const need = xpForLevel(s.level); $('xpFill').style.width = (100 * s.xp / need).toFixed(1) + '%'; $('xpText').textContent = `${fmt(s.xp)} / ${fmt(need)} XP`;
     const sp = g.spAvail(); const chip = $('spChip'); chip.firstChild.textContent = sp; chip.classList.toggle('has', sp > 0);
     const p = g.player; $('shFill').style.width = (st.shield ? 100 * Math.max(0, p.sh) / st.shield : 0).toFixed(1) + '%'; $('enFill').style.width = (100 * Math.max(0, p.energy) / st.energyMax).toFixed(1) + '%';
@@ -312,7 +315,7 @@ export class UI {
   }
   drawRadar() {
     const c = this.radar, ctx = this.rctx, g = this.g; const S = c.width, R = S / 2;
-    const T = TIERS[g.s.tier - 1]; const st = g.stats(); const HZ = g.phen ? g.phen.env : null; const neb = HZ ? HZ.neb : 0, ion = HZ ? HZ.ion : 0; const range = 85 * T.cam * st.radar * (1 - 0.45 * neb); const k = (R - 6) / range; this.radarRange = range; const px = g.player.x, pz = g.player.z; const fx = st.fx;
+    const T = g.hull(); const st = g.stats(); const HZ = g.phen ? g.phen.env : null; const neb = HZ ? HZ.neb : 0, ion = HZ ? HZ.ion : 0; const range = 85 * T.cam * st.radar * (1 - 0.45 * neb); const k = (R - 6) / range; this.radarRange = range; const px = g.player.x, pz = g.player.z; const fx = st.fx;
     ctx.clearRect(0, 0, S, S);
     ctx.save(); ctx.beginPath(); ctx.arc(R, R, R - 3, 0, Math.PI * 2); ctx.clip();
     const grd = ctx.createRadialGradient(R, R, 0, R, R, R); grd.addColorStop(0, 'rgba(10,40,60,0.75)'); grd.addColorStop(1, 'rgba(4,14,26,0.85)');
@@ -342,10 +345,12 @@ export class UI {
     for (const e of g.enemies) { if (e.dead || e.cloaked) continue; if (ion > 0.05 && !e.D.inst && Math.random() < ion * 0.55) continue; // ion storms drop contacts
       if (e.D.inst) { const F = FACTIONS[e.faction]; const sx = R + (e.x - px) * k, sy = R + (e.z - pz) * k; if ((sx - R) ** 2 + (sy - R) ** 2 > (R - 4) ** 2) continue; const sz = e.type === 'inst_core' ? 5 : 2.6; ctx.fillStyle = F ? F.color : '#ff4455'; ctx.fillRect(sx - sz / 2, sy - sz / 2, sz, sz); if (e.type === 'inst_core') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(sx - sz / 2 - 1.5, sy - sz / 2 - 1.5, sz + 3, sz + 3); } continue; }
       if (e.D.part || !e.group.visible) continue;
+      if (e.segs && e.hullLen * k > 5) { const sx = R + (e.x - px) * k, sy = R + (e.z - pz) * k; const L = e.hullLen * k * (e.scale || 1), W = Math.max(2.5, L * 0.26); ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.PI - e.yaw); ctx.fillStyle = e.D.boss ? '#ff3df2' : e.faction ? FACTIONS[e.faction].color : '#ff4455'; ctx.beginPath(); ctx.moveTo(0, -L / 2); ctx.lineTo(W / 2, -L * 0.2); ctx.lineTo(W / 2, L / 2); ctx.lineTo(-W / 2, L / 2); ctx.lineTo(-W / 2, -L * 0.2); ctx.closePath(); ctx.fill(); ctx.restore(); } else // v8: capital hulls show their true outline
       dot(e.x, e.z, e.D.boss ? 6 : e.type === 'capital' ? 4.5 : e.type === 'gunship' || e.type === 'freighter' ? 3.2 : 2.4, e.D.boss ? '#ff3df2' : e.type === 'freighter' ? '#ffd166' : e.type === 'sentinel' ? '#ffaa33' : e.faction ? FACTIONS[e.faction].color : '#ff4455');
       if (e.battle || e.D.boss || e.mid) { const sx = R + (e.x - px) * k, sy = R + (e.z - pz) * k; ctx.strokeStyle = e.D.boss ? '#ff3df2' : e.mid ? '#ffd166' : 'rgba(200,160,255,.8)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(sx, sy, e.D.boss ? 9 : 4.5, 0, Math.PI * 2); ctx.stroke(); }
       if (e.elite && fx.eliteDmg) { const sx = R + (e.x - px) * k, sy = R + (e.z - pz) * k; ctx.strokeStyle = '#ffb238'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(sx, sy, 4.5, 0, Math.PI * 2); ctx.stroke(); } }
     for (const f of g.camp.friends) if (!f.dead) dot(f.x, f.z, f.big ? 4 : 2.6, '#5dff98');
+    for (const al of g.allies) if (al.wing) dot(al.x, al.z, 1.6, '#7fb2ff');
     // identified installations beyond radar range
     for (const sec of [g.gsec, ...neighbours(g.gsec)]) { if (!isPirate(sec) || g.s.galaxy.liberated[sec.id]) continue; for (const o of installations(sec)) { if (g.s.galaxy.inst[o.id] || g.liveOutposts.has(o.id) || !(g.s.galaxy.spot[o.id] || fx.detect)) continue; const sx = R + (o.x - px) * k, sy = R + (o.z - pz) * k; if ((sx - R) ** 2 + (sy - R) ** 2 > (R - 4) ** 2) continue; ctx.strokeStyle = FACTIONS[sec.faction].color; ctx.lineWidth = 1.5; ctx.strokeRect(sx - 3, sy - 3, 6, 6); } }
     // station
@@ -465,27 +470,39 @@ export class UI {
     } else h += `<div class="card"><h4>MAXIMUM LEVEL</h4><p>Your Frontier Citadel is complete.</p></div>`;
     return h;
   }
-  tierCanvas(i) { return `<canvas class="tierArt" data-tier="${i}" width="200" height="120"></canvas>`; }
+  tierCanvas(id) { return `<canvas class="tierArt" data-hull="${id}" width="200" height="120"></canvas>`; }
   tab_shipyard() {
-    const g = this.g, s = g.s; let h = this.dockNote();
-    const pt = this.pvTier || Math.min(5, s.tier + 1); const PT = TIERS[pt - 1];
-    h += `<div class="card pvCard"><div class="pvSlot" data-kind="ship" data-arg="${pt}"><span class="pvTag">TIER ${pt} · ${PT.name.toUpperCase()}</span></div>
-      <div class="seg pvSel">${TIERS.map((T) => `<button class="${pt === T.tier ? 'on' : ''}" data-act="pvtier" data-t="${T.tier}">T${T.tier}</button>`).join('')}</div></div>`;
-    TIERS.forEach((T, i) => {
-      const owned = s.tier >= T.tier, next = T.tier === s.tier + 1; const inf = g.tierInfo(T.tier);
-      const req = T.tier > 1 ? `Requires station Lv ${T.station}` : '';
-      h += `<div class="card tier ${owned ? 'owned' : ''} ${s.tier === T.tier ? 'cur' : ''}">${this.tierCanvas(i)}<div class="tinfo"><small>TIER ${T.tier} · ${T.cls.toUpperCase()}</small><h4>${T.name}</h4>
-        <p>${T.slots} weapon slot${T.slots > 1 ? 's' : ''} · Hull ${T.hp} · Cargo ${T.cargo}${T.tier >= 4 ? ' · escort drones' : ''}</p>
-        ${owned ? `<span class="tag">${s.tier === T.tier ? 'ACTIVE' : 'OWNED'}</span>` : `<p class="${s.stationLvl >= T.station ? 'okreq' : 'req'}">${req}</p><div class="mats">${this.matsHtml(T.mats)}</div>
-        ${next ? `<button class="btn gold" data-act="tier" data-t="${T.tier}" data-cost="${T.cost}" data-block="${!g.docked || !inf.ok ? 1 : 0}">BUILD ${CRYSTAL}${fmt(T.cost)}</button>` : '<span class="tag dim">LOCKED</span>'}`}</div></div>`;
-    });
+    const g = this.g, s = g.s; let h = this.dockNote(); const cur = g.hull();
+    const nextMain = HULL_IDS.find((id) => !s.hulls.includes(id) && g.hullInfo(id).prereq && !HULLS[id].side) || cur.id;
+    const pid = HULLS[this.pvHull] ? this.pvHull : nextMain; const PT = HULLS[pid]; const ratio = PT.len / HULLS.scout.len;
+    h += `<div class="card pvCard"><div class="pvSlot" data-kind="ship" data-arg="${HULL_IDS.indexOf(pid)}"><span class="pvTag">${PT.name.toUpperCase()} · ${Math.round(PT.len * UNIT_M)} m · ${ratio < 1.05 ? '1×' : ratio.toFixed(ratio < 10 ? 1 : 0) + '×'} SCOUT</span></div>
+      <div class="seg pvSel wrap">${HULL_IDS.map((id) => `<button class="${pid === id ? 'on' : ''} ${s.hulls.includes(id) ? 'own' : ''}" data-act="pvhull" data-h="${id}">${HULLS[id].name.replace(' Fighter', '').replace('Intercept ', 'I-').replace('Fleet ', 'F-')}</button>`).join('')}</div>
+      <p class="muted small">Preview shows the hull at true scale beside a ghosted Scout.</p></div>`;
+    h += `<p class="muted">Climb the class path: each rank unlocks at a station level and needs one of the hulls before it. Side-grades (◆) branch off the main line with their own roles. You keep every hull you build: switch between them here while docked.</p>`;
+    const RANK = ['', 'SMALL', 'FIGHTER', 'MEDIUM', 'LARGE', 'HEAVY', 'CAPITAL', 'TITAN'];
+    for (let r = 1; r <= 7; r++) {
+      const ids = HULL_IDS.filter((id) => HULLS[id].rank === r); if (!ids.length) continue;
+      h += `<h5>RANK ${r} · ${RANK[r]}</h5>`;
+      for (const id of ids) {
+        const T = HULLS[id]; const inf = g.hullInfo(id); const owned = inf.owned, active = s.hull === id; const A = ABILITIES[T.ability];
+        const from = T.from.length ? `Needs ${T.from.map((f) => HULLS[f].name).join(' or ')}` : ''; const req = [from, T.station > 1 ? `Station Lv ${T.station}` : ''].filter(Boolean).join(' · ');
+        const perks = [T.vsBase ? `×${T.vsBase} vs bases` : '', T.vsBig ? `×${T.vsBig} vs capitals` : '', T.wing ? `${T.wing.n} ${T.wing.name}s in the hangar` : '', T.regen ? 'self-repair' : '', T.radar ? `radar ×${T.radar}` : '', T.mining ? `mining ×${T.mining}` : '', T.armor ? `${Math.round(T.armor * 100)}% armour` : ''].filter(Boolean).join(' · ');
+        h += `<div class="card tier ${owned ? 'owned' : ''} ${active ? 'cur' : ''}" data-hull="${id}">${this.tierCanvas(id)}<div class="tinfo"><small>${T.side ? '◆ SIDE-GRADE · ' : ''}${T.cls.toUpperCase()} · ${Math.round(T.len * UNIT_M)} m</small><h4>${T.name}</h4>
+          <p class="muted small">${T.role}</p>
+          <p>${T.slots} hardpoint${T.slots > 1 ? 's' : ''} · Hull ${T.hp} · Cargo ${T.cargo}${perks ? ' · ' + perks : ''}</p>
+          ${A ? `<p class="abilLine"><b style="color:${A.color}">${A.name}</b> · ${A.desc}</p>` : ''}
+          ${owned ? (active ? '<span class="tag">ACTIVE</span>' : `<button class="btn" data-act="flyhull" data-h="${id}" data-cost="0" data-block="${g.docked ? 0 : 1}">FLY THIS SHIP</button><span class="tag dim">OWNED</span>`)
+            : `<p class="${inf.prereq && s.stationLvl >= T.station ? 'okreq' : 'req'}">${req}</p><div class="mats">${this.matsHtml(T.mats)}</div>
+            ${inf.prereq ? `<button class="btn gold" data-act="hull" data-h="${id}" data-cost="${T.cost}" data-block="${!g.docked || !inf.ok ? 1 : 0}">BUILD ${CRYSTAL}${fmt(T.cost)}</button>` : '<span class="tag dim">LOCKED</span>'}`}</div></div>`;
+      }
+    }
     setTimeout(() => this.drawTierArt(), 0);
     return h;
   }
   drawTierArt() {
     const img = this.tiersImg; if (!img.complete) { img.onload = () => this.drawTierArt(); return; }
     document.querySelectorAll('canvas.tierArt').forEach((c) => {
-      const [x, y, w, h] = TIER_CROPS[+c.dataset.tier]; const ctx = c.getContext('2d');
+      const [x, y, w, h] = HULL_CROPS[c.dataset.hull] || HULL_CROPS.scout; const ctx = c.getContext('2d');
       const s = Math.min(c.width / w, c.height / h); const dw = w * s, dh = h * s;
       ctx.fillStyle = '#05080f'; ctx.fillRect(0, 0, c.width, c.height);
       ctx.drawImage(img, x, y, w, h, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
@@ -791,7 +808,7 @@ export class UI {
       <div class="card"><h4>CONTROLS</h4><p>Touch: drag anywhere to steer (virtual joystick). Weapons fire automatically. Tap the round ability buttons on the right; tap the radar for the galaxy map.<br>Desktop: WASD / arrow keys or drag with the mouse. 1–6 = abilities, Space = Quantum Dash, G = galaxy map, K = skills, I = gear, U = upgrades, M = missions, F = factory, H = station/autopilot, Esc = close.</p></div>
       <div class="card row"><span>Progress autosaves every few seconds.</span><span class="btnrow"><button class="btn sm gold" data-act="save">Save game</button><button class="btn sm" data-act="saves">Save / Load…</button></span></div>
       <div class="card row"><span>Erase all progress</span><button class="btn sm danger" data-act="reset" data-confirm="1">Reset</button></div>
-      <p class="muted">Stellar Frontier v7 · Built with three.js · Living space: planets, nebulae, ion storms, gravity wells & a black hole · Destructible bases · Newtonian flight & impulse physics · Sound effects synthesised in real time</p>`;
+      <p class="muted">Stellar Frontier v8 · Built with three.js · 15 true-scale hull classes from the Stellar Odyssey concept sheet · Living space: planets, nebulae, ion storms, gravity wells & a black hole · Destructible bases · Newtonian flight & impulse physics · Sound effects synthesised in real time</p>`;
   }
   renderGraphicsCard(st) { // v7: quality presets with auto-detect, camera shake level, frame cap, performance overlay
     const det = this.opts.detected || { q: 'medium', why: '' }; const act = this.opts.activeQuality ? this.opts.activeQuality() : det.q;
@@ -864,7 +881,7 @@ export class UI {
       }
       this.confirmKey = null;
     }
-    if (b.classList.contains('dis') && !['toggle', 'quality', 'shakelvl', 'fpscap', 'assist', 'musicmode', 'track', 'reset', 'save', 'autopilot', 'saves', 'pvtier', 'equip', 'buyskill'].includes(a)) { this.toast(b.dataset.block === '1' && !g.docked && ['respec', 'buyitem', 'station', 'tier'].includes(a) ? 'Dock at the station first' : a === 'itemup' ? 'Not enough credits or components' : 'Not enough credits or materials', 'warn'); this.audio.denied(); return; }
+    if (b.classList.contains('dis') && !['toggle', 'quality', 'shakelvl', 'fpscap', 'assist', 'musicmode', 'track', 'reset', 'save', 'autopilot', 'saves', 'pvtier', 'pvhull', 'equip', 'buyskill'].includes(a)) { this.toast(b.dataset.block === '1' && !g.docked && ['respec', 'buyitem', 'station', 'tier', 'hull', 'flyhull'].includes(a) ? 'Dock at the station first' : a === 'itemup' ? 'Not enough credits or components' : 'Not enough credits or materials', 'warn'); this.audio.denied(); return; }
     switch (a) {
       case 'sell': { const r = g.sellCargo(); if (r) this.toast(`Sold: +${r.credits} cr`, 'good'); break; }
       case 'sellvault': g.sellVault(b.dataset.k, 10); break;
@@ -872,6 +889,9 @@ export class UI {
       case 'facup': g.upgradeFactory(b.dataset.w); break;
       case 'station': g.upgradeStation(); break;
       case 'tier': g.buyTier(+b.dataset.t); break;
+      case 'hull': g.buyHull(b.dataset.h); break;
+      case 'flyhull': g.flyHull(b.dataset.h); break;
+      case 'pvhull': this.pvHull = b.dataset.h; break;
       case 'buyitem': { if (!g.docked) { this.toast('Dock at the station first', 'warn'); return; } const it = g.buyItem(b.dataset.t); if (it) this.selItem = it.id; break; }
       case 'gotogear': this.open('upgrades', null, 'gear'); return;
       case 'branch': this.branch = b.dataset.b; this.selSkill = null; break;

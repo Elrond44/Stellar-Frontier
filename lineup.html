@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stellar Frontier · Fleet Registry (true scale)</title>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<style>
+  html,body{margin:0;height:100%;background:#03060d;color:#cfe3ff;font:600 13px/1.3 system-ui,sans-serif;overflow:hidden}
+  canvas{display:block;width:100%;height:100%}
+  #hdr{position:absolute;left:16px;top:10px;letter-spacing:.12em}
+  #hdr h1{margin:0;font-size:22px;color:#e8f2ff}#hdr small{color:#7fa3cc}
+  .lbl{position:absolute;transform:translate(-50%,0);text-align:center;white-space:nowrap;text-shadow:0 1px 3px #000;pointer-events:none}
+  .lbl b{display:block;color:#fff;font-size:12px}.lbl i{font-style:normal;color:#8fb4dd;font-size:10px}
+  #cls{position:absolute;inset:0;pointer-events:none}
+  .ct{position:absolute;color:#9fc6ff;font-size:12px;letter-spacing:.14em;border-bottom:1px solid #2b4a74;padding-bottom:2px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hdr"><h1>STELLAR FRONTIER · FLEET REGISTRY</h1><small>All fifteen hulls at true relative scale · 1 grid square = 50 m</small></div>
+<div id="cls"></div>
+<script type="module">
+import * as THREE from 'three';
+import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=8';
+import { makeFlames, animateNavLights } from './src/models.js?v=8';
+const q = new URLSearchParams(location.search); const mode = q.get('mode') || 'lineup';
+const canvas = document.getElementById('c'); const R = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.1; R.outputColorSpace = THREE.SRGBColorSpace; R.setPixelRatio(Math.min(2, devicePixelRatio));
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x03060d);
+scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x2a1830, 0.75)); const key = new THREE.DirectionalLight(0xffe6c8, 2.6); key.position.set(-30, 60, 40); scene.add(key); const rim = new THREE.DirectionalLight(0x5aa0ff, 1.4); rim.position.set(40, 10, -60); scene.add(rim);
+{ const es = new THREE.Scene(); es.add(new THREE.Mesh(new THREE.SphereGeometry(10, 24, 12), new THREE.ShaderMaterial({ side: THREE.BackSide, vertexShader: 'varying vec3 vP; void main(){ vP=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}', fragmentShader: 'varying vec3 vP; void main(){ float t=vP.y*0.5+0.5; vec3 c=mix(vec3(0.05,0.03,0.08),vec3(0.35,0.5,0.8),t); c+=vec3(1.4,0.9,0.6)*pow(max(0.0,dot(vP,normalize(vec3(-0.5,0.8,0.4)))),12.0); gl_FragColor=vec4(c,1.0);}' })));
+  const pm = new THREE.PMREMGenerator(R); scene.environment = pm.fromScene(es, 0.02).texture; scene.environmentIntensity = 0.8; }
+{ const g = new THREE.BufferGeometry(); const n = 2500, p = new Float32Array(n * 3); for (let i = 0; i < n; i++) { p[i * 3] = (Math.random() - 0.5) * 3000; p[i * 3 + 1] = -200 - Math.random() * 300; p[i * 3 + 2] = (Math.random() - 0.5) * 3000; } g.setAttribute('position', new THREE.BufferAttribute(p, 3)); scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9fb8ff, size: 1.6, sizeAttenuation: false }))); }
+const camera = new THREE.PerspectiveCamera(30, 1, 1, 5000); const ships = []; const labels = []; window.READY = false;
+function place(id, scheme, x, z, yaw = Math.PI / 2, tilt = 0) {
+  const b = buildHull(id, { scheme, turrets: 'enemy' }); const g = b.group; g.position.set(x, 0, z); g.rotation.set(tilt, yaw, 0, 'YXZ');
+  const fl = makeFlames(b.engines, b.engColor); fl.mat.uniforms.uPower.value = 0.8; for (const f of fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.6); f.sprite.scale.setScalar(f.r * 3.2); } g.add(fl.group);
+  scene.add(g); ships.push({ g, b, fl }); return b;
+}
+const lbl = (txt, sub, x, y, z) => labels.push({ txt, sub, v: new THREE.Vector3(x, y, z) });
+if (mode === 'lineup') {
+  // rows like the sheet, every hull at true scale, noses pointing right
+  const rows = [['scout', 'interceptor', 'strike', 'bomber'], ['corvette', 'gunship', 'engineer', 'explorer'], ['frigate', 'destroyer', 'icarrier', 'cruiser'], ['battlecruiser', 'fleetcarrier'], ['dreadnought']];
+  let z = 0; const rowsW = rows.map((row) => row.reduce((w, id) => w + HULLS[id].len, 0) + (row.length - 1) * (HULLS[row[0]].rank <= 3 ? 22 : 14));
+  rows.forEach((row, ri) => { const gap = HULLS[row[0]].rank <= 3 ? 22 : 14; let x = -rowsW[ri] / 2; let rowH = 0; for (const id of row) rowH = Math.max(rowH, HULLS[id].beam); z += rowH / 2 + (ri ? 12 : 0);
+    row.forEach((id, k) => { const H = HULLS[id]; place(id, undefined, x + H.len / 2, z); const up = H.rank <= 3 && k % 2 === 1; lbl(H.name, `${H.len * UNIT_M} m · ${H.role}`, x + H.len / 2, 0, up ? z - H.beam / 2 - 9 : z + H.beam / 2 + 2); x += H.len + gap; });
+    z += rowH / 2 + 14; });
+  // frame the whole fleet (16:9 or whatever the viewport is)
+  const W = Math.max(...rowsW) + 30, D = z + 12; const zc = D / 2 - 6; const asp = innerWidth / innerHeight; const vfov = THREE.MathUtils.degToRad(30);
+  const need = Math.max(D / (2 * Math.tan(vfov / 2)), W / asp / (2 * Math.tan(vfov / 2))) * 1.1;
+  const grid = new THREE.GridHelper(1000, 100, 0x1e3456, 0x0f1c30); grid.position.set(0, -12, zc); scene.add(grid);
+  camera.position.set(0, need * 0.94, zc + need * 0.34); camera.lookAt(0, 0, zc + 4);
+} else if (mode === 'factions') {
+  const ids = (q.get('hulls') || 'strike,gunship,frigate').split(','); const facs = ['federation', 'crimson', 'eclipse', 'iron', 'void', 'ashen'];
+  const gap = 10, rowW = ids.reduce((w, id) => w + HULLS[id].len, 0) + gap * (ids.length - 1), rowS = Math.max(...ids.map((id) => HULLS[id].beam)) + 9; const x0 = -rowW / 2 + 12;
+  facs.forEach((f, i) => { let x = x0; const z = i * rowS; ids.forEach((id) => { const H = HULLS[id]; const sid = FACTION_PAINT[f]; place(id, sid, x + H.len / 2, z, Math.PI / 2); x += H.len + gap; }); const LX = x0 - 22; const LZ = z - 2;
+    lbl(PAINT_NAMES[FACTION_PAINT[f]], f === 'federation' ? 'friendly patrols' : f + ' faction', LX, 0, LZ); });
+  { const W = rowW + 70, D = facs.length * rowS + 6, zc = (facs.length - 1) * rowS / 2; const asp = innerWidth / innerHeight; const tf = 2 * Math.tan(THREE.MathUtils.degToRad(15)); const need = Math.max(D / tf, W / asp / tf) * 1.08; camera.position.set(-6, need * 0.94, zc + need * 0.34); camera.lookAt(-6, 0, zc + 2); }
+} else if (mode === 'catalog') {
+  HULL_IDS.forEach((id, i) => { const b = place(id, q.get('scheme') || undefined, 0, 0, 2.35, 0); b.group.visible = false; });
+} else { const id = q.get('hull') || 'dreadnought'; const H = HULLS[id]; place(id, q.get('scheme') || undefined, 0, 0, 2.3, 0); const d = H.len * 1.25; camera.position.set(d * 0.55, d * 0.5, d * 0.75); camera.lookAt(0, 0, 0); }
+const box = document.getElementById('cls');
+function resize() { const w = innerWidth, h = innerHeight; R.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+let t = 0; function frame() { t += 1 / 60; for (const s of ships) { s.fl.mat.uniforms.uTime.value = t; animateNavLights(s.g, t); }
+  if (mode === 'catalog') { const W = innerWidth, Hh = innerHeight, cols = 4, rows = 4, cw = W / cols, ch = Hh / rows; R.setScissorTest(true); R.setClearColor(0x03060d); labels.length = 0;
+    ships.forEach((s, i) => { ships.forEach((o) => (o.g.visible = o === s)); const c = i % cols, r = Math.floor(i / cols); const x = c * cw, y = Hh - (r + 1) * ch; R.setViewport(x, y, cw, ch); R.setScissor(x, y, cw, ch);
+      const H = HULLS[HULL_IDS[i]]; const d = H.len * 1.9; camera.aspect = cw / ch; camera.updateProjectionMatrix(); camera.position.set(d * 0.62, d * 0.62, d * 0.7); camera.lookAt(0, 0, 0); R.render(scene, camera); });
+    R.setScissorTest(false); box.innerHTML = HULL_IDS.map((id, i) => { const H = HULLS[id]; const c = i % 4, r = Math.floor(i / 4); return `<div class="lbl" style="left:${(c + 0.5) * innerWidth / 4}px;top:${(r + 1) * innerHeight / 4 - 34}px"><b>${H.name}</b><i>${H.len * UNIT_M} m · ${H.role}</i></div>`; }).join(''); window.READY = true; if (!q.get('still')) requestAnimationFrame(frame); return; }
+  R.render(scene, camera);
+  box.innerHTML = labels.map((L) => { const v = L.v.clone().project(camera); return `<div class="lbl" style="left:${(v.x * 0.5 + 0.5) * innerWidth}px;top:${(-v.y * 0.5 + 0.5) * innerHeight}px"><b>${L.txt}</b><i>${L.sub}</i></div>`; }).join('');
+  window.READY = true; if (!q.get('still')) requestAnimationFrame(frame); }
+frame();
+</script>
+</body>
+</html>

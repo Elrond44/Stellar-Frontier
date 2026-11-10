@@ -69,6 +69,23 @@ export const ABILITIES = {
   drones:   { name: 'Drone Deployment', short: 'DRONES', cd: 55, energy: 60, color: '#c27bff', desc: 'Deploys 3 combat drones for 20 s.' },
 };
 export const ABILITY_ORDER = ['dash', 'emp', 'overload', 'barrage', 'surge', 'drones'];
+// v8 hull role abilities: always available on the hull that carries them (one per hull class)
+export const ROLE_ABILITIES = {
+  recon:      { name: 'Recon Ping',          short: 'PING',  cd: 14, energy: 20, color: '#6fd8ff', desc: 'Reveals cloaked ships within 70 m and boosts radar range by 50% for 8 s.' },
+  afterburn:  { name: 'Afterburner',         short: 'BURN',  cd: 12, energy: 25, color: '#ff6b4a', desc: '+60% top speed and 35% less damage taken for 4 s.' },
+  strikerun:  { name: 'Strike Run',          short: 'STRIKE', cd: 16, energy: 30, color: '#ffd166', desc: '+40% weapon damage and +25% fire rate for 5 s.' },
+  bombrun:    { name: 'Bomb Run',            short: 'BOMBS', cd: 14, energy: 35, color: '#ff4a4a', desc: 'Drops six heavy bombs ahead of the ship. Triple damage to installations.' },
+  flak:       { name: 'Flak Screen',         short: 'FLAK',  cd: 16, energy: 30, color: '#9fd0ff', desc: 'Point defence shreds every enemy projectile near the hull for 4 s.' },
+  broadside:  { name: 'Broadside',           short: 'BROAD', cd: 12, energy: 35, color: '#ff9a3d', desc: 'Every battery fires a heavy volley at the nearest targets.' },
+  repair:     { name: 'Repair Field',        short: 'REPAIR', cd: 20, energy: 40, color: '#5dff98', desc: 'Restores 30% hull over 5 s and repairs nearby friendly ships.' },
+  scan:       { name: 'Deep Scan',           short: 'SCAN',  cd: 18, energy: 25, color: '#7fe7ff', desc: 'Reveals cloaked ships and rich ore within 130 m; +60% radar range for 10 s.' },
+  tactical:   { name: 'Tactical Shift',      short: 'SHIFT', cd: 18, energy: 30, color: '#6fb8ff', desc: 'Restores shields and grants +40% speed for 4 s.' },
+  torpedo:    { name: 'Anti-Capital Torpedo', short: 'TORP', cd: 15, energy: 40, color: '#ff5a5a', desc: 'Two heavy torpedoes; double damage against capital ships, bases and bosses.' },
+  wing:       { name: 'Scramble Wing',       short: 'WING',  cd: 24, energy: 40, color: '#ffd166', desc: 'Launches a reserve wing from the hangars for 20 s.' },
+  command:    { name: 'Command Aura',        short: 'CMD',   cd: 22, energy: 40, color: '#7fb2ff', desc: 'You and your wing take 40% less damage and deal 20% more for 6 s.' },
+  titanlance: { name: 'Titan Main Battery',  short: 'LANCE', cd: 20, energy: 50, color: '#ff7a26', desc: 'Fires the spinal lance: a 700 m beam that devastates everything in line.' },
+};
+Object.assign(ABILITIES, ROLE_ABILITIES);
 
 // XP & skill points. One level system: the ship level (formerly "pilot level").
 export const xpForLevel = (l) => Math.round(80 * Math.pow(l, 1.55));

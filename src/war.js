@@ -2,7 +2,7 @@
 // Factions earn income from held sectors + resource facilities, launch attacks on neighbouring rival/unclaimed
 // sectors, form short alliances against the strongest power and retaliate. Liberated space, the Haven and faction
 // home sectors never change hands, and every faction is capped at a few sectors above its starting territory.
-import { FACTIONS, FACTION_KEYS, GSECTORS, SECTOR_BY_ID, HOME, installations, neighbours, isHome } from './galaxy.js?v=7';
+import { FACTIONS, FACTION_KEYS, GSECTORS, SECTOR_BY_ID, HOME, installations, neighbours, isHome } from './galaxy.js?v=8';
 
 // conflict frequency presets (Settings > Faction warfare)
 export const WAR_LEVELS = {

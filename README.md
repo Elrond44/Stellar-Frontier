@@ -7,10 +7,52 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 - Steer with the virtual joystick (drag anywhere) or WASD / arrow keys. Weapons fire automatically.
 - Mine glowing asteroids, haul ore back to your station, and sell it.
 - Upgrade your ship, run the station factory (Income / Capacity / CLAIM), and expand the station from a lone refinery to an industrial hub.
-- Evolve your ship through 5 tiers, from a tiny mining scout to a capital dreadnought.
+- Climb a class path of 15 hulls, from a 20 m Scout to a 720 m Dreadnought, all built at true relative scale.
 - Push into pirate sectors for rare ores and loot, liberate them stage by stage from five warring pirate factions, and bring down each faction's flagship.
 
 Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). All models, effects, music and sound are generated procedurally in code. Progress autosaves to your browser's local storage.
+
+## v8: Concept-sheet fleet at true scale
+- **15 hulls from the "Stellar Odyssey" concept sheet** (`art/ship-concepts.jpg`): Scout, Interceptor, Strike Fighter, Bomber, Corvette, Gunship, Engineer, Explorer, Frigate, Destroyer, Intercept Carrier, Cruiser, Battlecruiser, Fleet Carrier and Dreadnought. Each is built in code (`src/hulls.js`) to match the sheet's silhouette, colours, panel lines, engines, turrets, emissive strips and greebles. The v6 PBR materials and damage states are kept.
+- **True relative scale** (1 unit = 5 m; Scout = 20 m):
+
+  | Hull | Length | × Scout |
+  |---|---|---|
+  | Interceptor / Strike Fighter | 23–25 m | 1.2× |
+  | Corvette / Gunship | 50–52 m | 2.5× |
+  | Frigate | 100 m | 5× |
+  | Destroyer | 140 m | 7× |
+  | Cruiser | 200 m | 10× |
+  | Battlecruiser / Fleet Carrier | 380–420 m | 19–21× |
+  | Dreadnought | 720 m | 36× |
+
+  Hitboxes (keel capsules for long hulls), mass, hardpoints and turret counts all follow size.
+  - The camera pulls back with the hull, and fog, asteroid streaming, radar range and spawn distances adapt.
+  - The radar draws capital ships as true-size outlines.
+  - The home station and pirate bases are built larger so they read correctly next to capital ships.
+- **Progression:** a class path with branch choices at each rank, unlocked by station level and owning a hull from the rank before. Side-grades have their own roles:
+  - **Bomber:** ×1.6 damage against bases, plus Bomb Run.
+  - **Engineer:** self-repair, plus a Repair Field that also heals allies.
+  - **Explorer:** long radar, better mining, plus Deep Scan.
+  - **Carriers:** launch fighter wings from their hangar bays.
+
+  Every hull has its own stats, slots and role ability (Recon Ping, Afterburner, Strike Run, Flak Screen, Broadside, Tactical Shift, Anti-Capital Torpedo, Scramble Wing, Command Aura, Titan Main Battery…). Built hulls are kept, and you can switch between them while docked. Old saves migrate T1–T5 to the Scout, Strike Fighter, Gunship, Cruiser and Battlecruiser.
+- **Shipyard:**
+  - Cards are cropped from the concept sheet.
+  - The 3D preview shows each hull at true scale beside a ghosted Scout.
+  - Each card shows the hull's role, ability and requirements, with BUILD and FLY buttons.
+- **Factions:** the sheet's faction liveries are mapped onto the pirate factions:
+  - Pirate Clans red for Crimson.
+  - Corporate gold for Eclipse.
+  - Mercenary grey for Iron.
+  - Alien violet for Void.
+  - Ember for Ashen.
+
+  Frontier patrols fly Federation-blue Corvettes and Frigates. Frigates and Destroyers join deep-space raids. Commanders fly Cruisers. Flagships are Dreadnoughts, Battlecruisers and a Fleet Carrier at true scale, with their destructible components spread over the real deck.
+- **Performance:**
+  - Mid-range hulls drop their greeble layer.
+  - Distant craft collapse into merged, vertex-coloured low-poly meshes drawn with one `InstancedMesh` per hull and paint, so a whole wing is a single draw call.
+- **Fleet Registry:** `lineup.html` shows every hull at true scale (`?mode=lineup`), faction variants (`?mode=factions`), a catalogue (`?mode=catalog`) or one hull (`?mode=single&hull=dreadnought`).
 
 ## v7: Living space, destructible bases and polish (Release D)
 - **Environments:** procedural planets sit far below the play plane. There are 7 types (desert, ocean, two gas giants, ice, volcanic, violet rock), with shader-lit terminators, clouds, craters, lava glow, atmosphere rims and ringed giants that cast shadows. Three parallax nebula layers, background asteroid fields, foreground shards and distant galaxies with dust lanes give the scene depth.
