@@ -51,7 +51,9 @@ Branch `v8-wip` holds local WIP commits. `main` stays at v7 (45689c9) until v8 p
 Plan:
 - [x] src/explosions.js: ExplosionManager, PROFILES, PlasmaSystem (instanced noise/temperature billboards), ArcSystem, DebrisPhysics (momentum inheritance, hit-side impulse, wreck slabs w/ cap), ExplosionLighting (light budget), DestructionSequence (6 stages, per-class, dreadnought/station 8 steps), ExplosionAudio (layered, voice limit)
 - [x] Hooks: killEnemy, damageEnemy (hit dir / shield hit / collapse), impactFx (weapon signatures), playerDie, structures (modules/HQ)
-- [ ] Quality budgets + exposure clamp
+- [x] Quality budgets + exposure clamp
 - [x] ?v=9 bump, About v9, README/CREDITS
-- [ ] tests/v9.js (10 scenarios + leaks) + rerun old suites; shots/v9
+- [x] tests/v9.js (10 scenarios + leaks) ALL PASS; shots/v9 taken
+- [ ] rerun old suites (v6 explosion check updated to ExplosionManager)
+- [x] README/CREDITS v9 sections
 - [ ] merge to main, push, verify Pages

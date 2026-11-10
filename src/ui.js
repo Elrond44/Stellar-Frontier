@@ -818,7 +818,7 @@ export class UI {
       <div class="card gfx"><div class="row"><span>Quality preset</span>${seg('quality', st.quality, [['auto', 'AUTO'], ['low', 'LOW'], ['medium', 'MEDIUM'], ['high', 'HIGH']])}</div>
         <p class="muted small" id="gfxDesc"><b>${P.label}</b>${st.quality === 'auto' ? ` (auto-detected: ${PRESETS[det.q].label}${act !== det.q ? `, running ${PRESETS[act].label} to hold the frame rate` : ''})` : ''}: ${P.desc}</p>
         <p class="muted small">Device: ${det.why || 'unknown GPU'}</p></div>
-      <div class="card row"><span>Camera shake<small class="muted" style="display:block">Directional impacts and explosions</small></span>${seg('shakelvl', st.shake, [['full', 'FULL'], ['reduced', 'REDUCED'], ['off', 'OFF']])}</div>
+      <div class="card row"><span>Screen shake<small class="muted" style="display:block">Explosion and impact camera impulse (scales with blast size and distance)</small></span>${seg('shakelvl', st.shake, [['full', 'FULL'], ['reduced', 'REDUCED'], ['off', 'OFF']])}</div>
       <div class="card row"><span>Frame rate cap<small class="muted" style="display:block">30 FPS saves battery and heat</small></span>${seg('fpscap', String(st.fpsCap || 60), [['60', '60'], ['30', '30']])}</div>
       ${`<div class="card row"><span>Performance overlay<small class="muted" style="display:block">FPS, frame time, draw calls, memory</small></span><button class="toggle ${st.fps ? 'on' : ''}" data-act="toggle" data-k="fps">${st.fps ? 'ON' : 'OFF'}</button></div>`}`;
   }
