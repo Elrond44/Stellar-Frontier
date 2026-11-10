@@ -72,7 +72,7 @@ const ZONE_FS = {
     void main(){ float r = length(vL); if (r > 1.0) discard; vec2 uv = vW/120.0 + uSeed;
       vec4 a = texture2D(uTex, uv*0.5 + vec2(uTime*0.004, 0.0)); vec2 w = (a.rg-0.5)*0.5; vec4 b = texture2D(uTex, uv + w - vec2(0.0, uTime*0.006));
       float den = smoothstep(0.25, 0.75, b.r*0.6 + a.r*0.6) * smoothstep(1.0, 0.55, r);
-      vec3 c = mix(uCol, uCol.bgr, b.b) * (0.18 + 0.25*b.g);
+      vec3 c = mix(uCol, uCol.bgr, b.b) * (0.045 + 0.07*b.g);
       float al = den * uA; gl_FragColor = vec4(c*al, al); }`,
   gravity: `uniform float uTime; uniform vec3 uCol; uniform float uA; varying vec2 vL; varying vec2 vW;
     void main(){ float r = length(vL); if (r > 1.0) discard; float ang = atan(vL.y, vL.x);
