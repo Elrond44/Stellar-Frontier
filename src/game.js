@@ -660,7 +660,7 @@ export class Game {
     const desiredYaw = faceP ? Math.atan2(dx, dz) : want !== null ? want : Math.atan2(e.vx, e.vz);
     { const wantVel = clamp(angleDiff(e.yaw, desiredYaw) * 3, -F.w, F.w); const angAcc = clamp((wantVel - e.yawVel) / Math.max(dt, 1e-4), -F.aw, F.aw); e.yawVel += angAcc * dt; e.yaw += e.yawVel * dt; e.angAcc = angAcc / F.aw; }
     // thrust is applied in the hull frame: strong main engine along the nose, weaker retro and lateral thrusters
-    if (!raw && e.knockT <= 0) {
+    if (!raw && !(e.knockT > 0)) {
       const hx = Math.sin(e.yaw), hz = Math.cos(e.yaw);
       const fwd = clamp(ax * hx + az * hz, -F.a * 0.4, F.a); const lat = clamp(ax * hz - az * hx, -F.a * F.lat, F.a * F.lat);
       e.vx += (hx * fwd + hz * lat) * dt; e.vz += (hz * fwd - hx * lat) * dt; e.thrF = fwd / F.a; e.thrL = lat / F.a;
