@@ -82,7 +82,7 @@ void main() {
   float rim = 0.5 + 0.45 * n;
   float body = 1.0 - smoothstep(rim * 0.55, rim, r);
   float hollow = mix(1.0, smoothstep(0.0, 0.75, r + n * 0.35), smoothstep(0.3, 1.0, age) * 0.75); // core cools first, shell thins
-  float T = clamp(vP.z * (1.0 - age * 0.85) * (1.15 - r * 0.7) + (n - 0.5) * 0.35, 0.0, 1.0);
+  float T = clamp(vP.z * (1.0 - age * 0.9) * (1.05 - r * 0.95) + (n - 0.5) * 0.4, 0.0, 1.0);
   vec3 col = ramp(T) * mix(vec3(1.0), vC, 0.3) * (0.45 + 1.9 * T * T) * (0.6 + 0.55 * n);
   float a = body * hollow * pow(1.0 - age, 1.4) * vP.w * uGain;
   gl_FragColor = vec4(min(col, vec3(2.6)) * a, a * 0.45); // premultiplied: partly occludes (soft internal shadow), mostly adds
@@ -239,7 +239,7 @@ export class ExplosionManager {
   // size in the same units as the old boom(); o: {vx,vz,tint,ix,iz,frags,heat,light,sound,shake,y,electric}
   blast(x, y, z, size, o = {}) {
     const g = this.g; const near = g.vfx.near(x, z); const vx = o.vx || 0, vz = o.vz || 0; const B = this.B; this.stats0.blasts++;
-    const s = size; const heat = o.heat ?? 1;
+    const s = size; const heat = o.heat ?? 1; if (this.log) this.log.push({ k: o.kind || 'blast', x, z, s, t: g.time });
     // 2: localized flash (short, white-hot, small) — sized so a fighter never rivals a capital ship
     this.plasma.spawn(x, y + 0.4, z, 0.6 * s, 2.6 * s, 0.12 + 0.03 * s, 1, 1.2, null, vx * 0.5, vz * 0.5);
     // 3: plasma expansion: main lobe + offset lobes drifting with the wreck
@@ -308,13 +308,14 @@ export class ExplosionManager {
 
   // ---- full destruction sequence
   destroy(e, o = {}) {
+    if (!Number.isFinite(e.x) || !Number.isFinite(e.z)) return { P: PROFILES.fighter, grp: null, dur: 0, t: 0, ev: [] };
     const g = this.g; const P = o.profile || classify(e); const B = this.B; this.stats0.started++;
     const near = g.vfx.near(e.x, e.z); const busy = this.seqs.length >= B.seqs;
     const keep = !!(P.keep && e.group && e.group.visible && e.group.parent && !o.noHull && near > 0.08 && !busy);
     const dur = rand(P.dur[0], P.dur[1]) * (busy ? 0.6 : 1);
     const yaw = e.yaw || (e.group ? e.group.rotation.y : 0); const k = e.scale || 1;
     let ix = o.ix, iz = o.iz; if (ix === undefined) { const p = g.player; const dx = e.x - p.x, dz = e.z - p.z; const d = Math.hypot(dx, dz) || 1; ix = dx / d; iz = dz / d; }
-    const S = { e, P, t: 0, dur, x: e.x, z: e.z, y: 0.5, vx: e.vx || 0, vz: e.vz || 0, yaw, hx: Math.sin(yaw), hz: Math.cos(yaw), ix, iz, tint: o.tint || [3, 1.2, 0.45],
+    const S = { e, P, t: 0, dur, x: e.x, z: e.z, y: 0.5, vx: Number.isFinite(e.vx) ? e.vx : 0, vz: Number.isFinite(e.vz) ? e.vz : 0, yaw, hx: Math.sin(yaw), hz: Math.cos(yaw), ix, iz, tint: o.tint || [3, 1.2, 0.45],
       grp: keep ? e.group : null, broke: !keep, breakT: keep ? dur * P.keep : 0, ev: [], step: P.steps ? 0 : -1, spin: (ix * Math.cos(yaw) - iz * Math.sin(yaw)) * 0.25 / Math.sqrt(Math.max(1, (e.hullLen || 4) / 10)) + rand(-0.03, 0.03),
       len: e.hullLen || (e.radius || 1) * 2 * k, beam: (e.beam || e.radius || 1) * k, z0: e.segs ? e.segs[0].z * k : -(e.radius || 1) * 0.8, z1: e.segs ? e.segs[e.segs.length - 1].z * k : (e.radius || 1) * 0.8, y0: e.group ? e.group.position.y : 0, shield: (e.shieldMax || e.maxShield || 0) > 0 };
     if (keep) { g.lod && g.lod.release(e.group); S.D = ensureDamage(e.group); }
@@ -326,7 +327,7 @@ export class ExplosionManager {
     at(t1, () => { const q = keep ? this.hullPt(S, -0.4, 0.8) : S; this.blast(q.x, 0.5, q.z, keep ? Math.min(2.2, sz * 0.5) : sz, { vx: S.vx, vz: S.vz, tint: S.tint, ix: S.ix, iz: S.iz, light: P.light * (keep ? 0.6 : 1), shake: P.shake * (keep ? 0.5 : 1), frags: keep ? Math.round(P.frags * 0.3) : P.frags, electric: keep }); });
     // 5: staggered secondaries at real positions along the keel, bow/stern alternating out from the breach
     const nSec = Math.round(P.sec * B.sec * (busy ? 0.5 : 1)); const t5a = t1 + 0.1, t5b = keep ? S.breakT * 0.98 : dur * 0.8;
-    for (let i = 0; i < nSec; i++) { const u = (i + rand(0.1, 0.9)) / Math.max(1, nSec); at(t5a + (t5b - t5a) * u, () => { this.stats0.secondaries++; const q = this.hullPt(S, rand(-1, 1), rand(-0.8, 0.8));
+    for (let i = 0; i < nSec; i++) { const u = (i + rand(0.1, 0.9)) / Math.max(1, nSec); at(t5a + (t5b - t5a) * u, () => { this.stats0.secondaries++; const q = this.hullPt(S, rand(-1, 1), rand(-0.8, 0.8)); if (this.log) this.log.push({ k: 'sec', x: q.x, z: q.z, cx: S.x, cz: S.z, hx: S.hx, hz: S.hz, z0: S.z0, z1: S.z1, beam: S.beam, t: g.time });
       this.blast(q.x, 0.6, q.z, Math.max(0.7, sz * rand(0.22, 0.36)), { vx: S.vx, vz: S.vz, tint: S.tint, ix: q.ox, iz: q.oz, light: P.light * 0.45, shake: 0.05 * Math.min(4, sz), sound: i % 2 === 0, frags: Math.round(4 + sz), ring: false });
       if (S.grp && i % 2 === 1) { const q2 = this.hullPt(S, rand(-1, 1), 1); this.debris.spawn(q2.x, 0.7, q2.z, S.vx, S.vz, q2.ox, q2.oz, 3 + sz, 0.25 + 0.05 * sz, 'plate', 0.8); } }); }
     if (keep) {
@@ -338,7 +339,7 @@ export class ExplosionManager {
     if (!keep) { this.seqStep(S, 0); } // fire t=0 events now so position matches the frame of death
     return S;
   }
-  dreadSteps(S, at) { const g = this.g; const D = S.dur; const sz = S.P.size; const set = (i) => () => { S.step = i; };
+  dreadSteps(S, at) { const g = this.g; const D = S.dur; const sz = S.P.size; const set = (i) => () => { S.step = i; (S.steps || (S.steps = [])).push(i); };
     // 0 shields collapse
     at(0, () => { set(0)(); if (S.shield || true) { this.shieldCollapse({ x: S.x, z: S.z, bound: S.len * 0.5, radius: S.len * 0.5 }, [0.6, 1.8, 3.4]); } });
     // 1 weapons fail: pops at the turret mounts / hardpoints

@@ -63,7 +63,9 @@ export class Wrecks {
     const p = g.player; const d = Math.hypot(p.x - W.x, p.z - W.z);
     if (!g.dead && d < W.blastR) { const f = 1 - d / W.blastR; if (W.blastDmg > 0) g.hurtPlayer(p.maxHp * W.blastDmg * (0.4 + 0.6 * f), W.x, W.z, { energy: true }); const ux = (p.x - W.x) / (d || 1), uz = (p.z - W.z) / (d || 1); p.vx += ux * 18 * f; p.vz += uz * 18 * f; }
     g.addShake(0.8, W.x, W.z); g.zoomPunch && g.zoomPunch(0.08);
-    if (g.xm) { const n = Math.min(10, 4 + Math.round(W.R / 3)); for (let q = 0; q < n; q++) { const a = q / n * TAU + rand(-0.3, 0.3); g.xm.debris.spawn(W.x + Math.cos(a) * W.R * 0.5, 0.7, W.z + Math.sin(a) * W.R * 0.5, W.vx, W.vz, Math.cos(a), Math.sin(a), 3.5, Math.min(6, 1.2 + W.R * 0.18), 'slab', 0.9); } W.step = 7; } // structure breaks up, debris drifts
+    if (g.xm) { const n = Math.min(10, 4 + Math.round(W.R / 3)); const sx = W.x, sz = W.z; // v9 steps 6-8: central discharge -> structure breaks up -> debris drifts
+      const brk = () => { W.step = 6; for (let q = 0; q < n; q++) { const a = q / n * TAU + rand(-0.3, 0.3); g.xm.debris.spawn(sx + Math.cos(a) * W.R * 0.5, 0.7, sz + Math.sin(a) * W.R * 0.5, W.vx, W.vz, Math.cos(a), Math.sin(a), 3.5, Math.min(6, 1.2 + W.R * 0.18), 'slab', 0.9); } };
+      if (g.seq) { g.seq.at(0.25, brk); g.seq.at(1.2, () => { W.step = 7; }); } else { brk(); W.step = 7; } }
     this.remove(W); this.stats.finished++; W.onEnd && W.onEnd(W);
   }
   remove(W) { const g = this.g; g.scene.remove(W.grp); releaseDamage(W.grp); }

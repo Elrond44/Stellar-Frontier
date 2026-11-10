@@ -632,7 +632,7 @@ export class Audio {
   // v9: layered, distance-attenuated blast with an explosion-event limiter (overlapping battles never stack into mush);
   // the soundtrack is ducked gently and never below 55% so it stays audible
   blast(size, x, z, o = {}) {
-    if (!this.ctx) return; const now = this.ctx.currentTime; const W = this._xw || (this._xw = []); while (W.length && now - W[0] > 0.3) W.shift();
+    if (!this.ctx || !Number.isFinite(size) || (x !== undefined && !(Number.isFinite(x) && Number.isFinite(z)))) return; const now = this.ctx.currentTime; const W = this._xw || (this._xw = []); while (W.length && now - W[0] > 0.3) W.shift();
     if (W.length >= (this.low ? 3 : 5) && size < 3) { this.stats.dropped++; return; } W.push(now);
     const big = size >= 1.6, cap = size >= 3.5;
     this.play(big ? 'boomL' : 'boomS', { x, z, vol: Math.min(1.3, 0.55 + size * 0.17), rate: cap ? 0.74 : big ? 0.92 : 1.18 - Math.min(0.2, size * 0.1) });
