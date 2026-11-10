@@ -323,6 +323,9 @@ export class ExplosionManager {
     const sz = P.size; const t1 = P === PROFILES.fighter || P === PROFILES.module ? 0.04 : keep ? Math.min(dur * 0.18, 1.6) : dur * 0.08; // end of stage 1
     // 1: structural failure at a few real hull points, hit side first
     const nFail = P.fail; for (let i = 0; i < nFail; i++) at(i * t1 / Math.max(1, nFail), () => { const q = this.hullPt(S, i === 0 ? -0.6 : rand(-1, 1), i === 0 ? 1 : rand(-1, 1)); this.failPoint(q.x, S.top, q.z, Math.min(2.2, 0.6 + sz * 0.3), S.ix, S.iz); });
+    if (keep) at(0, () => { const q = this.hullPt(S, -0.5, 0.9); const u = 0.6 + 0.3 * sz; // the killing blow breaches the hull: local flash, hot chips, light
+      this.plasma.spawn(q.x, S.top, q.z, u * 0.5, u * 2.4, 0.4, 0.9, 1, S.tint, S.vx, S.vz); this.lights.light(q.x, S.top, q.z, Math.min(2, sz * 0.5), 0xffa060, 0.3, 16 + 4 * sz);
+      for (let k = 0; k < 6 + Math.round(sz); k++) this.debris.spawn(q.x, S.top, q.z, S.vx, S.vz, S.ix, S.iz, 6, 0.2 + 0.04 * sz, 'chip', 1); });
     // 2+3+4: primary detonation (for kept hulls: the breach section; the core goes at break-up)
     at(t1, () => { const q = keep ? this.hullPt(S, -0.4, 0.8) : S; this.blast(q.x, S.grp ? S.top : 0.5, q.z, keep ? Math.min(2.2, sz * 0.5) : sz, { vx: S.vx, vz: S.vz, tint: S.tint, ix: S.ix, iz: S.iz, light: P.light * (keep ? 0.6 : 1), shake: P.shake * (keep ? 0.5 : 1), frags: keep ? Math.round(P.frags * 0.3) : P.frags, electric: keep }); });
     // 5: staggered secondaries at real positions along the keel, bow/stern alternating out from the breach
