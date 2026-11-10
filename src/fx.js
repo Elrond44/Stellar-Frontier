@@ -125,39 +125,54 @@ export class Rings {
   }
 }
 
-// Instanced bolts (player + enemy shots, missiles drawn as bolts)
+// Instanced bolts: a hot core + a soft glow sleeve for every shot, turbulent plasma balls, long thin railgun streaks
+export const BOLT_TIME = { value: 0 };
 export class Bolts {
-  constructor(scene, max = 500) {
+  constructor(scene, max = 500, plasmaMat = null) {
     this.max = max;
-    const geo = new THREE.BoxGeometry(0.22, 0.22, 1); 
+    const geo = new THREE.BoxGeometry(0.22, 0.22, 1);
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-    this.mesh = new THREE.InstancedMesh(geo, mat, max); this.mesh.frustumCulled = false;
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.setColorAt(0, new THREE.Color(1, 1, 1));
-    scene.add(this.mesh);
+    const mk = (g, m, ro) => { const im = new THREE.InstancedMesh(g, m, max); im.frustumCulled = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); im.setColorAt(0, new THREE.Color(1, 1, 1)); im.count = 0; im.renderOrder = ro; scene.add(im); return im; };
+    this.mesh = mk(geo, mat, 6);
+    const gmat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.glow = mk(new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1, true).rotateX(Math.PI / 2), gmat, 5);
+    this.plasma = plasmaMat ? mk(new THREE.IcosahedronGeometry(0.5, 1), plasmaMat, 6) : null;
     this.list = []; this.free = [];
     for (let i = max - 1; i >= 0; i--) this.free.push(i);
     this.dummy = new THREE.Object3D(); this.col = new THREE.Color();
     for (let i = 0; i < max; i++) this.hide(i);
   }
-  hide(i) { const d = this.dummy; d.scale.set(0, 0, 0); d.position.set(0, -999, 0); d.updateMatrix(); this.mesh.setMatrixAt(i, d.matrix); }
-  spawn(o) { // o: {x,z,vx,vz,dmg,owner,life,len,w,color:[r,g,b],...}
+  hide(i) { const d = this.dummy; d.scale.set(0, 0, 0); d.position.set(0, -999, 0); d.updateMatrix(); this.mesh.setMatrixAt(i, d.matrix); this.glow.setMatrixAt(i, d.matrix); if (this.plasma) this.plasma.setMatrixAt(i, d.matrix); }
+  spawn(o) { // o: {x,z,vx,vz,dmg,owner,life,len,w,color:[r,g,b],style?:'bolt'|'rail'|'plasma'|'missile'}
     if (!this.free.length) return null;
-    o.idx = this.free.pop(); o.dead = false; o.y = o.y ?? 0.6;
-    this.col.setRGB(o.color[0], o.color[1], o.color[2]); this.mesh.setColorAt(o.idx, this.col);
-    this.mesh.instanceColor.needsUpdate = true;
+    o.idx = this.free.pop(); o.dead = false; o.y = o.y ?? 0.6; o.style = o.style || (o.kind === 'missile' ? 'missile' : 'bolt');
+    const c = o.color; this.col.setRGB(c[0], c[1], c[2]); this.mesh.setColorAt(o.idx, this.col);
+    const gk = o.style === 'rail' ? 0.45 : o.owner === 'e' ? 0.14 : 0.22; this.col.setRGB(c[0] * gk, c[1] * gk, c[2] * gk); this.glow.setColorAt(o.idx, this.col);
+    if (this.plasma) { this.col.setRGB(c[0] * 0.8, c[1] * 0.8, c[2] * 0.8); this.plasma.setColorAt(o.idx, this.col); this.plasma.instanceColor.needsUpdate = true; }
+    this.mesh.instanceColor.needsUpdate = true; this.glow.instanceColor.needsUpdate = true;
     this.list.push(o); return o;
   }
   kill(o) { o.dead = true; }
   sync() {
-    const d = this.dummy; const L = this.list;
+    const d = this.dummy; const L = this.list; let hi = 0;
     for (let k = L.length - 1; k >= 0; k--) {
       const o = L[k];
       if (o.dead) { this.hide(o.idx); this.free.push(o.idx); L[k] = L[L.length - 1]; L.pop(); continue; }
-      d.position.set(o.x, o.y, o.z); d.rotation.set(0, Math.atan2(o.vx, o.vz), 0);
-      d.scale.set(o.w || 1, o.w || 1, o.len || 1.6); d.updateMatrix(); this.mesh.setMatrixAt(o.idx, d.matrix);
+      if (o.idx + 1 > hi) hi = o.idx + 1;
+      const w = o.w || 1, len = o.len || 1.6; d.position.set(o.x, o.y, o.z); d.rotation.set(0, Math.atan2(o.vx, o.vz), 0);
+      if (o.style === 'plasma' && this.plasma) {
+        d.scale.set(0, 0, 0); d.updateMatrix(); this.mesh.setMatrixAt(o.idx, d.matrix);
+        d.scale.set(w * 0.95, w * 0.95, w * 1.25); d.updateMatrix(); this.plasma.setMatrixAt(o.idx, d.matrix);
+        d.scale.set(w * 1.6, w * 1.6, len * 1.4); d.updateMatrix(); this.glow.setMatrixAt(o.idx, d.matrix);
+        continue;
+      }
+      if (o.style === 'rail') d.scale.set(w * 0.55, w * 0.55, len * 2.4); else d.scale.set(w, w, len);
+      d.updateMatrix(); this.mesh.setMatrixAt(o.idx, d.matrix);
+      if (o.style === 'rail') d.scale.set(w * 1.3, w * 1.3, len * 4.2); else d.scale.set(w * 1.7, w * 1.7, len * 1.25);
+      d.updateMatrix(); this.glow.setMatrixAt(o.idx, d.matrix);
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.count = this.glow.count = hi; if (this.plasma) { this.plasma.count = hi; this.plasma.instanceMatrix.needsUpdate = true; }
+    this.mesh.instanceMatrix.needsUpdate = true; this.glow.instanceMatrix.needsUpdate = true;
   }
 }
 
@@ -196,9 +211,11 @@ export class Flashes {
     this.pool = []; this.enabled = true;
     for (let i = 0; i < n; i++) { const l = new THREE.PointLight(0xffaa55, 0, 30, 1.6); l.position.set(0, -999, 0); scene.add(l); this.pool.push({ l, life: 0, max: 1, i0: 0 }); }
   }
-  spawn(x, y, z, intensity = 40, color = 0xffaa55, life = 0.35, dist = 30) {
+  spawn(x, y, z, intensity = 40, color = 0xffaa55, life = 0.35, dist = 30, weak = false) {
     if (!this.enabled) return;
     let o = this.pool[0]; for (const p of this.pool) if (p.life < o.life) o = p;
+    if (weak && o.life > 0) return; // muzzle/impact lights never steal an explosion's light
+    this.used = (this.used || 0) + 1;
     o.life = o.max = life; o.i0 = intensity; o.l.color.setHex(color); o.l.distance = dist; o.l.position.set(x, y + 2, z); o.l.intensity = intensity;
   }
   update(dt) {

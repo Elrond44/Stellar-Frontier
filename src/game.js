@@ -12,7 +12,8 @@ import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, spEarned, spSpent, skill
 import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=6';
 import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=6';
 import { AsteroidField, Minerals } from './world.js?v=6';
-import { Particles, Debris, Rings, Bolts, Flashes } from './fx.js?v=6';
+import { Particles, Debris, Rings, Bolts, Flashes, BOLT_TIME } from './fx.js?v=6';
+import { FXManager, Sequencer, EnergyShells, MetalDebris, makeShieldMaterial, ShieldFX, ShieldBubbles, prepareDamage, ensureDamage, releaseDamage, DMG_TIME, DMG_STATS, plasmaMaterial } from './vfx.js?v=6';
 import { STORY, makeContract } from './quests.js?v=6';
 import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=6';
 
@@ -31,10 +32,12 @@ export class Game {
     // systems
     this.fx = new Particles(scene, 4000);
     this.smoke = new Particles(scene, 900, { normal: true });
-    this.flashes = new Flashes(scene, 3);
+    this.flashes = new Flashes(scene, 4);
     this.debris = new Debris(scene);
     this.rings = new Rings(scene);
-    this.bolts = new Bolts(scene, 600);
+    this.bolts = new Bolts(scene, 600, plasmaMaterial(BOLT_TIME));
+    this.vfx = new FXManager(this); this.seq = new Sequencer(); this.shells = new EnergyShells(scene, 10); this.metal = new MetalDebris(scene, 160); this.bubbles = new ShieldBubbles(scene, 6); this.ghosts = []; this.DMG_STATS = DMG_STATS;
+    this.engineLight = new THREE.PointLight(0x5ab4ff, 0, 16, 2); this.engineLight.position.set(0, -999, 0); scene.add(this.engineLight);
     this.flight = new FlightModel(); this.thr = this.flight.out; this.hashE = new SpatialHash(14); this.hashR = new SpatialHash(12); this._cand = []; this._bA = {}; this._bB = {}; this.kick = { x: 0, z: 0 };
     this.field = new AsteroidField(scene); this.field.camera = camera;
     this.minerals = new Minerals(scene);
@@ -49,7 +52,7 @@ export class Game {
     this.loot = []; this.lootPool = []; this.liveCaches = new Map(); this.cachePool = []; this.jamT = 0;
     this.allies = []; this.gsec = GSECTORS[0]; this.secEnterT = -99; this.taken = new Set(); this.fxCache = null;
     this.tmpV = new THREE.Vector3(); this.tmpV2 = new THREE.Vector3(); this.droneOre = 0; this.dockT = 0;
-    this.shieldMat = this.makeShieldMat(); this.tractor = this.makeBeam(new THREE.Color(0.3, 1.4, 2.2), new THREE.Color(0.05, 0.25, 0.5)); scene.add(this.tractor);
+    this.shieldMat = this.makeShieldMat(); this.shieldFx = new ShieldFX(this.shieldMat); this.prevSh = 1; this.tractor = this.makeBeam(new THREE.Color(0.3, 1.4, 2.2), new THREE.Color(0.05, 0.25, 0.5)); scene.add(this.tractor);
     // station
     this.stationRoot = null; this.buildStationModel();
     // player
@@ -364,7 +367,8 @@ export class Game {
       if (p.flames) { p.flames.mat.dispose(); p.flames.coreMat.dispose(); p.flames.spriteMat.dispose(); }
       for (const w of p.weapons) if (w.beam) { this.scene.remove(w.beam); this.disposeBeam(w.beam); }
     }
-    const built = buildShip(this.s.tier);
+    if (p.model) releaseDamage(p.model); this.clearGhosts();
+    const built = buildShip(this.s.tier); prepareDamage(built.group); ensureDamage(built.group);
     const g = new THREE.Group(); g.add(built.group); g.rotation.order = 'YXZ'; built.group.scale.setScalar(1.25);
     const fl = makeFlames(built.engines); built.group.add(fl.group);
     p.flames = fl; p.weapons = [];
@@ -416,25 +420,26 @@ export class Game {
     return core;
   }
   disposeBeam(b) { b.geometry.dispose(); b.material.dispose(); b.children[0].material.dispose(); const imp = b.userData.impact; if (imp) { this.scene.remove(imp); imp.material.dispose(); } }
-  makeShieldMat() {
-    return new THREE.ShaderMaterial({
-      uniforms: { uHit: { value: new THREE.Vector3(0, 0, 1) }, uT: { value: 0 }, uCol: { value: new THREE.Color(0.3, 1.3, 2.4) } },
-      vertexShader: `varying vec3 vN; varying vec3 vP; varying vec3 vV; void main(){ vP=normalize(position); vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.0); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
-      fragmentShader: `uniform vec3 uHit; uniform float uT; uniform vec3 uCol; varying vec3 vN; varying vec3 vP; varying vec3 vV;
-        void main(){ float fres=pow(1.0-abs(dot(vN,vV)),2.5); float d=acos(clamp(dot(vP,normalize(uHit)),-1.0,1.0));
-          float age=1.0-uT; float ring=exp(-pow((d-age*2.2)*7.0,2.0))*uT; float spot=exp(-d*d*6.0)*uT*uT;
-          float hex=0.5+0.5*sin(vP.x*40.0)*sin(vP.z*40.0);
-          float a=(fres*0.16*uT + ring*0.55 + spot*0.35)*(0.75+0.25*hex); gl_FragColor=vec4(uCol*a,a); }`,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-    });
-  }
-  // layered explosion: flash, fireball, sparks, smoke, debris, shock ring, light flash
-  boom(x, y, z, s, tint, ring = true) {
-    this.fx.explosion(x, y, z, s, tint);
-    this.smoke.burst(x, y, z, Math.ceil(6 * s), 3.5 * s, 1.6, 1.2 * s, 3.4 * s, [0.16, 0.14, 0.15], 1.6, 0.3);
-    this.fx.burst(x, y, z, Math.ceil(5 * s), 14 * s, 0.9, 0.35, 0.05, [3.0, 1.6, 0.5], 0.6, 0.6); // long hot streaks
+  makeShieldMat() { return makeShieldMaterial([0.3, 1.3, 2.4]); }
+  // v6 staged explosion: 1 flash -> 2 energy sphere + fireball -> 3 fragmentation (inherits momentum) -> 4 secondary detonations -> 5 dissipation
+  boom(x, y, z, s, tint, ring = true, o = {}) {
+    const near = this.vfx.near(x, z); const vx = o.vx || 0, vz = o.vz || 0; const tc = tint || [3, 1.2, 0.45]; const base = this.vfx.base;
+    this.fx.emit(x, y + 0.6, z, vx * 0.3, 0, vz * 0.3, 0.12 + s * 0.02, 3 * s, 7 * s, 3, 2.6, 2.2, 0); // 1 flash
+    this.flashes.spawn(x, y, z, 30 + 25 * s, 0xff9a4a, 0.3 + 0.08 * s, 18 + 10 * s, s < 0.9);
+    if (s >= 0.8 && near > 0.3) this.shells.spawn(x, y, z, 2.2 * s + 1, [tc[0] * 0.8, tc[1] * 0.8, tc[2] * 0.8], 0.3 + 0.07 * s, { vx: vx * 0.5, vz: vz * 0.5 }); // 2 energy sphere
+    this.fx.explosion(x, y, z, s * (0.6 + 0.4 * near), tint);
     if (ring) this.rings.spawn(x, y - 0.2, z, 8 * s, tint ? tint.map((v) => v * 0.8) : [3, 1.2, 0.5], 0.55);
-    this.flashes.spawn(x, y, z, 30 + 25 * s, 0xff9a4a, 0.3 + 0.08 * s, 18 + 10 * s);
+    if (o.metal !== false && s >= 0.9) this.metal.spawn(x, y, z, Math.max(2, Math.round(Math.min(26, 4 * s) * (0.4 + 0.6 * near) * base)), vx, vz, 7 + 3 * s, 0.35 + 0.18 * Math.min(s, 4), 1); // 3 fragments
+    this.fx.burst(x, y, z, Math.ceil(5 * s), 14 * s, 0.9, 0.35, 0.05, [3.0, 1.6, 0.5], 0.6, 0.6); // hot streaks
+    const n2 = o.secondary ?? (s >= 2.8 ? Math.round(s * 1.5) : s >= 1.6 ? 2 : 0); const R = o.r || s * 1.6; // 4 secondaries
+    for (let k = 0; k < n2; k++) this.seq.at(0.12 + k * rand(0.12, 0.26), () => { const a = rand(0, TAU), d = rand(0.3, 1) * R; const sx = x + Math.cos(a) * d + vx * 0.15 * (k + 1), sz = z + Math.sin(a) * d + vz * 0.15 * (k + 1);
+      this.fx.explosion(sx, y, sz, Math.max(0.5, s * 0.32), tint); this.shells.spawn(sx, y, sz, 1.4 + s * 0.5, [3, 1.5, 0.5], 0.28); this.flashes.spawn(sx, y, sz, 20 + 6 * s, 0xffb060, 0.22, 16, true);
+      this.metal.spawn(sx, y, sz, Math.max(1, Math.round(3 * base)), vx, vz, 8, 0.4, 1); if (k % 2 === 0) this.audio.explode(false, sx, sz); this.addShake(0.06 * Math.min(4, s), sx, sz); });
+    if (n2 >= 3) this.seq.at(0.25 + n2 * 0.19, () => { // final core breach (capital ships / bosses / big structures)
+      this.shells.spawn(x, y, z, 5 * s, [3.4, 2.4, 1.2], 0.6, { a: 1.8 }); this.fx.explosion(x, y, z, s * 0.9, tint); this.rings.spawn(x, y, z, 16 * s, [3, 1.6, 0.6], 0.9); this.flashes.spawn(x, y, z, 60 + 20 * s, 0xffc080, 0.6, 40);
+      this.metal.spawn(x, y, z, Math.round(10 * base), vx, vz, 14, 0.6, 1); this.audio.explode(true, x, z, true); this.addShake(0.12 * Math.min(4, s), x, z); });
+    this.smoke.burst(x, y, z, Math.ceil(6 * s * near), 3.5 * s, 1.6, 1.2 * s, 3.4 * s, [0.16, 0.14, 0.15], 1.6, 0.3); // 5 dissipation
+    if (s >= 1 && near > 0.4) this.seq.at(0.25, () => { this.smoke.burst(x + vx * 0.25, y, z + vz * 0.25, Math.ceil(4 * s), 1.5 * s, 2.8, 1.8 * s, 5 * s, [0.12, 0.11, 0.12], 1, 0.25); this.fx.burst(x + vx * 0.25, y, z + vz * 0.25, Math.ceil(6 * s), 3 * s, 1.8, 0.3, 0.05, [2.4, 0.9, 0.25], 0.8, 0.5); });
   }
 
   // ---------- enemies ----------
@@ -470,6 +475,7 @@ export class Game {
     const elite = !!opts.elite; const L0 = RING_L0[gs.ring] || 1; const lv = this.s.level;
     const baseHp = D.inst && TTK[type] ? ttkHp(type, lv, L0, D.armor) : D.hp * sc * shipK(lv, L0);
     const hp = baseHp * (opts.hpMul || 1) * M.hp * (elite ? 2.6 : 1);
+    if (!P.dmgReady) { prepareDamage(P.group); P.dmgReady = true; }
     const g = P.group.clone(); g.rotation.order = 'YXZ'; this.scene.add(g); if (elite) g.scale.setScalar(1.25);
     const e = { type, D, x, z, vx: 0, vz: 0, yaw: rand(0, TAU), bank: 0, hp, maxHp: hp, dmgMul: (1 + 0.5 * Math.max(0, danger - 1)) * easy * M.dmg * (elite ? 1.4 : 1) * dmgK(lv, L0),
       group: g, turrets: [], cd: rand(0.5, 2), state: 'attack', t: rand(0, 10), radius: P.radius * (elite ? 1.2 : 1), hard: P.hardpoints, hitT: 0, orbit: rand(0, TAU),
@@ -481,7 +487,7 @@ export class Game {
     g.position.set(x, 0, z);
     this.enemies.push(e); return e;
   }
-  removeEnemy(e) { this.scene.remove(e.group); e.dead = true; } // geometry is shared with the prototype; nothing to dispose
+  removeEnemy(e) { this.scene.remove(e.group); e.dead = true; releaseDamage(e.group); } // geometry is shared with the prototype; nothing to dispose
   // pirate wave: composition follows the sector faction's fleet doctrine (roles unlock with danger)
   spawnWave(danger, big = false, near, msg) {
     const p = this.player; const a = rand(0, TAU); const fac = FACTIONS[this.gsec.faction] && !this.s.galaxy.liberated[this.gsec.id] ? this.gsec.faction : null;
@@ -697,7 +703,9 @@ export class Game {
     if (!rival && fx.overcharge && this.player.energy > st.energyMax * 0.7) dmg *= 1 + fx.overcharge;
     const [mul, label] = this.camp.dmgMod(e); let shielded = !!label; dmg *= mul;
     if (e.shield > 0 && dmg > 0) { const sm = (S && S.shieldMul) || 1; const sd = dmg * sm; const ab = Math.min(e.shield, sd); e.shield -= ab; dmg = (sd - ab) / sm; e.shieldT = this.time;
-      if (e.shield <= 0) { this.rings.spawn(e.x, 0.6, e.z, e.radius * 2.5, [0.5, 2, 3.4], 0.4); } else if (Math.random() < 0.3) this.fx.emit(e.x, 0.8, e.z, 0, 0, 0, 0.15, e.radius * 2.2, 0.4, 0.4, 1.6, 3, 0); }
+      const hp = this.hitPt || this.player; const F = FACTIONS[e.faction]; const sc = F ? [F.rgb[0] * 0.35 + 0.25, F.rgb[1] * 0.35 + 0.45, F.rgb[2] * 0.35 + 0.8] : null;
+      if (e.group.visible) this.bubbles.hit(e, hp.x, hp.z, sc);
+      if (e.shield <= 0) { this.bubbles.collapse(e); this.rings.spawn(e.x, 0.6, e.z, e.radius * 2.5, [0.5, 2, 3.4], 0.4); this.shells.spawn(e.x, 0.6, e.z, e.radius * 2, sc || [0.6, 1.8, 3.4], 0.35, { r0: e.radius * 1.2 }); this.fx.burst(e.x, 0.8, e.z, 14, 10, 0.4, 0.5, 0.1, sc || [0.6, 1.9, 3.4], 2.5); } }
     const armor = Math.max(0, (e.armor ?? e.D.armor) - ((S && S.pen) || 0) - (rival ? 0 : st.pen || 0));
     const d = dmg * (1 - armor); e.hp -= d; e.hitT = 0.15;
     if (S && d > 0) {
@@ -720,8 +728,8 @@ export class Game {
     this.removeEnemy(e);
     const big = e.type === 'flagship' ? 5 : e.type === 'boss' ? 4 : e.type === 'inst_hq' ? 4 : e.D.inst && e.outpost ? 3.2 : e.type === 'commander' || e.type === 'capital' ? 3 : e.type === 'gunship' || e.type === 'freighter' || e.type === 'inst_gen' || e.D.part ? 1.8 : e.D.inst ? 1.4 : 1;
     const F = FACTIONS[e.faction]; const tint = F ? F.rgb.map((v) => v * 0.9) : [3.2, 0.5, 0.4];
-    this.boom(e.x, 0.5, e.z, big, tint);
-    this.debris.spawn(e.x, 0.3, e.z, Math.round(6 * Math.min(big, 4)), 10, 0.6, 0x2a1416);
+    this.boom(e.x, 0.5, e.z, big, tint, true, { vx: e.vx || 0, vz: e.vz || 0, r: e.radius });
+    this.debris.spawn(e.x, 0.3, e.z, Math.round(3 * Math.min(big, 4)), 10, 0.6, 0x2a1416);
     this.audio.explode(big > 1, e.x, e.z, big >= 3); this.addShake(0.25 * Math.min(big, 4), e.x, e.z);
     this.s.stats.kills++; this.emit('kill', { type: e.type });
     if (e.bc || e.D.part) { this.camp.onKill(e); return; }
@@ -770,37 +778,46 @@ export class Game {
       let dx = this.input.x, dz = this.input.z; let m = Math.hypot(dx, dz); if (m < 0.2) { dx = Math.sin(p.yaw); dz = Math.cos(p.yaw); m = 1; }
       const dist = 26 * (1 + (fx.dashLen || 0)); this.dashT = 0.22; this.dashV = { x: dx / m * dist / 0.22, z: dz / m * dist / 0.22 }; p.yaw = Math.atan2(dx, dz);
       this.rings.spawn(p.x, 0.3, p.z, 6 + p.radius * 2, [0.5, 3, 1.4], 0.4); this.fx.burst(p.x, 0.6, p.z, 24, 10, 0.4, 1.1, 0.1, [0.5, 3, 1.4], 3);
+      this.shells.spawn(p.x, 0.6, p.z, p.radius * 0.4, [0.4, 2.6, 1.2], 0.25, { r0: p.radius * 3, a: 1.2 }); this.ghostAcc = 1; this.flashes.spawn(p.x, 1, p.z, 20, 0x44ff99, 0.25, 18, true);
     } else if (id === 'emp') {
       const R = 24 + p.radius; let n = 0;
       for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.z - p.z); if (d < R + e.radius) { n++; e.shield = 0; e.shieldT = this.time; if (!e.D.inst && !e.D.part) e.stunT = e.D.boss ? 1.0 : 3.5; if (e.cloaked) { e.cloaked = false; e.group.visible = true; } this.arc(p.x, p.z, e.x, e.z); this.damageEnemy(e, 10 * pst.dmg, false); } }
       for (const b of this.bolts.list) if (!b.dead && b.owner === 'e' && Math.hypot(b.x - p.x, b.z - p.z) < R) { b.dead = true; this.fx.emit(b.x, 0.6, b.z, 0, 1, 0, 0.3, 0.8, 0.2, 0.8, 2.4, 3.6, 3); }
-      this.rings.spawn(p.x, 0.4, p.z, R, [0.6, 2.4, 3.6], 0.7); this.rings.spawn(p.x, 0.4, p.z, R * 0.6, [1.2, 2.8, 3.6], 0.5); this.flashes.spawn(p.x, 2, p.z, 40, 0x66ddff, 0.3, 34);
+      this.rings.spawn(p.x, 0.4, p.z, R, [0.6, 2.4, 3.6], 0.7); this.rings.spawn(p.x, 0.4, p.z, R * 0.6, [1.2, 2.8, 3.6], 0.5); this.shells.spawn(p.x, 0.5, p.z, R, [0.5, 1.8, 3.4], 0.6, { r0: p.radius, flat: 0.3, a: 1.1 });
+      for (const e of this.enemies) if (!e.dead && e.stunT > 0 && Math.hypot(e.x - p.x, e.z - p.z) < R + e.radius) this.fx.burst(e.x, 1, e.z, 10, 6, 0.5, 0.8, 0.1, [0.8, 2.6, 3.6], 3); this.flashes.spawn(p.x, 2, p.z, 40, 0x66ddff, 0.3, 34);
       this.fx.burst(p.x, 0.6, p.z, 46, R * 2.2, 0.3, 0.7, 0.1, [0.5, 1.8, 2.8], 3, 0.05); this.addShake(0.3);
       this.ui && this.ui.float(p.x, 3, p.z, n ? `EMP · ${n} disabled` : 'EMP', '#6fd8ff', true);
     } else if (id === 'overload') {
-      p.sh = pst.shield; this.overT = 5 + (fx.barrier || 0); this.shieldMat.uniforms.uT.value = 1;
+      p.sh = pst.shield; this.overT = 5 + (fx.barrier || 0); this.shells.spawn(p.x, 0.6, p.z, p.radius * 2.4, [0.5, 1.8, 3.6], 0.5, { r0: p.radius * 0.8 });
       this.rings.spawn(p.x, 0.5, p.z, p.radius * 4, [0.5, 1.8, 3.6], 0.6); this.fx.burst(p.x, 1, p.z, 40, 8, 0.6, 1, 0.1, [0.5, 1.8, 3.6], 2);
     } else if (id === 'barrage') {
       const tg = this.enemies.filter((e) => !e.dead && !e.cloaked && Math.hypot(e.x - p.x, e.z - p.z) < 42).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
       const n = 12 + (fx.multi ? 4 : 0); const S = { vsShip: 1.3, vsRock: 1, shieldMul: 1, pen: 0.3, beh: 'missile' };
       for (let k = 0; k < n; k++) { const t = tg.length ? { kind: 'ship', o: tg[k % tg.length] } : this.findTarget(p.x, p.z, 40, true); const a = p.yaw + (k / n - 0.5) * 2.6 + Math.PI; const sp = 34 * pst.proj;
-        setTimeout(() => { if (this.dead) return; this.bolts.spawn({ x: p.x, z: p.z, y: 1.2, vx: Math.sin(a) * sp * 0.6, vz: Math.cos(a) * sp * 0.6, speed: sp, dmg: 16 * pst.dmg, owner: 'p', kind: 'missile', S, target: t, life: 3.4, len: 1.1, w: 1.6, color: [3.4, 1.4, 0.4], splash: 3.5, turn: 7 }); }, k * 45); }
+        this.seq.at(k * 0.045, () => { if (this.dead) return; const side = k % 2 ? 1 : -1; const lx = Math.cos(p.yaw) * side * p.radius * 0.6, lz = -Math.sin(p.yaw) * side * p.radius * 0.6; this.fx.emit(p.x + lx, 1.2, p.z + lz, 0, 0, 0, 0.1, 1.2, 0.3, 3.4, 1.8, 0.6, 0); this.bolts.spawn({ x: p.x + lx, z: p.z + lz, y: 1.2, vx: Math.sin(a) * sp * 0.6, vz: Math.cos(a) * sp * 0.6, speed: sp, dmg: 16 * pst.dmg, owner: 'p', kind: 'missile', S, target: t, life: 3.4, len: 1.1, w: 1.6, color: k % 2 ? [3.4, 1.4, 0.4] : [3.6, 2.2, 0.6], splash: 3.5, turn: 7 }); }); }
     } else if (id === 'surge') {
       this.surgeT = 6; this.rings.spawn(p.x, 0.5, p.z, p.radius * 5, [3.4, 2.6, 0.5], 0.7); this.fx.burst(p.x, 1, p.z, 50, 10, 0.6, 1.2, 0.1, [3.4, 2.6, 0.5], 2);
     } else if (id === 'drones') {
-      this.clearAllies(); for (let k = 0; k < 3; k++) { const o = buildShip(1).group; o.scale.setScalar(0.42); o.traverse((m) => { if (m.isMesh && m.material && m.material.emissive) { /* keep */ } }); this.scene.add(o); this.allies.push({ obj: o, a: k / 3 * TAU, cd: rand(0, 0.5), t: 20, x: p.x, z: p.z }); }
+      this.clearAllies(); for (let k = 0; k < 3; k++) { const b = buildShip(1); const o = b.group; o.scale.setScalar(0.42); const fl = makeFlames(b.engines, new THREE.Color(2.2, 0.8, 3.4)); o.add(fl.group); this.scene.add(o); const a0 = k / 3 * TAU; this.allies.push({ obj: o, fl, a: a0, cd: rand(0, 0.5), t: 20, x: p.x + Math.cos(a0) * 3, z: p.z + Math.sin(a0) * 3, vx: p.vx + Math.cos(a0) * 12, vz: p.vz + Math.sin(a0) * 12, yaw: a0, thr: 1 }); }
       this.fx.burst(p.x, 1, p.z, 30, 10, 0.5, 1, 0.1, [2.2, 0.8, 3.4], 2);
     }
     this.audio.ability(id, p.x, p.z); this.emit('ability', { id }); return true;
   }
-  clearAllies() { for (const a of this.allies) { this.scene.remove(a.obj); disposeObject(a.obj); } this.allies.length = 0; }
+  clearAllies() { for (const a of this.allies) this.dropAlly(a); this.allies.length = 0; }
+  dropAlly(a) { this.scene.remove(a.obj); disposeObject(a.obj); if (a.fl) { a.fl.mat.dispose(); a.fl.coreMat.dispose(); a.fl.spriteMat.dispose(); } }
   updateAllies(dt) {
     const p = this.player; const st = this.stats();
     for (let i = this.allies.length - 1; i >= 0; i--) {
-      const a = this.allies[i]; a.t -= dt; if (a.t <= 0 || this.dead) { this.fx.burst(a.x, 1, a.z, 10, 6, 0.4, 0.6, 0.1, [2.2, 0.8, 3.4], 3); this.scene.remove(a.obj); disposeObject(a.obj); this.allies.splice(i, 1); continue; }
+      const a = this.allies[i]; a.t -= dt; if (a.t <= 0 || this.dead) { this.fx.burst(a.x, 1, a.z, 10, 6, 0.4, 0.6, 0.1, [2.2, 0.8, 3.4], 3); this.dropAlly(a); this.allies.splice(i, 1); continue; }
       a.a += dt * 1.6; const t = this.findTarget(a.x, a.z, 26, true); const tgt = t && t.kind === 'ship' ? t.o : null;
       const gx = tgt ? tgt.x + Math.cos(a.a) * 8 : p.x + Math.cos(a.a) * (p.radius + 6), gz = tgt ? tgt.z + Math.sin(a.a) * 8 : p.z + Math.sin(a.a) * (p.radius + 6);
-      a.x = damp(a.x, gx, 3, dt); a.z = damp(a.z, gz, 3, dt); a.obj.position.set(a.x, 1.6, a.z); a.obj.rotation.y = tgt ? Math.atan2(tgt.x - a.x, tgt.z - a.z) : -a.a;
+      { // steer with real thrust: accelerate toward the slot, limited speed, nose follows thrust (or the target when firing)
+        const dx = gx - a.x, dz = gz - a.z, d = Math.hypot(dx, dz) || 1; const want = Math.min(26, d * 2.5); const ax = (dx / d * want - a.vx) * 3, az = (dz / d * want - a.vz) * 3; const am = Math.hypot(ax, az); const lim = 60; const kk = am > lim ? lim / am : 1;
+        a.vx += ax * kk * dt; a.vz += az * kk * dt; a.x += a.vx * dt; a.z += a.vz * dt; a.thr = damp(a.thr || 0, Math.min(1, am * kk / lim + 0.2), 8, dt);
+        const face = tgt && Math.hypot(tgt.x - a.x, tgt.z - a.z) < 20 ? Math.atan2(tgt.x - a.x, tgt.z - a.z) : Math.atan2(a.vx + ax * 0.05, a.vz + az * 0.05); a.yaw = (a.yaw || 0) + clamp(angleDiff(a.yaw || 0, face), -8 * dt, 8 * dt);
+        a.obj.position.set(a.x, 1.6, a.z); a.obj.rotation.y = a.yaw;
+        if (a.fl) { a.fl.mat.uniforms.uPower.value = 0.3 + a.thr; a.fl.mat.uniforms.uTime.value = this.time; for (const f of a.fl.flames) { const L = f.r * (1 + a.thr * 5); f.mesh.scale.set(1, 1, L); f.core.scale.set(1, 1, L * 0.55); } }
+        if (a.thr > 0.4 && Math.random() < 0.5 * this.fx.budget) this.fx.emit(a.x - Math.sin(a.yaw) * 1, 1.5, a.z - Math.cos(a.yaw) * 1, -a.vx * 0.3, 0, -a.vz * 0.3, 0.3, 0.6, 0.1, 2.2, 0.8, 3.4, 2); }
       a.cd -= dt; if (tgt && a.cd <= 0) { a.cd = 0.45; const d = Math.hypot(tgt.x - a.x, tgt.z - a.z) || 1, sp = 60;
         this.bolts.spawn({ x: a.x, z: a.z, y: 1.4, vx: (tgt.x - a.x) / d * sp, vz: (tgt.z - a.z) / d * sp, dmg: 7 * st.dmg, owner: 'p', kind: 'cannon', S: { vsShip: 1.1, vsRock: 0.5, shieldMul: 1, pen: 0.1 }, life: 0.6, len: 1.2, w: 0.9, color: [2.4, 0.9, 3.6] }); this.audio.droneFire(a.x, a.z); }
     }
@@ -814,20 +831,27 @@ export class Game {
     if (this.overT > 0) dmg *= 0.25;
     if (o.drain) p.energy = Math.max(0, p.energy - o.drain);
     // shield layer
-    if (p.sh > 0) { const k = o.shieldBreak || 1; const sd = dmg * k; const ab = Math.min(p.sh, sd); p.sh -= ab; dmg = (sd - ab) / k; this.lastShieldHit = this.time; if (p.sh <= 0) { this.audio.shieldDown(); this.ui && this.ui.float(p.x, 2.4, p.z, 'SHIELDS DOWN', '#6fd8ff'); } }
+    const hadSh = p.sh > 0;
+    if (p.sh > 0) { const k = o.shieldBreak || 1; const sd = dmg * k; const ab = Math.min(p.sh, sd); p.sh -= ab; dmg = (sd - ab) / k; this.lastShieldHit = this.time; if (p.sh <= 0) { this.audio.shieldDown(); this.ui && this.ui.float(p.x, 2.4, p.z, 'SHIELDS DOWN', '#6fd8ff'); this.shieldCollapse(); } }
     p.hp -= dmg; this.lastHurt = this.time;
     if (sk.emergencyShield && p.hp > 0 && p.hp < p.maxHp * 0.3 && this.time - this.emergT > 60) { this.emergT = this.time; p.sh = st.shield; this.audio.ability('overload', p.x, p.z); this.toast('Emergency shield restore!', 'good'); this.rings.spawn(p.x, 0.5, p.z, p.radius * 4, [0.5, 1.8, 3.6], 0.6); }
     if (sk.emergencyThrust && p.hp > 0 && p.hp < p.maxHp * 0.25 && this.time - this.emergThrustT > 45) { this.emergThrustT = this.time; const a = fx !== undefined ? Math.atan2(p.x - fx, p.z - fz) : p.yaw; this.dashT = 0.25; this.dashV = { x: Math.sin(a) * 120, z: Math.cos(a) * 120 }; this.audio.ability('dash', p.x, p.z); this.toast('Emergency thrust engaged!', 'good'); }
-    if (fx !== undefined && p.shield && this.shieldOn !== false) {
+    if (fx !== undefined && p.shield && this.shieldOn !== false && hadSh) {
       const lx = fx - p.x, lz = fz - p.z, c = Math.cos(-p.yaw), s = Math.sin(-p.yaw);
-      this.shieldMat.uniforms.uHit.value.set(lx * c + lz * s, 0.2, -lx * s + lz * c).normalize(); this.shieldMat.uniforms.uT.value = 1;
+      this.shieldFx.hit(lx * c + lz * s, 0.25 * Math.hypot(lx, lz), -lx * s + lz * c, 1);
+      const d = Math.hypot(lx, lz) || 1; const R = p.radius * 1.6; this.fx.burst(p.x + lx / d * R, 0.7, p.z + lz / d * R, 5, 7, 0.25, 0.5, 0.08, [0.5, 1.8, 3.2], 3);
+      if (Math.random() < 0.4) this.flashes.spawn(p.x + lx / d * R, 0.5, p.z + lz / d * R, 14, 0x55bbff, 0.15, 10, true);
     }
     this.addShake(0.18); this.audio.hurt(fx !== undefined && p.sh > 0, fx === undefined ? p.x : fx, fz === undefined ? p.z : fz); if (dmg > 0.5) this.ui && this.ui.hurtFlash();
     if (p.hp <= 0) this.playerDie();
   }
+  shieldCollapse() {
+    const p = this.player; this.shieldFx.collapse(); this.shells.spawn(p.x, 0.6, p.z, p.radius * 2.6, [0.6, 1.8, 3.4], 0.45, { r0: p.radius * 1.7, a: 1.6 });
+    this.fx.burst(p.x, 0.8, p.z, 24, 12, 0.5, 0.6, 0.1, [0.6, 1.9, 3.4], 2.5, 0.3); this.flashes.spawn(p.x, 1, p.z, 30, 0x66ccff, 0.3, 20);
+  }
   playerDie() {
     const p = this.player; this.dead = true; p.hp = 0; this.autopilot = false;
-    this.boom(p.x, 0.5, p.z, 2.5, [0.5, 2, 3]); this.debris.spawn(p.x, 0, p.z, 20, 14, 0.7);
+    this.boom(p.x, 0.5, p.z, 2.5, [0.5, 2, 3], true, { vx: p.vx, vz: p.vz, r: p.radius }); this.debris.spawn(p.x, 0, p.z, 10, 14, 0.7);
     this.audio.explode(true, p.x, p.z); this.addShake(0.8); p.group.visible = false;
     let lost = 0; for (const k of MINERAL_KEYS) { const n = Math.ceil(this.s.cargo[k] / 2); lost += n; this.s.cargo[k] -= n; if (n) this.minerals.spawn(p.x, p.z, k, Math.min(n, 12), 12); }
     this.s.stats.deaths++;
@@ -941,11 +965,13 @@ export class Game {
         const mult = t.kind === 'rock' ? S.vsRock * st.mining : S.vsShip * (1 + (fx.beamDmg || 0));
         w.acc += S.dmg * st.dmg * mult * st.rate * dt; w.tick -= dt;
         const bc = S.beamRgb;
-        if (Math.random() < 0.7 * this.fx.budget) this.fx.emit(hit.x, hit.y, hit.z, rand(-6, 6), rand(0, 4), rand(-6, 6), 0.35, 0.7, 0.1, bc[0] * 0.6, bc[1] * 0.9, bc[2], 3);
+        if (Math.random() < 0.8 * this.fx.budget) { const sp = rand(4, 10); this.fx.emit(hit.x, hit.y, hit.z, -dir.x * sp + rand(-4, 4), rand(0, 4), -dir.z * sp + rand(-4, 4), 0.35, 0.6, 0.08, bc[0] * 0.6 + 0.6, bc[1] * 0.9 + 0.4, bc[2], 3); } // sparks kick back off the hull
+        if (Math.random() < 0.5 * this.fx.budget) this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.06, 1.3 * (1 + this.s.tier * 0.12), 0.6, bc[0] * 0.5, bc[1] * 0.5, bc[2] * 0.5, 0); // muzzle bloom
+        if (Math.random() < dt * 2.5) this.flashes.spawn(hit.x, hit.y, hit.z, 10, new THREE.Color(bc[0], bc[1], bc[2]).getHex(), 0.18, 10, true);
         if (Math.random() < 0.15 * this.fx.budget && t.kind === 'rock') this.fx.emit(hit.x, hit.y, hit.z, rand(-3, 3), rand(0, 2), rand(-3, 3), 0.8, 0.4, 1.4, 0.25, 0.22, 0.22, 2);
         if (w.tick <= 0) {
           w.tick = 0.15; const crit = Math.random() < critC; const dmg = w.acc * (crit ? 2.5 : 1); w.acc = 0;
-          if (t.kind === 'rock') { this.damageRock(o, dmg, crit); this.audio.rockHit(hit.x, hit.z); } else { this.damageEnemy(o, dmg, crit, S); this.audio.hit(hit.x, hit.z); }
+          if (t.kind === 'rock') { this.damageRock(o, dmg, crit); this.audio.rockHit(hit.x, hit.z); } else { this.hitPt = hit; this.damageEnemy(o, dmg, crit, S); this.hitPt = null; this.audio.hit(hit.x, hit.z); }
         }
       } else if (w.cd <= 0 && aimed) {
         if (!pay(S.energy)) { w.cd = 0.15; continue; }
@@ -955,7 +981,8 @@ export class Game {
           const ax = o.x + (o.vx || 0) * lead, az = o.z + (o.vz || 0) * lead; const ad = Math.hypot(ax - muzzle.x, az - muzzle.z) || 1;
           const sp = rand(-0.03, 0.03); const ux = (ax - muzzle.x) / ad, uz = (az - muzzle.z) / ad; const c = Math.cos(sp), s = Math.sin(sp);
           const crit = Math.random() < critC;
-          this.bolts.spawn({ x: muzzle.x, z: muzzle.z, y: muzzle.y, vx: (ux * c - uz * s) * speed, vz: (uz * c + ux * s) * speed, dmg: S.dmg * st.dmg, crit, owner: 'p', kind: 'cannon', S, pierce: S.pierce, life: range * 1.3 / speed, len: S.len, w: S.w, color: S.rgb });
+          this.bolts.spawn({ x: muzzle.x, z: muzzle.z, y: muzzle.y, vx: (ux * c - uz * s) * speed, vz: (uz * c + ux * s) * speed, dmg: S.dmg * st.dmg, crit, owner: 'p', kind: 'cannon', S, pierce: S.pierce, life: range * 1.3 / speed, len: S.len, w: S.w, color: S.rgb, style: S.cat === 'plasma' ? 'plasma' : S.cat === 'railgun' && S.speed > 100 ? 'rail' : 'bolt' });
+          this.muzzleFx(muzzle, ux, uz, S);
           this.recoil(muzzle, ux, uz, S, st);
           const mc = S.rgb; this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.08, 1.8 * S.w, 0.5, mc[0], mc[1], mc[2], 0); this.fx.emit(muzzle.x, muzzle.y, muzzle.z, 0, 0, 0, 0.05, 0.7, 0.2, 4, 4, 3, 0); w.recoil = 1;
           this.audio.shoot(muzzle.x, muzzle.z, this.s.tier + (S.cat === 'plasma' ? -1.5 : S.cat === 'railgun' && S.speed > 100 ? -2 : S.cat === 'ion' ? 2 : 0));
@@ -995,6 +1022,18 @@ export class Game {
           this.bolts.spawn({ x: ex, z: ez, y: 1.2, vx: (o.x - ex) / d * sp, vz: (o.z - ez) / d * sp, dmg: 5 * st.dmg, owner: 'p', kind: 'cannon', S: pdS, life: 0.6, len: 1.2, w: 0.8, color: [0.6, 2.6, 3.4] }); this.audio.droneFire(ex, ez); }
         else esc.cd = 0.3;
       }
+    }
+  }
+  muzzleFx(m, ux, uz, S) {
+    const bud = this.fx.budget; const c = S.rgb || [3, 2, 1];
+    if (S.cat === 'railgun' && S.speed > 100) { // electromagnetic discharge + muzzle streak
+      for (let i = 0; i < 8; i++) if (Math.random() < bud) { const a = rand(0, TAU); this.fx.emit(m.x + Math.cos(a) * 0.4, m.y, m.z + Math.sin(a) * 0.4, Math.cos(a) * rand(3, 9), rand(-1, 2), Math.sin(a) * rand(3, 9), 0.18, 0.35, 0.05, 1.4, 2.4, 3.6, 4); }
+      for (let i = 0; i < 4; i++) this.fx.emit(m.x + ux * i * 0.8, m.y, m.z + uz * i * 0.8, ux * 30, 0, uz * 30, 0.1, 1.2 - i * 0.2, 0.2, 2.6, 3, 3.6, 6);
+      this.flashes.spawn(m.x, m.y, m.z, 22, 0x99ccff, 0.12, 14, true);
+    } else if (S.cat === 'plasma') { // superheated bloom
+      this.fx.emit(m.x, m.y, m.z, ux * 4, 0, uz * 4, 0.16, 2.4 * S.w, 0.6, c[0] * 0.8, c[1] * 0.8, c[2] * 0.8, 3);
+      for (let i = 0; i < 4; i++) if (Math.random() < bud) this.fx.emit(m.x, m.y, m.z, ux * rand(4, 10) + rand(-3, 3), rand(0, 2), uz * rand(4, 10) + rand(-3, 3), 0.3, 0.5, 0.1, c[0], c[1], c[2], 3);
+      this.flashes.spawn(m.x, m.y, m.z, 12, new THREE.Color(c[0], c[1], c[2]).getHex(), 0.12, 10, true);
     }
   }
   // recoil: impulse scales with weapon power, divided by ship mass; off-centre hardpoints add a little torque
@@ -1043,6 +1082,8 @@ export class Game {
         if (Math.random() < 0.9 * this.smoke.budget) this.smoke.emit(b.x, b.y, b.z, rand(-0.6, 0.6), rand(0, 0.8), rand(-0.6, 0.6), 1.1, 0.4, 1.8, 0.32, 0.31, 0.33, 1.5, 0.8);
       }
       let x0 = b.x, z0 = b.z; const x1 = b.x + b.vx * dt, z1 = b.z + b.vz * dt; b.x = x1; b.z = z1;
+      if (b.style === 'plasma' && Math.random() < 0.9 * this.fx.budget) { const c = b.color; this.fx.emit(x0 + rand(-0.2, 0.2), b.y + rand(-0.2, 0.2), z0 + rand(-0.2, 0.2), -b.vx * 0.05 + rand(-1, 1), rand(-0.5, 0.5), -b.vz * 0.05 + rand(-1, 1), 0.35, 0.8 * (b.w || 1), 0.1, c[0] * 0.5, c[1] * 0.5, c[2] * 0.5, 2); }
+      else if (b.style === 'rail' && this.fx.budget > 0.3) { for (let i = 0; i < 3; i++) { const t = i / 3; this.fx.emit(x0 + (x1 - x0) * t, b.y, z0 + (z1 - z0) * t, 0, 0, 0, 0.22, 0.45, 0.15, 1.2, 1.8, 2.8, 0, 0.7); } }
       if (b.owner === 'p') {
         let hit = false; const S = b.S; const filt = fE(b);
         for (let guard = 0; guard < 4 && !hit; guard++) {
@@ -1054,7 +1095,7 @@ export class Game {
             const e = he.o; b.x = x0 + (x1 - x0) * he.t; b.z = z0 + (z1 - z0) * he.t;
             if (b.kind === 'missile') { hit = true; this.explodeMissile(b); break; }
             let tgt = e; if (e.bc) for (const q of [...e.bc.gens, ...e.bc.parts]) if (!q.dead && Math.hypot(q.x - b.x, q.z - b.z) < q.radius + 1.2) { tgt = q; break; } // components first
-            const c = !!b.crit; this.damageEnemy(tgt, b.dmg * S.vsShip * (c ? 2.5 : 1), c, S);
+            const c = !!b.crit; this.hitPt = b; this.damageEnemy(tgt, b.dmg * S.vsShip * (c ? 2.5 : 1), c, S); this.hitPt = null;
             this.knock(e, b, S);
             if (S.splash) this.boltSplash(b, e);
             this.impactFx(b, e, S); this.audio.hit(b.x, b.z);
@@ -1097,6 +1138,7 @@ export class Game {
       this.fx.emit(b.x, y, b.z, Math.sin(a) * v, rand(-1, 3), Math.cos(a) * v, rand(0.15, 0.4), rock ? 0.5 : 0.6, 0.08, col[0], col[1], col[2], 3); }
     if (S && S.cat === 'railgun') for (let i = 0; i < 4; i++) this.fx.emit(b.x, y, b.z, ux * rand(6, 16) + rand(-2, 2), rand(0, 2), uz * rand(6, 16) + rand(-2, 2), 0.35, 0.4, 0.1, 3.4, 3, 2.4, 2); // exit spray
     this.fx.emit(b.x, y, b.z, 0, 0, 0, 0.07, rock ? 1.4 : 1.8, 0.4, col[0], col[1], col[2], 0);
+    if (b.style === 'plasma') { this.rings.spawn(b.x, y, b.z, 1.8 * (b.w || 1), col.map((v) => v * 0.35), 0.25); if (this.vfx.near(b.x, b.z) > 0.5 && this.fx.budget > 0.6) this.shells.spawn(b.x, y, b.z, 1.1 * (b.w || 1), col.map((v) => v * 0.3), 0.22); for (let i = 0; i < 6; i++) if (Math.random() < this.fx.budget) this.fx.emit(b.x, y, b.z, rand(-5, 5), rand(0, 3), rand(-5, 5), rand(0.4, 0.8), 0.5, 0.05, col[0], col[1], col[2], 2); }
   }
   // ---------- v6 physics: broadphase + impulse collisions (player / ships / asteroids) ----------
   buildHashes() {
@@ -1173,7 +1215,7 @@ export class Game {
     const jet = (lx, lz, dx, dz, k) => { // local offset (right, forward) and exhaust direction (local)
       if (Math.random() > Math.min(1, k * 1.6) * bud) return;
       const wx = p.x + rx * lx + hx * lz, wz = p.z + rz * lx + hz * lz; const ex = rx * dx + hx * dz, ez = rz * dx + hz * dz; const v = 9 + R * 2;
-      this.fx.emit(wx, y, wz, ex * v + p.vx, 0, ez * v + p.vz, 0.16, 0.45 + R * 0.12, 0.05, 1.6, 2.2, 3.2, 3);
+      this.fx.emit(wx, y, wz, ex * v + p.vx, 0, ez * v + p.vz, 0.24, 0.8 + R * 0.3, 0.15, 1.6, 2.2, 3.2, 3); this.fx.emit(wx, y, wz, ex * v * 0.3 + p.vx, 0, ez * v * 0.3 + p.vz, 0.08, 0.5 + R * 0.15, 0.3, 3, 3.2, 3.6, 0); // plume + hot nozzle core
       if (Math.random() < 0.4) this.fx.emit(wx, y, wz, ex * v * 0.5 + p.vx, 0.2, ez * v * 0.5 + p.vz, 0.4, 0.3, 0.9, 0.9, 1, 1.2, 3, 0.5);
     };
     // yaw torque: nose jet one side, tail jet the other side
@@ -1191,6 +1233,49 @@ export class Game {
     return best ? { o: best, t: bt } : null;
   }
 
+  // ---------- v6 health-driven damage states (tied to real HP: regen/repairs heal the visuals too) ----------
+  hullFx(x, z, yaw, vx, vz, R, lvl, D, k, fp) {
+    D.U.uDmg.value = lvl;
+    if (k <= 0.05) return;
+    if (lvl > 0.25 && Math.random() < lvl * 0.7 * k) { const a = rand(0, TAU), r = rand(0.2, 0.7) * R; this.fx.emit(x + Math.cos(a) * r, rand(0.4, 1.1), z + Math.sin(a) * r, rand(-6, 6), rand(1, 5), rand(-6, 6), 0.3, 0.3, 0.05, 3.4, 2.4, 1.2, 3); } // sparks
+    if (lvl > 0.45 && Math.random() < lvl * 0.6 * k) this.smoke.emit(x + rand(-0.3, 0.3) * R, 0.9, z + rand(-0.3, 0.3) * R, -vx * 0.25 + rand(-0.4, 0.4), rand(0.6, 1.4), -vz * 0.25 + rand(-0.4, 0.4), 1.5, 0.3 * R, 0.9 * R, 0.1, 0.095, 0.1, 1, 0.75); // smoke trail
+    if (lvl > 0.68) { // plasma fires venting from fixed hull breaches + electrical discharges
+      const c = Math.cos(yaw), s = Math.sin(yaw);
+      for (let i = 0; i < 2; i++) if (Math.random() < 0.8 * k) { const lx = fp[i * 2] * R, lz = fp[i * 2 + 1] * R; const wx = x + c * lx + s * lz, wz = z - s * lx + c * lz; const blue = i === 1;
+        this.fx.emit(wx, 0.9, wz, -vx * 0.35 + rand(-1, 1), rand(1.5, 3.2), -vz * 0.35 + rand(-1, 1), rand(0.3, 0.6), 0.6 + 0.25 * Math.min(4, R), 0.15, blue ? 0.5 : 2.6, blue ? 1.3 : 0.9, blue ? 2.6 : 0.25, 1.5); }
+      if (Math.random() < 0.05 * k) { const a = rand(0, TAU); this.arc(x + Math.cos(a) * R * 0.5, z + Math.sin(a) * R * 0.5, x - Math.cos(a) * R * 0.4, z - Math.sin(a) * R * 0.4); }
+    }
+  }
+  damageFx(dt) {
+    const bud = this.fx.budget;
+    for (const e of this.enemies) {
+      if (e.dead || !e.group.visible) continue;
+      const frac = 1 - e.hp / e.maxHp; const stunned = e.stunT > 0;
+      if (frac < 0.12 && !stunned && !e.group.userData.dmg) continue;
+      const D = ensureDamage(e.group); const lvl = clamp((frac - 0.1) / 0.85, 0, 1);
+      D.U.uFlick.value = stunned ? (Math.random() < 0.3 ? rand(0, 0.6) : 0.05) : lvl > 0.55 && Math.random() < 0.06 + lvl * 0.12 ? rand(0.05, 0.5) : 1; // failing systems / EMP blackout
+      const k = bud * this.vfx.near(e.x, e.z) * (e.D.inst ? 0.6 : 1);
+      this.hullFx(e.x, e.z, e.yaw || 0, e.vx || 0, e.vz || 0, Math.max(0.8, e.radius * (e.scale || 1)), lvl, D, k, e.firePts || (e.firePts = [rand(-0.5, 0.5), rand(-0.4, 0.4), rand(-0.5, 0.5), rand(-0.4, 0.4)]));
+    }
+    const p = this.player; if (this.dead || !p.model) return;
+    const D = ensureDamage(p.model); const lvl = clamp((1 - p.hp / p.maxHp - 0.1) / 0.85, 0, 1); this.pDmg = lvl;
+    D.U.uFlick.value = lvl > 0.5 && Math.random() < 0.05 + lvl * 0.15 ? rand(0.1, 0.5) : 1;
+    this.hullFx(p.x, p.z, p.yaw, p.vx, p.vz, p.radius, lvl, D, bud, p.firePts || (p.firePts = [0.35, -0.2, -0.3, 0.15]));
+  }
+  // ---------- v6 ability VFX helpers ----------
+  clearGhosts() { for (const g of this.ghosts) { this.scene.remove(g.obj); g.mat.dispose(); } this.ghosts.length = 0; }
+  spawnGhost() {
+    const p = this.player; if (!p.model) return;
+    if (this.ghosts.length < 4) { const mat = new THREE.MeshBasicMaterial({ color: 0x2aff8a, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }); const obj = new THREE.Group(); const m = p.model.clone();
+      m.traverse((o) => { if (o.isMesh) o.material = mat; if (o.isSprite || (o.material && o.material.isShaderMaterial)) o.visible = false; }); obj.add(m); obj.rotation.order = 'YXZ'; obj.visible = false; this.scene.add(obj); this.ghosts.push({ obj, mat, life: 0 }); }
+    let g = this.ghosts[0]; for (const o of this.ghosts) if (o.life < g.life) g = o;
+    g.life = 0.32; g.obj.visible = true; g.obj.position.copy(p.group.position); g.obj.rotation.copy(p.group.rotation);
+  }
+  updateGhosts(dt) {
+    for (const g of this.ghosts) { if (g.life <= 0) continue; g.life -= dt; if (g.life <= 0) { g.obj.visible = false; continue; } g.mat.opacity = 0.55 * (g.life / 0.32); const sc = 1 + (0.32 - g.life) * 0.4; g.obj.scale.set(sc, sc, sc * 1.15); }
+    if (this.dashT > 0) { this.ghostAcc = (this.ghostAcc || 0) + dt; if (this.ghostAcc > 0.045) { this.ghostAcc = 0; this.spawnGhost(); }
+      const p = this.player; const bud = this.fx.budget; for (let i = 0; i < 3; i++) if (Math.random() < bud) this.fx.emit(p.x + rand(-1, 1) * p.radius * 0.6, 0.5, p.z + rand(-1, 1) * p.radius * 0.6, -this.dashV.x * 0.08, 0, -this.dashV.z * 0.08, 0.3, 0.6, 0.05, 0.6, 3, 1.6, 0); }
+  }
   // ---------- hp bars ----------
   initBars() {
     const bg = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthTest: false });
@@ -1213,7 +1298,7 @@ export class Game {
 
   // ---------- main update ----------
   update(dt) {
-    this.time += dt; this.s.stats.playTime += dt;
+    this.time += dt; this.s.stats.playTime += dt; BOLT_TIME.value = DMG_TIME.value = this.time; this.vfx.frame(dt); this.vfx.update();
     const p = this.player; const st = this.stats(); const T = TIERS[this.s.tier - 1];
     this.field.setTime(this.time);
     // --- movement ---
@@ -1222,19 +1307,19 @@ export class Game {
     if (this.autopilot && !this.dead) { const d = Math.hypot(p.x, p.z) || 1; ix = -p.x / d; iz = -p.z / d; if (d < DOCK_R - 6) { this.autopilot = false; } }
     const im = Math.min(1, Math.hypot(ix, iz));
     // timers: abilities, energy, shields
-    if (this.overT > 0) this.overT -= dt; if (this.surgeT > 0) { this.surgeT -= dt; if (Math.random() < 0.5 * this.fx.budget) this.fx.emit(p.x + rand(-1, 1) * p.radius, 0.8, p.z + rand(-1, 1) * p.radius, 0, 2, 0, 0.5, 0.8, 0.2, 3.4, 2.6, 0.5, 2); }
+    if (this.overT > 0) this.overT -= dt; if (this.surgeT > 0 && !this.dead && p.group) { p.group.updateMatrixWorld(true); for (const w of p.weapons) if (Math.random() < 0.6 * this.fx.budget) { const m = this.tmpV.copy(w.turret.userData.muzzle || w.turret.position); w.turret.localToWorld(m); this.fx.emit(m.x, m.y + 0.1, m.z, rand(-0.5, 0.5), 0.6, rand(-0.5, 0.5), 0.25, 1.3, 0.4, 3.4, 2.6, 0.6, 2); } }
+    if (this.surgeT > 0) { this.surgeT -= dt; if (Math.random() < 0.5 * this.fx.budget) this.fx.emit(p.x + rand(-1, 1) * p.radius, 0.8, p.z + rand(-1, 1) * p.radius, 0, 2, 0, 0.5, 0.8, 0.2, 3.4, 2.6, 0.5, 2); }
     if (!this.dead) {
       p.energy = Math.min(st.energyMax, p.energy + st.energyRegen * dt * (this.jamT > this.time ? 0.4 : 1));
       if (this.docked) p.sh = Math.min(st.shield, p.sh + st.shield * 0.5 * dt);
       else if (this.time - this.lastShieldHit > st.shieldDelay && this.time - this.lastHurt > st.shieldDelay) p.sh = Math.min(st.shield, p.sh + st.shield * st.shieldRegen * dt);
       if (this.skillFx().autoRepair && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * this.skillFx().autoRepair * dt);
     }
-    if (this.overT > 0) { this.shieldMat.uniforms.uT.value = Math.max(this.shieldMat.uniforms.uT.value, 0.55 + 0.15 * Math.sin(this.time * 12)); }
     if (!this.dead) {
       if (this.dashT > 0) { // quantum dash: fixed-velocity blink, then carry top speed
         const ddt = Math.min(dt, this.dashT); this.dashT -= dt; p.x += this.dashV.x * ddt; p.z += this.dashV.z * ddt; p.vx = this.dashV.x; p.vz = this.dashV.z; p.yawVel *= 0.5;
         if (Math.random() < 0.9) this.fx.emit(p.x, 0.6, p.z, 0, 0, 0, 0.35, p.radius * 1.4, 0.4, 0.4, 2.6, 1.4, 0);
-        if (this.dashT <= 0) { const m = Math.hypot(this.dashV.x, this.dashV.z) || 1; p.vx = this.dashV.x / m * st.speed; p.vz = this.dashV.z / m * st.speed; this.rings.spawn(p.x, 0.3, p.z, 4 + p.radius, [0.5, 3, 1.4], 0.3); }
+        if (this.dashT <= 0) { const m = Math.hypot(this.dashV.x, this.dashV.z) || 1; p.vx = this.dashV.x / m * st.speed; p.vz = this.dashV.z / m * st.speed; this.rings.spawn(p.x, 0.3, p.z, 4 + p.radius, [0.5, 3, 1.4], 0.3); this.shells.spawn(p.x, 0.6, p.z, p.radius * 2.6, [0.4, 2.6, 1.2], 0.3, { r0: p.radius * 0.5 }); }
       } else {
       const boost = this.time - this.emergThrustT < 4; const maxMul = (this.autopilot ? 1.15 * (1 + (st.fx.hyper || 0)) : 1) * (boost ? 1.5 : 1);
       p.mass = TIER_MASS[this.s.tier - 1];
@@ -1251,14 +1336,18 @@ export class Game {
     p.group.rotation.set(Math.sin(this.time * 1.1) * 0.02 - p.thrust * 0.05 + this.thr.brake * 0.04, p.yaw, -p.bank);
     if (!this.dead) this.thrusterFx(dt);
     // flames + trails
-    const pw = 0.25 + p.thrust * 1.1; p.flames.mat.uniforms.uPower.value = pw; p.flames.mat.uniforms.uTime.value = this.time;
-    for (const f of p.flames.flames) { const L = f.r * (1.2 + p.thrust * 5.5) * (0.9 + Math.random() * 0.2); f.mesh.scale.set(1, 1, L); f.core.scale.set(1, 1, L * 0.55); f.mesh.visible = f.core.visible = !this.dead; f.sprite.scale.setScalar(f.r * (2.2 + p.thrust * 2.2) * (0.92 + Math.random() * 0.16)); }
+    const dl = this.pDmg || 0; const sput = dl > 0.45 && Math.random() < (dl - 0.4) * 0.5 ? rand(0.15, 0.5) : 1; // damaged engines sputter
+    if (sput < 1 && Math.random() < 0.3 * this.fx.budget && !this.dead) this.smoke.emit(p.x - Math.sin(p.yaw) * p.radius, 0.5, p.z - Math.cos(p.yaw) * p.radius, -p.vx * 0.2, 0.5, -p.vz * 0.2, 1, 0.5, 1.6, 0.12, 0.11, 0.12, 1, 0.8);
+    const pw = (0.25 + p.thrust * 1.1 + this.thr.boost * 0.4) * sput; p.flames.mat.uniforms.uPower.value = pw;
+    { const L = this.engineLight; if (L.visible) { L.position.set(p.x - Math.sin(p.yaw) * p.radius * 1.3, 1.0, p.z - Math.cos(p.yaw) * p.radius * 1.3); L.intensity = this.dead ? 0 : (4 + p.thrust * 14 + this.thr.boost * 8) * sput * (1 + p.radius * 0.15); L.distance = 10 + p.radius * 3; } } p.flames.mat.uniforms.uTime.value = this.time;
+    for (const f of p.flames.flames) { const L = f.r * (1.2 + p.thrust * 5.5 + this.thr.boost * 2.5) * (0.9 + Math.random() * 0.2) * (0.4 + 0.6 * sput); f.mesh.scale.set(1, 1, L); f.core.scale.set(1, 1, L * 0.55); f.mesh.visible = f.core.visible = !this.dead; f.sprite.scale.setScalar(f.r * (2.2 + p.thrust * 2.2) * (0.92 + Math.random() * 0.16)); }
     animateNavLights(p.model, this.time);
     for (const e of p.escorts || []) animateNavLights(e.obj, this.time);
     { const animated = {}; for (const e of this.enemies) if (!e.dead && !animated[e.type]) { animated[e.type] = 1; animateNavLights(e.group, this.time); } }
     for (const k in this.protos) this.protos[k].flameMat.uniforms.uTime.value = this.time;
     // shield ripple
-    { const u = this.shieldMat.uniforms.uT; if (u.value > 0) u.value = Math.max(0, u.value - dt * 2.6); p.shield.visible = u.value > 0 && !this.dead && this.shieldOn !== false; }
+    { const frac = st.shield ? p.sh / st.shield : 0; if (this.prevSh <= 0.001 && p.sh > 0 && !this.dead) this.shieldFx.regen(); this.prevSh = p.sh;
+      this.shieldFx.update(dt, frac, this.overT > 0, this.time); p.shield.visible = this.shieldFx.active() && !this.dead && this.shieldOn !== false; }
     if (!this.dead && p.thrust > 0.2) {
       p.group.updateMatrixWorld(true);
       for (const f of p.flames.flames) if (Math.random() < p.thrust * 0.6 * this.fx.budget) {
@@ -1331,11 +1420,12 @@ export class Game {
       if (Math.random() < 0.3) this.fx.emit(v.x, v.y + 0.1, v.z, 0, 0.8, 0, 0.5, 0.9, 0.3, 1.6, 0.6, 0.15, 1);
     }
     this.smoke.update(dt); this.flashes.update(dt);
+    this.seq.update(dt); this.shells.update(dt); this.metal.update(dt, this.smoke, this.fx); this.bubbles.update(dt, this.time); this.damageFx(dt); this.updateGhosts(dt);
     this.updateBars();
   }
 
   setQuality(q) {
-    const low = q === 'low';
+    const low = q === 'low'; this.quality = q; this.vfx.setQuality(q); this.engineLight.visible = !low; this.metal.meshes.forEach((m) => (m.visible = true));
     this.flashes.enabled = !low; for (const o of this.flashes.pool) o.l.visible = !low;
     this.smoke.budget = low ? 0 : q === 'medium' ? 0.6 : 1; this.smoke.points.visible = !low;
     this.shieldOn = !low;

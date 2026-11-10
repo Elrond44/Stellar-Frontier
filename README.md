@@ -12,6 +12,31 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 
 Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). All models, effects, music and sound are generated procedurally in code. Progress autosaves to your browser's local storage.
 
+## v6: Cinematic combat and physics (Release C)
+- **Flight model:** Newtonian-hybrid handling. Each ship tier has mass. The main engine pushes along the nose, the hull turns with angular inertia, and stabilisers bleed off sideways drift. With no input, retro-thrusters brake progressively instead of the ship stopping dead. Settings → **Flight assist** (Low / Normal / High) trades momentum and drift for arcade-style vectored thrust. Normal keeps the joystick about as snappy as v5. Autopilot always flies on High.
+- **Thrusters tied to real forces:** main-engine length and brightness follow actual thrust. Nose and tail RCS jets fire when the ship turns, lateral jets fire to cancel drift, and retro jets fire when braking. Boost (emergency thrust or hyperdrive autopilot) lengthens the flames. The player ship now casts a dynamic engine light.
+- **Collisions with mass and impulse:** ships and asteroids collide using an impulse solver (restitution, mass ratio, a spin kick and impact energy). Ramming shoves light asteroids and small fighters but bounces you off capital ships. Ramming damages enemies and, at high speed, hurts you too (Impact Dampers still negate it). Asteroids now have mass, drift, knock into each other, and their fragments inherit the parent's momentum. Railgun slugs physically shove what they hit.
+- **No tunnelling:** every projectile uses a swept (continuous) test against a spatial-hash broadphase, so 130+ u/s railgun slugs can no longer pass through small ships or rocks between frames, and big fights cost less CPU.
+- **Weapons fire from the real hardpoints with distinct identities:**
+  - Lasers have a core and glow, a muzzle bloom, and sparks that kick back off the hull.
+  - Plasma bolts are turbulent instanced plasma balls with an ion trail, a bloom and an energy wave on impact.
+  - Railguns fire long thin streaks with an electromagnetic discharge, a directional camera kick and an exit spray.
+  - Missiles launch slowly off the rail, then light their motor. Their turn rate is limited and they have a proximity fuse.
+  - Recoil scales with weapon power and ship mass, and off-centre hardpoints add a little torque.
+- **5-stage explosions:** a flash, an energy sphere with fireball, hot metal fragments that inherit the wreck's velocity and cool down, secondary detonations, then smoke and embers. Capital ships, flagships and big structures chain secondaries into a final core breach. Everything is driven by a game-time sequencer, so effects pause with the game.
+- **Impact shields:** shields are invisible until hit. Up to 4 simultaneous impact ripples run over a hex lattice, dimming and shifting toward red as the shield weakens. Shields shatter with a collapse effect when they break and show a regeneration sweep when they come back. Enemy shields show local impact bubbles. Overload turns your shield into a bright, fast-flowing field.
+- **Health-driven damage states:** hull materials take scorch blooms, lose their sheen and open glowing cracks as HP drops. Sparks and smoke follow, then venting plasma fires and electrical arcs. Windows and lights flicker, and the player's engines sputter. It is all tied to real HP, so repairs heal the visuals. EMP'd ships black out.
+- **PBR materials:** hull plating has packed roughness and metalness maps (bare plates and rivets read as metal, seams and vents as dull), normal maps, emissive windows and stronger environment reflections. Light count stays fixed (pooled flash lights plus one engine light) so no shaders recompile mid-fight.
+- **Abilities:**
+  - Quantum Dash leaves afterimages and an implode/burst distortion.
+  - EMP fires an electromagnetic shell that lights up and blacks out its targets.
+  - Overload produces the flowing shield.
+  - Barrage alternates launch rails and leaves readable trails.
+  - Surge makes your hardpoints glow.
+  - Combat drones fly with real thrust and engine flames.
+- **Performance first:** a central FX manager scales particle emission by quality tier, pool load, frame time and distance from the player. Distant effects get a trickle and phones keep a smooth frame rate. Damage materials are cloned only for damaged ships and disposed on removal (tested for leaks after large battles).
+- **Saves:** v1–v5 saves migrate automatically (v6 adds the flight-assist setting). Export codes are now `SF6.`.
+
 ## v5: Faction war, flagships and missions (Release B)
 - **6-stage liberation:** every pirate sector is liberated in order through Reconnaissance (fly within 130 m of each installation to identify it), Disruption (comm arrays, resource facilities, supply convoys), Defensive Suppression (defense platforms, shipyards, elite patrols), Base Assault (the HQ's sector shield only drops once suppression is complete), Commander Encounter (a named sector commander warps in) and Liberation. Tap the HUD stage tracker (6 pips, current objective) to open the sector on the map, which lists every stage and installation.
 - **Installation types:** communication arrays call in reinforcement waves, shipyards launch replacement ships, resource facilities fund the faction's war effort and send drones, defense platforms fire telegraphed long-range artillery, and the HQ stronghold sits under a sector shield and calls its garrison. Shield generators and turrets guard them all.

@@ -169,7 +169,7 @@ export class Campaign {
     const G = this.G; const o = L.o; G.inst[o.id] = 1; G.spot[o.id] = 1; g.s.stats.outposts++;
     for (const part of L.parts) if (!part.dead && part !== e) { part.hp = 0; part.noLoot = true; g.killEnemy(part); }
     this.live.delete(o.id);
-    for (let k = 0; k < 5; k++) setTimeout(() => g.boom(e.x + rand(-9, 9), 0.5, e.z + rand(-9, 9), 1.8, FACTIONS[e.faction] ? FACTIONS[e.faction].rgb : [3.2, 0.6, 0.4], k % 2 === 0), 120 + k * 160);
+    for (let k = 0; k < 5; k++) g.seq.at(0.12 + k * 0.16, () => g.boom(e.x + rand(-9, 9), 0.5, e.z + rand(-9, 9), 1.8, FACTIONS[e.faction] ? FACTIONS[e.faction].rgb : [3.2, 0.6, 0.4], k % 2 === 0, { secondary: 0 }));
     g.flashes.spawn(e.x, 3, e.z, 120, 0xffb070, 0.6, 50);
     const th = Math.max(1, L.sec.threat); g.dropLoot(e.x, e.z, 'installation', th, o.kind === 'hq' ? 2 : 1); if (th >= 4 || o.kind === 'hq') g.dropLoot(e.x, e.z, 'installation', th);
     if (o.kind === 'res') { const keys = ['stellarite', 'viridium', 'crimsonite', 'voidstone']; for (let k = 0; k < 3; k++) g.minerals.spawn(e.x, e.z, pick(keys), 6, 12); }
@@ -343,7 +343,7 @@ export class Campaign {
     const g = this.g; const bc = e.bc; const def = bc.def; const G = this.G; const fk = def.fk; if (g.boss === e) g.boss = null;
     for (const x of [...bc.parts, ...bc.gens]) if (!x.dead) g.removeEnemy(x);
     for (const x of g.enemies) if (!x.dead && x.summoner === e) { g.fx.burst(x.x, 0.6, x.z, 14, 10, 0.4, 0.8, 0.1, [0.6, 2.2, 3.4], 3); g.removeEnemy(x); }
-    for (let k = 0; k < 8; k++) setTimeout(() => g.boom(e.x + rand(-e.radius, e.radius), 0.5, e.z + rand(-e.radius, e.radius), def.commander ? 1.6 : 2.4, FACTIONS[fk] ? FACTIONS[fk].rgb : [3, 0.6, 0.4], k % 2 === 0), k * 170);
+    for (let k = 0; k < 8; k++) g.seq.at(k * 0.17, () => g.boom(e.x + rand(-e.radius, e.radius), 0.5, e.z + rand(-e.radius, e.radius), def.commander ? 1.6 : 2.4, FACTIONS[fk] ? FACTIONS[fk].rgb : [3, 0.6, 0.4], k % 2 === 0, { secondary: 0, vx: e.vx, vz: e.vz }));
     g.flashes.spawn(e.x, 4, e.z, 200, 0xffc080, 0.9, 70); g.addShake(1.0, e.x, e.z);
     if (def.commander) {
       G.cmd[bc.sec] = 1; this.cmdE = null; const sec = SECTOR_BY_ID[bc.sec]; const th = Math.max(1, sec.threat);

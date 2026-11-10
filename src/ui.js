@@ -740,7 +740,7 @@ export class UI {
       <div class="card"><h4>CONTROLS</h4><p>Touch: drag anywhere to steer (virtual joystick). Weapons fire automatically. Tap the round ability buttons on the right; tap the radar for the galaxy map.<br>Desktop: WASD / arrow keys or drag with the mouse. 1–6 = abilities, Space = Quantum Dash, G = galaxy map, K = skills, I = gear, U = upgrades, M = missions, F = factory, H = station/autopilot, Esc = close.</p></div>
       <div class="card row"><span>Progress autosaves every few seconds.</span><span class="btnrow"><button class="btn sm gold" data-act="save">Save game</button><button class="btn sm" data-act="saves">Save / Load…</button></span></div>
       <div class="card row"><span>Erase all progress</span><button class="btn sm danger" data-act="reset" data-confirm="1">Reset</button></div>
-      <p class="muted">Stellar Frontier v5 · Built with three.js · Faction war, flagships, missions & 6-stage liberation · Sound effects synthesised in real time</p>`;
+      <p class="muted">Stellar Frontier v6 · Built with three.js · Cinematic combat: Newtonian flight, impulse physics, impact shields & staged explosions · Sound effects synthesised in real time</p>`;
   }
   renderMusicCard() {
     const st = this.g.s.settings, a = this.audio; const ts = a.trackState(); const n = (a.tracks || []).length; const sound = st.musicMode !== 'generated';

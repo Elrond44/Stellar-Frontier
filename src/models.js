@@ -49,7 +49,8 @@ function panelSet(seed, size = 512) {
     const l = Math.hypot(dx, dy, 1); const i = (y * size + x) * 4;
     nd.data[i] = (-dx / l * 0.5 + 0.5) * 255; nd.data[i + 1] = (dy / l * 0.5 + 0.5) * 255; nd.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; nd.data[i + 3] = 255;
     const h = H(x, y); const rough = Math.min(255, 120 + (1 - h) * 120 + (Math.random() * 18));
-    rd.data[i] = rough; rd.data[i + 1] = rough; rd.data[i + 2] = rough; rd.data[i + 3] = 255;
+    const met = Math.min(255, 60 + h * 200 + Math.random() * 16); // v6: B = metalness (bare raised plates/rivets metallic, seams/vents dull)
+    rd.data[i] = rough; rd.data[i + 1] = rough; rd.data[i + 2] = met; rd.data[i + 3] = 255;
   }
   ng.putImageData(nd, 0, 0); rg.putImageData(rd, 0, 0);
   // colour map: light-grey tint * height shading + grime
@@ -118,10 +119,10 @@ let MATS = null;
 export function materials() {
   if (MATS) return MATS;
   const T = textures(); const hdr = (r, g, b) => new THREE.Color(r, g, b);
-  const std = (o) => new THREE.MeshStandardMaterial({ map: T.map, normalMap: T.normal, roughnessMap: T.rough, normalScale: new THREE.Vector2(0.9, 0.9), ...o });
+  const std = (o) => new THREE.MeshStandardMaterial({ map: T.map, normalMap: T.normal, roughnessMap: T.rough, metalnessMap: T.rough, envMapIntensity: 1.25, normalScale: new THREE.Vector2(0.9, 0.9), ...o });
   MATS = {
-    hull: std({ color: 0x8e96a0, metalness: 0.55, roughness: 0.75, emissive: 0xffffff, emissiveMap: T.windows, emissiveIntensity: 1.5 }),
-    dark: std({ color: 0x4a515b, metalness: 0.7, roughness: 0.7 }),
+    hull: std({ color: 0x8e96a0, metalness: 0.8, roughness: 0.72, emissive: 0xffffff, emissiveMap: T.windows, emissiveIntensity: 1.5 }),
+    dark: std({ color: 0x4a515b, metalness: 0.95, roughness: 0.62 }),
     orange: std({ color: 0xff7a26, metalness: 0.3, roughness: 0.65, emissive: 0x3a1000, emissiveIntensity: 0.5 }),
     hazard: new THREE.MeshStandardMaterial({ map: T.hazard, metalness: 0.3, roughness: 0.6 }),
     glass: new THREE.MeshStandardMaterial({ color: 0x0a1a24, metalness: 0.9, roughness: 0.08, emissive: 0x1a8fb0, emissiveIntensity: 1.1 }),
@@ -132,10 +133,10 @@ export function materials() {
     red: new THREE.MeshBasicMaterial({ color: hdr(3.5, 0.35, 0.3) }),
     redSoft: new THREE.MeshBasicMaterial({ color: hdr(1.4, 0.12, 0.1) }),
     green: new THREE.MeshBasicMaterial({ color: hdr(0.5, 3.0, 1.0) }),
-    pirate: std({ color: 0x5c4246, metalness: 0.55, roughness: 0.7, emissive: 0xff2030, emissiveMap: T.windows, emissiveIntensity: 1.3 }),
+    pirate: std({ color: 0x5c4246, metalness: 0.8, roughness: 0.68, emissive: 0xff2030, emissiveMap: T.windows, emissiveIntensity: 1.3 }),
     pirateAccent: new THREE.MeshStandardMaterial({ color: 0xc8242c, map: T.livery, normalMap: T.normal, metalness: 0.35, roughness: 0.5, emissive: 0x5a0008, emissiveIntensity: 1.0 }),
     pirateBone: std({ color: 0xb8ad9a, metalness: 0.3, roughness: 0.75 }),
-    pirateDark: std({ color: 0x24181a, metalness: 0.7, roughness: 0.6 }),
+    pirateDark: std({ color: 0x24181a, metalness: 0.95, roughness: 0.55 }),
     solar: new THREE.MeshStandardMaterial({ map: T.solar, metalness: 0.8, roughness: 0.25, emissive: 0x0a2a6a, emissiveIntensity: 0.5, side: THREE.DoubleSide }),
   };
   return MATS;
