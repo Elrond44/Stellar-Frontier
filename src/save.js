@@ -1,12 +1,12 @@
 // Save system: versioned state, migration, validation, manual slots, export/import codes
-import { MINERAL_KEYS, UPGRADES, TIERS } from './data.js?v=6';
-import { TEMPLATES, LEGACY, makeItem, RARITIES } from './items.js?v=6';
-import { SKILL_BY_ID } from './rpg.js?v=6';
-import { SECTOR_BY_ID, freshGalaxy, legacyOutpost, FACTION_KEYS } from './galaxy.js?v=6';
-import { freshWar } from './war.js?v=6';
-import { MTYPES, freshMissions } from './missions.js?v=6';
+import { MINERAL_KEYS, UPGRADES, TIERS } from './data.js?v=7';
+import { TEMPLATES, LEGACY, makeItem, RARITIES } from './items.js?v=7';
+import { SKILL_BY_ID } from './rpg.js?v=7';
+import { SECTOR_BY_ID, freshGalaxy, legacyOutpost, FACTION_KEYS } from './galaxy.js?v=7';
+import { freshWar } from './war.js?v=7';
+import { MTYPES, freshMissions } from './missions.js?v=7';
 
-export const SAVE_VERSION = 6; // v6 = flight-assist setting (physics overhaul); v3 builds still wrote v2 (audio settings were additive); v5 = campaign (stages, war, missions, bosses)
+export const SAVE_VERSION = 7; // v7 = shake level (full/reduced/off), frame cap, notification settings; v6 = flight-assist setting (physics overhaul); v3 builds still wrote v2 (audio settings were additive); v5 = campaign (stages, war, missions, bosses)
 export const INV_CAP = 48;
 export const AUTO_KEY = 'stellar-frontier-save-v1'; // kept so v1 autosaves keep loading
 export const SLOT_COUNT = 3;
@@ -24,7 +24,7 @@ export function freshState() {
     // v5 campaign: faction war simulation, missions, unlocked flagship blueprints
     war: freshWar(), missions: freshMissions(), blueprints: {},
     stats: { mined: 0, rocks: 0, kills: 0, sold: 0, bosses: 0, deaths: 0, playTime: 0, outposts: 0, liberated: 0, caches: 0, items: 0 },
-    settings: { music: true, sfx: true, shake: true, quality: 'auto', fps: false, masterVol: 0.8, musicVol: 0.6, sfxVol: 0.85, mute: false, musicMode: 'soundtrack', trackIdx: 0, trackPos: 0, war: 'normal', assist: 'normal' },
+    settings: { music: true, sfx: true, shake: 'full', fpsCap: 60, quality: 'auto', fps: false, masterVol: 0.8, musicVol: 0.6, sfxVol: 0.85, mute: false, musicMode: 'soundtrack', trackIdx: 0, trackPos: 0, war: 'normal', assist: 'normal' },
     pos: { x: 0, z: 34 }, hp: null, tutorialDone: false, savedAt: Date.now(), created: Date.now(),
   };
 }
@@ -95,7 +95,7 @@ export function sanitize(raw) {
   s.contracts = Array.isArray(d.contracts) ? d.contracts.filter((c) => c && typeof c === 'object' && typeof c.kind === 'string' && num(c.need, 0) > 0 && c.reward && typeof c.title === 'string' && typeof c.desc === 'string')
     .slice(0, 3).map((c) => ({ id: String(c.id || Math.random()), title: c.title.slice(0, 60), desc: c.desc.slice(0, 120), kind: c.kind.slice(0, 30), need: num(c.need, 1, 1, 1e9), prog: num(c.prog, 0, 0, 1e12), reward: { credits: num(c.reward.credits, 0, 0, 1e12), xp: num(c.reward.xp, 0, 0, 1e12) } })) : [];
   for (const k in f.stats) s.stats[k] = num(d.stats && d.stats[k], 0, 0, 1e15);
-  const st = d.settings || {}; s.settings = { music: st.music !== false, sfx: st.sfx !== false, shake: st.shake !== false, quality: ['auto', 'low', 'medium', 'high'].includes(st.quality) ? st.quality : 'auto', fps: st.fps === true,
+  const st = d.settings || {}; s.settings = { music: st.music !== false, sfx: st.sfx !== false, shake: ['full', 'reduced', 'off'].includes(st.shake) ? st.shake : st.shake === false ? 'off' : 'full', fpsCap: st.fpsCap === 30 ? 30 : 60, quality: ['auto', 'low', 'medium', 'high'].includes(st.quality) ? st.quality : 'auto', fps: st.fps === true,
     // v3 audio mixer (older saves: the on/off toggles map onto the new sliders)
     masterVol: num(st.masterVol, 0.8, 0, 1), musicVol: num(st.musicVol, st.music === false ? 0 : 0.6, 0, 1), sfxVol: num(st.sfxVol, st.sfx === false ? 0 : 0.85, 0, 1), mute: st.mute === true,
     musicMode: st.musicMode === 'generated' ? 'generated' : 'soundtrack', trackIdx: int(st.trackIdx, 0, 0, 99), trackPos: num(st.trackPos, 0, 0, 36000), war: ['off', 'low', 'normal', 'high'].includes(st.war) ? st.war : 'normal', assist: ['low', 'normal', 'high'].includes(st.assist) ? st.assist : 'normal' };

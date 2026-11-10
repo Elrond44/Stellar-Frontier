@@ -1,6 +1,6 @@
 // v6 physics: Newtonian-hybrid flight model, impulse collisions, broadphase spatial hash and swept projectile tests.
 // Pure math (no three.js) so it can be unit-tested headlessly.
-import { clamp, angleDiff } from './util.js?v=6';
+import { clamp, angleDiff } from './util.js?v=7';
 
 // ---------------------------------------------------------------- masses
 export const TIER_MASS = [1.2, 2.8, 6, 13, 30];

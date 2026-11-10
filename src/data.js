@@ -70,6 +70,8 @@ export const ENEMIES = {
   inst_core:   { name: 'Outpost Command Core', hp: 2600, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 5.6, xp: 120, credits: 300, armor: 0.3, inst: true },
   inst_gen:    { name: 'Shield Generator', hp: 520, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 2.2, xp: 40, credits: 80, armor: 0.2, inst: true },
   inst_turret: { name: 'Defense Turret', hp: 380, speed: 0, dmg: 8, fireRate: 0.75, range: 34, radius: 1.9, xp: 15, credits: 40, armor: 0.25, inst: true },
+  inst_reactor: { name: 'Fusion Reactor', hp: 600, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 2.4, xp: 45, credits: 90, armor: 0.2, inst: true },
+  inst_hangar: { name: 'Fighter Hangar', hp: 560, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 2.8, xp: 40, credits: 80, armor: 0.25, inst: true },
   // v5 installation cores (one per installation, plus generators + turrets)
   inst_comm:   { name: 'Communication Array', hp: 1500, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 4, xp: 160, credits: 260, armor: 0.25, inst: true },
   inst_res:    { name: 'Resource Facility', hp: 1700, speed: 0, dmg: 0, fireRate: 0, range: 0, radius: 4.6, xp: 160, credits: 420, armor: 0.3, inst: true },

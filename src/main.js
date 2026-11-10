@@ -3,12 +3,16 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
-import { Game } from './game.js?v=6';
-import { UI } from './ui.js?v=6';
-import { Audio } from './audio.js?v=6';
-import { makeSky, makeStarLayer, makeDust } from './world.js?v=6';
-import { SECTORS, sectorAt } from './data.js?v=6';
-import { owner } from './galaxy.js?v=6';
+import { Game } from './game.js?v=7';
+import { UI } from './ui.js?v=7';
+import { Audio } from './audio.js?v=7';
+import { makeSky, makeStarLayer, makeDust } from './world.js?v=7';
+import { Environment } from './environment.js?v=7';
+import { CinematicPass } from './post.js?v=7';
+import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=7';
+import { Profiler } from './profiler.js?v=7';
+import { SECTORS, sectorAt } from './data.js?v=7';
+import { owner } from './galaxy.js?v=7';
 
 const canvas = document.getElementById('c');
 let renderer;
@@ -47,28 +51,36 @@ const stars2 = makeStarLayer(700, 300, -60, -30, 0.22, 1.4, 12); scene.add(stars
 const motes = makeStarLayer(260, 140, -6, 4, 0.06, 0.3, 13); scene.add(motes);
 const dust = makeDust(); scene.add(dust);
 const starLayers = [stars1, stars2, motes];
+const env = new Environment(scene); // v7: layered nebulae, lit planets, distant + foreground rock layers
+const FOG0 = 0.0042; const fogCol0 = new THREE.Color(0x050a18), fogNeb = new THREE.Color(0x1a0c26);
+const detected = detectQuality(renderer); // v7: device capability detection for the AUTO preset
+const prof = new Profiler(renderer, scene); const adapt = new AdaptiveQuality();
+if (window.SF_FORCE_QUALITY && PRESETS[window.SF_FORCE_QUALITY]) { detected.q = window.SF_FORCE_QUALITY; detected.why += ' (pinned by test harness)'; adapt.off = true; } // automated tests pin AUTO so software rendering stays comparable
 
 const audio = new Audio();
-const game = new Game(scene, camera, audio);
+const game = new Game(scene, camera, audio); game.prof = prof;
 const opts = { canvas, showFps: false, fpsText: () => '', applySettings: null, isPlaying: () => playing, onLoaded: null };
 const ui = new UI(game, audio, opts);
 
 // post-processing
-let composer = null, bloom = null, quality = 'medium';
+let composer = null, bloom = null, cine = null, quality = detected.q, activeQ = null;
+function resolvedQuality() { return game.s.settings.quality === 'auto' ? quality : game.s.settings.quality; }
 function setupQuality() {
-  const q = game.s.settings.quality === 'auto' ? quality : game.s.settings.quality;
+  const q = resolvedQuality(); const P = PRESETS[q] || PRESETS.medium; activeQ = q;
   const dpr = window.devicePixelRatio || 1;
-  const pr = q === 'low' ? Math.min(dpr, 1) : q === 'medium' ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+  const pr = Math.min(dpr, P.pr);
   renderer.setPixelRatio(pr);
   renderer.setSize(innerWidth, innerHeight, false);
-  game.fx.budget = q === 'low' ? 0.5 : 1; game.setQuality(q); audio.setLow(q === 'low');
-  sky.material.uniforms.uDetail.value = q === 'low' ? 0 : 1; dust.visible = q !== 'low'; motes.visible = q === 'high';
-  if (q === 'low') { composer = null; bloom = null; }
-  else {
+  game.setQuality(q); audio.setLow(q === 'low'); env.setQuality(q); game.field.maxFrag = P.fragments;
+  sky.material.uniforms.uDetail.value = P.sky; dust.visible = P.dust; motes.visible = P.motes;
+  if (composer) { composer.renderTarget1.dispose(); composer.renderTarget2.dispose(); if (bloom) bloom.dispose(); }
+  composer = null; bloom = null; cine = null;
+  if (P.post) {
     composer = new EffectComposer(renderer);
     composer.setPixelRatio(pr); composer.setSize(innerWidth, innerHeight);
     composer.addPass(new RenderPass(scene, camera));
-    bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), q === 'high' ? 0.9 : 0.8, 0.5, 0.92);
+    cine = new CinematicPass(); composer.addPass(cine.pass);
+    bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), P.bloom, 0.5, 0.92);
     composer.addPass(bloom); composer.addPass(new OutputPass());
   }
   resize();
@@ -92,8 +104,9 @@ addEventListener('resize', resize);
 applySettings();
 
 // fps tracking + auto quality
-let frames = 0, fpsAcc = 0, fps = 60, autoChecked = false, autoT = 0, slowFrames = 0;
-opts.fpsText = () => `${fps.toFixed(0)} fps · ${renderer.info.render.calls} draws · ${game.fx.active} particles`;
+let frames = 0, fpsAcc = 0, fps = 60, capAcc = 0;
+opts.fpsText = () => prof.text();
+opts.detected = detected; opts.activeQuality = () => activeQ;
 
 // title
 let playing = false;
@@ -132,19 +145,21 @@ const tint = new THREE.Vector3(...SECTORS[0].tint); const ownCol = {};
 const clock = new THREE.Clock();
 function frame() {
   requestAnimationFrame(frame);
-  const rawDt = clock.getDelta(); const dt = Math.min(rawDt, 1 / 20);
+  const rawDt0 = clock.getDelta();
+  // battery saver: optional 30 fps cap (also used automatically while menus are open)
+  const cap = game.s.settings.fpsCap === 30 || (ui.modalOpen && playing) ? 1 / 30 : 0;
+  capAcc += rawDt0; if (cap && capAcc < cap * 0.92) return; const rawDt = capAcc; capAcc = 0;
+  const dt = Math.min(rawDt, 1 / 20);
   frames++; fpsAcc += rawDt; if (fpsAcc >= 0.5) { fps = frames / fpsAcc; frames = 0; fpsAcc = 0; }
   const t0 = performance.now();
   if (playing && !ui.modalOpen) {
     game.update(dt);
-    if (game.s.settings.quality === 'auto' && !autoChecked) {
-      autoT += rawDt; if (rawDt > 1 / 32) slowFrames++;
-      if (autoT > 5) { autoChecked = true; if (slowFrames / (autoT * 50) > 0.5 && quality !== 'low') { quality = 'low'; setupQuality(); ui.toast('Graphics set to LOW for smoother play (change in Settings)'); } }
-    }
+    if (game.s.settings.quality === 'auto' && !adapt.off) { const nq = adapt.tick(rawDt, quality); if (nq) { quality = nq; setupQuality(); ui.toast(`Graphics lowered to ${PRESETS[nq].label} to keep play smooth (change in Settings)`); } }
   } else if (!playing) {
     game.time += dt; game.player.yaw += dt * 0.2; game.player.group.rotation.y = game.player.yaw;
     game.field.update(game.player.x, game.player.z, game.time, dt);
   }
+  prof.add('update', performance.now() - t0);
   ui.update(dt, innerWidth, innerHeight);
   audioTick(rawDt);
   game.updateCamera(dt, innerWidth / innerHeight);
@@ -156,14 +171,21 @@ function frame() {
   sky.material.uniforms.uTint.value.copy(tint); sky.material.uniforms.uTime.value = game.time;
   for (const l of starLayers) l.material.uniforms.uCam.value.set(camera.position.x, camera.position.z);
   dust.material.uniforms.uCam.value.set(camera.position.x, camera.position.z); dust.material.uniforms.uVel.value.set(game.player.vx, game.player.vz);
+  env.update(camera, tint, game.time);
+  // dense nebulae thicken the fog (reduced visibility)
+  { const nb = game.phen ? game.phen.env.neb : 0; game.fogK = damp0(game.fogK || 0, nb, 2, dt); scene.fog.density = FOG0 * (1 + game.fogK * 3.2); scene.fog.color.copy(fogCol0).lerp(fogNeb, game.fogK); }
+  if (cine) { cine.uniforms.uTint.value.copy(tint); cine.setLenses(game.lensList(), camera, innerWidth / innerHeight); }
   const t1 = performance.now();
   if (composer) composer.render(); else renderer.render(scene, camera);
+  const t2 = performance.now(); prof.add('render', t2 - t1);
   perf.upd = perf.upd * 0.95 + (t1 - t0) * 0.05; perf.calls = renderer.info.render.calls; perf.tris = renderer.info.render.triangles;
+  prof.endFrame(rawDt, { quality: activeQ, particles: game.fx.active + (game.smoke.active || 0), lenses: cine ? cine.count : 0, targets: composer ? [composer.renderTarget1, composer.renderTarget2] : [] });
 }
+const damp0 = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const perf = { upd: 0, calls: 0, tris: 0 };
 // soundtrack: the manifest is tiny; each song streams only when it is about to play
 audio.musicMode = game.s.settings.musicMode;
-fetch('music/tracks.json?v=6').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
+fetch('music/tracks.json?v=7').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
   if (!Array.isArray(list) || !list.length) return; const s = game.s.settings;
   audio.setTracks(list, s.trackIdx < list.length ? s.trackIdx : 0, s.trackIdx < list.length ? s.trackPos : 0);
 }).catch((e) => console.info('No soundtrack, using generated music:', e.message));
@@ -185,4 +207,4 @@ resize();
 frame();
 
 // test / debug hook
-window.SF = { perf, game, ui, audio, renderer, camera, scene, get fps() { return fps; }, setQuality(q) { game.s.settings.quality = q; applySettings(); } };
+window.SF = { perf, game, ui, audio, renderer, camera, scene, env, prof, detected, PRESETS, get fps() { return fps; }, get quality() { return activeQ; }, get cine() { return cine; }, get composer() { return composer; }, setQuality(q) { game.s.settings.quality = q; applySettings(); }, profile() { return prof.snapshot(); } };

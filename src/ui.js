@@ -1,15 +1,17 @@
 // HUD, joystick, radar and menus (DOM overlay)
-import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=6';
-import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=6';
-import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=6';
-import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=6';
-import { factionStats, WAR_LEVELS, allied } from './war.js?v=6';
-import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=6';
-import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=6';
-import { INV_CAP } from './save.js?v=6';
-import { fmt, clamp } from './util.js?v=6';
-import { FloatText } from './fx.js?v=6';
-import { Preview } from './preview.js?v=6';
+import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=7';
+import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=7';
+import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=7';
+import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=7';
+import { factionStats, WAR_LEVELS, allied } from './war.js?v=7';
+import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=7';
+import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=7';
+import { INV_CAP } from './save.js?v=7';
+import { fmt, clamp } from './util.js?v=7';
+import { FloatText } from './fx.js?v=7';
+import { Preview } from './preview.js?v=7';
+import { PRESETS } from './quality.js?v=7';
+import { PHEN } from './phenomena.js?v=7';
 
 const $ = (id) => document.getElementById(id);
 const TIER_CROPS = [[18, 368, 120, 100], [122, 305, 232, 190], [320, 228, 275, 255], [495, 220, 385, 310], [745, 105, 530, 490]];
@@ -106,19 +108,44 @@ export class UI {
   }
 
   // ---------- feedback ----------
+  // v7: toasts stack bottom-left (newest last), identical messages merge into one line with a ×N counter
   toast(msg, kind = '') {
-    const box = $('toasts'); const el = document.createElement('div'); el.className = 'toast ' + kind; el.textContent = msg; box.appendChild(el);
-    while (box.children.length > 3) box.removeChild(box.firstChild);
-    setTimeout(() => el.classList.add('out'), 2600); setTimeout(() => el.remove(), 3100);
+    const box = $('toasts'); msg = String(msg);
+    for (const el of box.children) if (el._msg === msg && !el.classList.contains('out')) { el._n = (el._n || 1) + 1; let n = el.querySelector('.n'); if (!n) { n = document.createElement('span'); n.className = 'n'; el.appendChild(n); } n.textContent = '×' + el._n; this.armToast(el); return el; }
+    const el = document.createElement('div'); el.className = 'toast ' + kind; el.textContent = msg; el._msg = msg; box.appendChild(el);
+    while (box.children.length > 4) box.removeChild(box.firstChild);
+    this.armToast(el); $('hint').classList.add('busy'); return el;
+  }
+  armToast(el) { clearTimeout(el._t1); clearTimeout(el._t2); el.classList.remove('out'); const life = /level|r4|r5/.test(el.className) ? 3600 : 2800;
+    el._t1 = setTimeout(() => el.classList.add('out'), life); el._t2 = setTimeout(() => { el.remove(); if (!$('toasts').children.length) $('hint').classList.remove('busy'); }, life + 450); }
+  // v7: one banner at a time; higher-priority banners (bosses) pre-empt, others queue (same key replaces)
+  showBanner(html, cls, fc, dur, prio = 1, key = '') {
+    const it = { html, cls, fc, dur, prio, key }; const now = performance.now(); const cur = this.bCur; this.bQ ||= [];
+    if (cur && now < cur.end) {
+      if (prio > cur.prio) { if (cur.end - now > 900 && cur.key !== key) this.bQ.unshift({ ...cur, dur: Math.max(1200, cur.end - now) }); this.displayBanner(it); return; }
+      const i = key ? this.bQ.findIndex((q) => q.key === key) : -1; if (i >= 0) this.bQ[i] = it; else if (key && cur.key === key) { this.displayBanner(it); return; } else this.bQ.push(it);
+      this.bQ.sort((a, b) => b.prio - a.prio); this.bQ.length = Math.min(this.bQ.length, 4); return;
+    }
+    this.displayBanner(it);
+  }
+  displayBanner(it) {
+    const b = $('banner'); b.innerHTML = it.html; b.style.setProperty('--fc', it.fc); b.className = 'show ' + it.cls; this.bCur = { ...it, end: performance.now() + it.dur };
+    clearTimeout(this.bannerT); clearTimeout(this.bannerN);
+    this.bannerT = setTimeout(() => { b.className = ''; this.bCur = null; this.bannerN = setTimeout(() => { if (!this.bCur && this.bQ && this.bQ.length) this.displayBanner(this.bQ.shift()); }, 420); }, it.dur);
+  }
+  hurtDir(ang, shield, a = 1) { // v7: arc around the ship pointing at the damage source
+    const box = $('dmgDir'); this.dd ||= []; let el = this.dd.find((x) => x._ang !== undefined && Math.abs(Math.atan2(Math.sin(x._ang - ang), Math.cos(x._ang - ang))) < 0.35 && performance.now() - x._t < 500);
+    if (!el) { el = this.dd.length < 6 ? box.appendChild(document.createElement('i')) : this.dd.reduce((o, x) => (x._t < o._t ? x : o)); if (!this.dd.includes(el)) this.dd.push(el); }
+    el._ang = ang; el._t = performance.now(); el._a = a; el.className = 'on' + (shield ? ' sh' : ''); el.style.setProperty('--a', a.toFixed(2)); this.hurtN = (this.hurtN || 0) + 1;
+    clearTimeout(el._tm); el._tm = setTimeout(() => el.classList.remove('on'), 380);
   }
   insignia(id, color, cls = 'ins') { const d = INSIGNIA[id] || INSIGNIA.neutral; return `<svg class="${cls}" viewBox="0 0 1 1" aria-hidden="true"><path d="${d}" fill="${color}" fill-rule="evenodd"/></svg>`; }
   threatPips(t) { return `<span class="pips5">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= t ? 'on t' + t : ''}"></i>`).join('')}</span>`; }
   sectorBanner(sec, o = {}) {
     if (!sec || !sec.ring) { const g = this.g; sec = g.gsec; } // legacy call
-    this.secBannerT = performance.now(); const g = this.g; const own = owner(sec, g.s.galaxy); const b = $('banner');
+    this.secBannerT = performance.now(); const g = this.g; const own = owner(sec, g.s.galaxy);
     const status = sec.faction === 'haven' ? 'SAFE HAVEN' : g.s.galaxy.liberated[sec.id] ? 'LIBERATED SPACE' : sec.faction === 'neutral' ? 'UNCLAIMED SPACE' : `${own.name.toUpperCase()} TERRITORY`;
-    b.innerHTML = `<div class="bIns">${this.insignia(own.id, own.color)}</div><small>SECTOR ${sec.id} · ${status}</small>${sec.name.toUpperCase()}<em>THREAT ${this.threatPips(sec.threat)} ${threatLabel(sec.threat).toUpperCase()}</em>${o.fresh ? `<em class="disc">◆ NEW SECTOR DISCOVERED · +${o.xp} XP</em>` : ''}${o.flip ? '<em class="disc">⚑ CONTROL OF THIS SECTOR HAS CHANGED</em>' : ''}`;
-    b.style.setProperty('--fc', own.color); b.className = 'show t' + sec.threat; clearTimeout(this.bannerT); this.bannerT = setTimeout(() => (b.className = ''), o.fresh ? 3800 : 2800);
+    this.showBanner(`<div class="bIns">${this.insignia(own.id, own.color)}</div><small>SECTOR ${sec.id} · ${status}</small>${sec.name.toUpperCase()}<em>THREAT ${this.threatPips(sec.threat)} ${threatLabel(sec.threat).toUpperCase()}</em>${o.fresh ? `<em class="disc">◆ NEW SECTOR DISCOVERED · +${o.xp} XP</em>` : ''}${o.flip ? '<em class="disc">⚑ CONTROL OF THIS SECTOR HAS CHANGED</em>' : ''}`, 't' + sec.threat, own.color, o.fresh ? 3800 : 2800, 1, 'sector');
   }
   liberationNotice(d) {
     const el = $('libNotice'); const R = RARITIES[d.item.r]; const F = d.faction;
@@ -130,14 +157,12 @@ export class UI {
     el.classList.remove('hidden'); clearTimeout(this.libT); this.libT = setTimeout(() => el.classList.add('hidden'), 9000);
   }
   bossIntro(def, phase) {
-    const b = $('banner'); const F = FACTIONS[def.fk]; const col = F ? F.color : '#ff4dd8';
-    b.innerHTML = `<div class="bIns">${this.insignia(def.fk, col)}</div><small>${def.commander ? def.title.toUpperCase() : 'FACTION FLAGSHIP · ' + def.ship.toUpperCase()}</small>${def.name.toUpperCase()}<em>${def.commander ? 'SECTOR DEFENDER' : def.title.toUpperCase()}</em><em class="disc">PHASE ${phase + 1}/${def.phases.length} · ${def.phases[phase].name.toUpperCase()}</em>`;
-    b.style.setProperty('--fc', col); b.className = 'show t5 boss'; clearTimeout(this.bannerT); this.bannerT = setTimeout(() => (b.className = ''), 3600);
+    const F = FACTIONS[def.fk]; const col = F ? F.color : '#ff4dd8';
+    this.showBanner(`<div class="bIns">${this.insignia(def.fk, col)}</div><small>${def.commander ? def.title.toUpperCase() : 'FACTION FLAGSHIP · ' + def.ship.toUpperCase()}</small>${def.name.toUpperCase()}<em>${def.commander ? 'SECTOR DEFENDER' : def.title.toUpperCase()}</em><em class="disc">PHASE ${phase + 1}/${def.phases.length} · ${def.phases[phase].name.toUpperCase()}</em>`, 't5 boss', col, 3600, 3, 'boss');
   }
   bossPhase(def, i) {
-    const b = $('banner'); const F = FACTIONS[def.fk]; const col = F ? F.color : '#ff4dd8';
-    b.innerHTML = `<small>${def.name.toUpperCase()} · PHASE ${i + 1}/${def.phases.length}</small>${def.phases[i].name.toUpperCase()}${def.phases[i].shieldGens ? '<em>SHIELD PYLONS ONLINE · DESTROY THEM TO BREACH THE HULL</em>' : def.phases[i].rage ? '<em>ENRAGED · ATTACKS INTENSIFY</em>' : def.phases[i].summon ? '<em>REINFORCEMENTS INBOUND</em>' : ''}`;
-    b.style.setProperty('--fc', col); b.className = 'show t5 boss'; clearTimeout(this.bannerT); this.bannerT = setTimeout(() => (b.className = ''), 2600);
+    const F = FACTIONS[def.fk]; const col = F ? F.color : '#ff4dd8';
+    this.showBanner(`<small>${def.name.toUpperCase()} · PHASE ${i + 1}/${def.phases.length}</small>${def.phases[i].name.toUpperCase()}${def.phases[i].shieldGens ? '<em>SHIELD PYLONS ONLINE · DESTROY THEM TO BREACH THE HULL</em>' : def.phases[i].rage ? '<em>ENRAGED · ATTACKS INTENSIFY</em>' : def.phases[i].summon ? '<em>REINFORCEMENTS INBOUND</em>' : ''}`, 't5 boss', col, 2600, 3, 'boss');
   }
   bossDefeated(def, it, lost) {
     const el = $('libNotice'); const R = RARITIES[it.r]; const F = FACTIONS[def.fk];
@@ -149,11 +174,9 @@ export class UI {
     el.classList.remove('hidden'); clearTimeout(this.libT); this.libT = setTimeout(() => el.classList.add('hidden'), 12000);
   }
   stageNotice(sec, st) {
-    const wait = 2800 - (performance.now() - (this.secBannerT || -1e9)); if (wait > 0) { clearTimeout(this.stageDefer); this.stageDefer = setTimeout(() => this.stageNotice(sec, libStages(sec, this.g.s.galaxy)), wait); return; }
     if (st.stage >= 5) return;
-    const b = $('banner'); const own = owner(sec, this.g.s.galaxy); const cur = st.steps[Math.min(5, st.stage)];
-    b.innerHTML = `<small>${sec.name.toUpperCase()} · LIBERATION STAGE ${Math.min(6, st.stage + 1)}/6</small>${cur.name.toUpperCase()}<em class="stg">${st.steps.map((x, i) => `<i class="${x.done ? 'done' : i === st.stage ? 'cur' : ''}">${x.icon}</i>`).join('')}</em><em>${cur.desc}</em>`;
-    b.style.setProperty('--fc', '#4fd2ff'); b.className = 'show t2'; clearTimeout(this.bannerT); this.bannerT = setTimeout(() => (b.className = ''), 3200);
+    const cur = st.steps[Math.min(5, st.stage)];
+    this.showBanner(`<small>${sec.name.toUpperCase()} · LIBERATION STAGE ${Math.min(6, st.stage + 1)}/6</small>${cur.name.toUpperCase()}<em class="stg">${st.steps.map((x, i) => `<i class="${x.done ? 'done' : i === st.stage ? 'cur' : ''}">${x.icon}</i>`).join('')}</em><em>${cur.desc}</em>`, 't2', '#4fd2ff', 3200, 1, 'stage');
   }
   hurtFlash() { const h = $('hurt'); h.classList.remove('on'); void h.offsetWidth; h.classList.add('on'); }
   cargoFull() { $('cargoPanel').classList.add('full'); }
@@ -167,7 +190,27 @@ export class UI {
     this.radarT -= dt; if (this.radarT <= 0) { this.radarT = 1 / 20; this.drawRadar(); }
     this.liveT -= dt; if (this.modalOpen && this.liveT <= 0) { this.liveT = 0.25; this.live(); }
     if (this.modalOpen) this.preview.render(dt);
-    this.homeArrow(w, h); this.wpArrow(w, h); this.updateAbilities();
+    this.homeArrow(w, h); this.wpArrow(w, h); this.updateAbilities(); this.updateCombatHud(dt, w, h);
+  }
+  updateCombatHud(dt, w, h) { // v7: damage-direction ring follows the ship; ghost bars trail real damage
+    const g = this.g, p = g.player; const box = $('dmgDir');
+    if (this.dd && this.dd.length) { const v = g.tmpV.set(p.x, 0, p.z).project(g.camera); box.style.transform = `translate(${((v.x * 0.5 + 0.5) * w).toFixed(1)}px, ${((-v.y * 0.5 + 0.5) * h).toFixed(1)}px)`;
+      // world angle -> screen: project a point 10m toward the source
+      for (const el of this.dd) { if (!el.classList.contains('on') && performance.now() - el._t > 900) continue; const tx = p.x + Math.sin(el._ang) * 10, tz = p.z + Math.cos(el._ang) * 10; const u = g.tmpV.set(tx, 0, tz).project(g.camera);
+        const a = Math.atan2((-u.y + v.y) * h, (u.x - v.x) * w) + Math.PI / 2; el.style.transform = `rotate(${a.toFixed(3)}rad)`; } }
+    const gh = (id, f) => { const el = $(id); if (!el) return; const k = '_g' + id; const cur = this[k] ?? f; let nv = cur;
+      if (f >= cur) nv = f; else if (performance.now() - (this[k + 't'] || 0) > 450) nv = Math.max(f, cur - dt * 0.6); if (f < cur && !this[k + 'd']) { this[k + 't'] = performance.now(); } this[k + 'd'] = f < cur; this[k] = nv; el.style.width = (nv * 100).toFixed(1) + '%'; };
+    const st = this._stC || (this._stC = g.stats()); if ((this._stCt = (this._stCt || 0) - dt) <= 0) { this._stCt = 1; this._stC = g.stats(); }
+    gh('hullGhost', Math.max(0, p.hp / p.maxHp)); gh('shGhost', st.shield ? Math.max(0, p.sh / st.shield) : 0);
+  }
+  updateHazardHud() {
+    const g = this.g; const el = $('hazWarn'); const E = g.phen && g.phen.env; const W = E && E.warn;
+    if (!W || g.dead || g.docked) { el.classList.remove('show'); return; }
+    const D = PHEN[W.Z.type]; const inside = W.inside; const I = W.Z.type === 'radiation' ? E.rad : W.Z.type === 'ion' ? E.ion : W.Z.type === 'nebula' ? E.neb : W.Z.type === 'gravity' ? E.grav : E.bh;
+    el.classList.add('show'); el.classList.toggle('in', inside); el.style.setProperty('--hc', D.css);
+    const txt = inside ? `${D.short} · ${E.horizon ? 'EVENT HORIZON: THRUST OUT NOW' : D.inside}` : `${D.short} AHEAD · ${W.d}m`; const sub = inside ? (W.Z.type === 'blackhole' ? 'Thrust away from the centre to escape' : D.warn) : D.warn;
+    const key = txt + sub; if (el._k !== key) { el._k = key; $('hzIcon').textContent = D.icon; $('hzText').innerHTML = `${txt}<small>${sub}</small>`; }
+    $('hzFill').style.width = ((inside ? Math.max(0.05, I) : 1 - W.d / 60) * 100).toFixed(0) + '%';
   }
   updateAbilities() {
     const g = this.g; const ab = g.abilities(); const key = ab.join(',');
@@ -253,6 +296,7 @@ export class UI {
     $('stationLbl').textContent = g.docked ? 'OPEN' : g.autopilot ? 'AUTO ▸' : 'STATION';
     const dt2 = $('dockTag'); const rep = g.camp.repairing && !g.docked; dt2.classList.toggle('show', g.docked || rep); const dtx = rep ? '◆ REPAIR RELAY · SYSTEMS RESTORING' : '◆ DOCKED · CARGO SOLD · HULL REPAIRING'; if (dt2.textContent !== dtx) dt2.textContent = dtx;
     if (this.opts.showFps) $('fps').textContent = this.opts.fpsText();
+    this.updateHazardHud(); $('toasts').classList.toggle('up', $('btnTrade').classList.contains('show'));
   }
   homeArrow(w, h) {
     const g = this.g; const v = g.tmpV.set(0, 0, 0).project(g.camera); const a = $('homeArrow');
@@ -268,7 +312,7 @@ export class UI {
   }
   drawRadar() {
     const c = this.radar, ctx = this.rctx, g = this.g; const S = c.width, R = S / 2;
-    const T = TIERS[g.s.tier - 1]; const st = g.stats(); const range = 85 * T.cam * st.radar; const k = (R - 6) / range; const px = g.player.x, pz = g.player.z; const fx = st.fx;
+    const T = TIERS[g.s.tier - 1]; const st = g.stats(); const HZ = g.phen ? g.phen.env : null; const neb = HZ ? HZ.neb : 0, ion = HZ ? HZ.ion : 0; const range = 85 * T.cam * st.radar * (1 - 0.45 * neb); const k = (R - 6) / range; this.radarRange = range; const px = g.player.x, pz = g.player.z; const fx = st.fx;
     ctx.clearRect(0, 0, S, S);
     ctx.save(); ctx.beginPath(); ctx.arc(R, R, R - 3, 0, Math.PI * 2); ctx.clip();
     const grd = ctx.createRadialGradient(R, R, 0, R, R, R); grd.addColorStop(0, 'rgba(10,40,60,0.75)'); grd.addColorStop(1, 'rgba(4,14,26,0.85)');
@@ -283,6 +327,10 @@ export class UI {
     ctx.strokeStyle = 'rgba(255,90,110,0.35)'; ctx.setLineDash([3, 4]);
     for (const rr of [190, 400, 650]) { const d = Math.hypot(px, pz); if (Math.abs(d - rr) < range * 1.5) { ctx.beginPath(); ctx.arc(R + (0 - px) * k, R + (0 - pz) * k, rr * k, 0, Math.PI * 2); ctx.stroke(); } }
     ctx.setLineDash([]);
+    if (g.phen) for (const Z of g.phen.near) { const d = Math.hypot(Z.x - px, Z.z - pz); if (d - Z.r > range * 1.45) continue; const D = PHEN[Z.type]; // v7 hazard zones
+      ctx.fillStyle = D.css + '26'; ctx.strokeStyle = D.css + 'aa'; ctx.setLineDash(Z.type === 'blackhole' ? [] : [4, 3]); ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(R + (Z.x - px) * k, R + (Z.z - pz) * k, Z.r * k, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      if (Z.type === 'blackhole') { ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(R + (Z.x - px) * k, R + (Z.z - pz) * k, Math.max(2, 12 * k), 0, Math.PI * 2); ctx.fill(); }
+      const ix = R + (Z.x - px) * k, iy = R + (Z.z - pz) * k; if ((ix - R) ** 2 + (iy - R) ** 2 < (R - 10) ** 2) { ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = D.css; ctx.fillText(D.icon, ix, iy + 4); } }
     const dot = (x, z, r, col) => { const sx = R + (x - px) * k, sy = R + (z - pz) * k; if ((sx - R) ** 2 + (sy - R) ** 2 > (R - 4) ** 2) return; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill(); };
     for (const a of g.field.list) if (a.alive) dot(a.x, a.z, Math.max(1.2, a.r * k * 0.9), a.rich ? '#ffcf5a' : 'rgba(150,170,190,0.65)');
     for (const m of g.minerals.list) dot(m.x, m.z, 1, MINERALS[m.type].css);
@@ -291,7 +339,7 @@ export class UI {
     for (const RG of RINGS) { if (RG.id === 'H') continue; const d0 = Math.hypot(px, pz); if (d0 + range < RG.r0 || d0 - range > Math.min(RG.r1, 1100)) continue; for (let i = 0; i < RG.n; i++) { const a = RG.off + i / RG.n * Math.PI * 2; ctx.beginPath(); ctx.moveTo(R + (Math.cos(a) * RG.r0 - px) * k, R + (Math.sin(a) * RG.r0 - pz) * k); ctx.lineTo(R + (Math.cos(a) * Math.min(RG.r1, 1100) - px) * k, R + (Math.sin(a) * Math.min(RG.r1, 1100) - pz) * k); ctx.stroke(); } }
     for (const l of g.loot) { const sx = R + (l.x - px) * k, sy = R + (l.z - pz) * k; ctx.fillStyle = RARITIES[l.it.r].color; ctx.beginPath(); ctx.moveTo(sx, sy - 3.5); ctx.lineTo(sx + 3, sy); ctx.lineTo(sx, sy + 3.5); ctx.lineTo(sx - 3, sy); ctx.fill(); }
     for (const [, c] of g.liveCaches) if (c.obj.visible) dot(c.c.x, c.c.z, 3, '#5dff98');
-    for (const e of g.enemies) { if (e.dead || e.cloaked) continue;
+    for (const e of g.enemies) { if (e.dead || e.cloaked) continue; if (ion > 0.05 && !e.D.inst && Math.random() < ion * 0.55) continue; // ion storms drop contacts
       if (e.D.inst) { const F = FACTIONS[e.faction]; const sx = R + (e.x - px) * k, sy = R + (e.z - pz) * k; if ((sx - R) ** 2 + (sy - R) ** 2 > (R - 4) ** 2) continue; const sz = e.type === 'inst_core' ? 5 : 2.6; ctx.fillStyle = F ? F.color : '#ff4455'; ctx.fillRect(sx - sz / 2, sy - sz / 2, sz, sz); if (e.type === 'inst_core') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(sx - sz / 2 - 1.5, sy - sz / 2 - 1.5, sz + 3, sz + 3); } continue; }
       if (e.D.part || !e.group.visible) continue;
       dot(e.x, e.z, e.D.boss ? 6 : e.type === 'capital' ? 4.5 : e.type === 'gunship' || e.type === 'freighter' ? 3.2 : 2.4, e.D.boss ? '#ff3df2' : e.type === 'freighter' ? '#ffd166' : e.type === 'sentinel' ? '#ffaa33' : e.faction ? FACTIONS[e.faction].color : '#ff4455');
@@ -314,6 +362,10 @@ export class UI {
     for (const b of g.s.war.battles) if (Math.hypot(px - b.x, pz - b.z) < 260) edge(b.x, b.z, '#c99bff', '⚔');
     const tm = g.s.missions.active.find((m) => m.id === g.s.missions.tracked); if (tm) edge(tm.x, tm.z, MTYPES[tm.type].color, MTYPES[tm.type].icon);
     if (g.camp.lib) edge(g.camp.lib.c.x, g.camp.lib.c.z, '#5dff98', 'RELAY');
+    if (ion > 0.05 || neb > 0.05) { // jamming static / nebula fog on the scope
+      if (neb > 0.05) { ctx.fillStyle = `rgba(150,80,200,${(0.25 * neb).toFixed(3)})`; ctx.fillRect(0, 0, S, S); }
+      if (ion > 0.05) { ctx.strokeStyle = `rgba(170,200,255,${(0.35 * ion).toFixed(3)})`; ctx.lineWidth = 1; for (let i = 0; i < 10 * ion + 2; i++) { const y = Math.random() * S; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(S, y + (Math.random() - 0.5) * 6); ctx.stroke(); } }
+      ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = ion > 0.05 ? '#b8ccff' : '#e0b0ff'; ctx.fillText(ion > 0.05 ? 'JAMMED' : 'RANGE ↓', R, S - 16); }
     ctx.restore();
     // player arrow
     ctx.save(); ctx.translate(R, R); ctx.rotate(Math.PI - g.player.yaw);
@@ -733,14 +785,25 @@ export class UI {
   renderSettings() {
     const st = this.g.s.settings; const tg = (k, label) => `<div class="card row"><span>${label}</span><button class="toggle ${st[k] ? 'on' : ''}" data-act="toggle" data-k="${k}">${st[k] ? 'ON' : 'OFF'}</button></div>`;
     const sl = (k, label) => { const v = Math.round((st[k] ?? 0) * 100); return `<div class="card row vol"><span>${label}</span><input type="range" min="0" max="100" step="1" value="${v}" data-vol="${k}" aria-label="${label} volume"><b class="volv" id="vol_${k}">${v}%</b></div>`; };
-    return `<div class="card"><h4>AUDIO</h4></div>` + sl('masterVol', 'Master') + sl('musicVol', 'Music') + sl('sfxVol', 'Sound effects') + tg('mute', 'Mute all') + this.renderMusicCard() + tg('shake', 'Camera shake') + tg('fps', 'Show FPS') +
-      `<div class="card row"><span>Graphics quality</span><div class="seg">${['auto', 'low', 'medium', 'high'].map((q) => `<button class="${st.quality === q ? 'on' : ''}" data-act="quality" data-q="${q}">${q.toUpperCase()}</button>`).join('')}</div></div>`+
+    return `<div class="card"><h4>AUDIO</h4></div>` + sl('masterVol', 'Master') + sl('musicVol', 'Music') + sl('sfxVol', 'Sound effects') + tg('mute', 'Mute all') + this.renderMusicCard() + this.renderGraphicsCard(st) +
       `<div class="card row"><span>Flight assist</span><div class="seg">${[['low', 'LOW'], ['normal', 'NORMAL'], ['high', 'HIGH']].map(([q, l]) => `<button class="${(st.assist || 'normal') === q ? 'on' : ''}" data-act="assist" data-q="${q}">${l}</button>`).join('')}</div></div>
       <div class="card row"><span>Faction warfare<small class="muted" style="display:block">How often factions fight each other and take territory</small></span><div class="seg">${['off', 'low', 'normal', 'high'].map((q) => `<button class="${(st.war || 'normal') === q ? 'on' : ''}" data-act="warlvl" data-q="${q}">${q.toUpperCase()}</button>`).join('')}</div></div>
       <div class="card"><h4>CONTROLS</h4><p>Touch: drag anywhere to steer (virtual joystick). Weapons fire automatically. Tap the round ability buttons on the right; tap the radar for the galaxy map.<br>Desktop: WASD / arrow keys or drag with the mouse. 1–6 = abilities, Space = Quantum Dash, G = galaxy map, K = skills, I = gear, U = upgrades, M = missions, F = factory, H = station/autopilot, Esc = close.</p></div>
       <div class="card row"><span>Progress autosaves every few seconds.</span><span class="btnrow"><button class="btn sm gold" data-act="save">Save game</button><button class="btn sm" data-act="saves">Save / Load…</button></span></div>
       <div class="card row"><span>Erase all progress</span><button class="btn sm danger" data-act="reset" data-confirm="1">Reset</button></div>
-      <p class="muted">Stellar Frontier v6 · Built with three.js · Cinematic combat: Newtonian flight, impulse physics, impact shields & staged explosions · Sound effects synthesised in real time</p>`;
+      <p class="muted">Stellar Frontier v7 · Built with three.js · Living space: planets, nebulae, ion storms, gravity wells & a black hole · Destructible bases · Newtonian flight & impulse physics · Sound effects synthesised in real time</p>`;
+  }
+  renderGraphicsCard(st) { // v7: quality presets with auto-detect, camera shake level, frame cap, performance overlay
+    const det = this.opts.detected || { q: 'medium', why: '' }; const act = this.opts.activeQuality ? this.opts.activeQuality() : det.q;
+    const seg = (act2, cur, list) => `<div class="seg">${list.map(([q, l]) => `<button class="${cur === q ? 'on' : ''}" data-act="${act2}" data-q="${q}">${l}</button>`).join('')}</div>`;
+    const P = PRESETS[st.quality === 'auto' ? act : st.quality] || PRESETS.medium;
+    return `<div class="card"><h4>GRAPHICS &amp; PERFORMANCE</h4></div>
+      <div class="card gfx"><div class="row"><span>Quality preset</span>${seg('quality', st.quality, [['auto', 'AUTO'], ['low', 'LOW'], ['medium', 'MEDIUM'], ['high', 'HIGH']])}</div>
+        <p class="muted small" id="gfxDesc"><b>${P.label}</b>${st.quality === 'auto' ? ` (auto-detected: ${PRESETS[det.q].label}${act !== det.q ? `, running ${PRESETS[act].label} to hold the frame rate` : ''})` : ''}: ${P.desc}</p>
+        <p class="muted small">Device: ${det.why || 'unknown GPU'}</p></div>
+      <div class="card row"><span>Camera shake<small class="muted" style="display:block">Directional impacts and explosions</small></span>${seg('shakelvl', st.shake, [['full', 'FULL'], ['reduced', 'REDUCED'], ['off', 'OFF']])}</div>
+      <div class="card row"><span>Frame rate cap<small class="muted" style="display:block">30 FPS saves battery and heat</small></span>${seg('fpscap', String(st.fpsCap || 60), [['60', '60'], ['30', '30']])}</div>
+      ${`<div class="card row"><span>Performance overlay<small class="muted" style="display:block">FPS, frame time, draw calls, memory</small></span><button class="toggle ${st.fps ? 'on' : ''}" data-act="toggle" data-k="fps">${st.fps ? 'ON' : 'OFF'}</button></div>`}`;
   }
   renderMusicCard() {
     const st = this.g.s.settings, a = this.audio; const ts = a.trackState(); const n = (a.tracks || []).length; const sound = st.musicMode !== 'generated';
@@ -801,7 +864,7 @@ export class UI {
       }
       this.confirmKey = null;
     }
-    if (b.classList.contains('dis') && !['toggle', 'quality', 'assist', 'musicmode', 'track', 'reset', 'save', 'autopilot', 'saves', 'pvtier', 'equip', 'buyskill'].includes(a)) { this.toast(b.dataset.block === '1' && !g.docked && ['respec', 'buyitem', 'station', 'tier'].includes(a) ? 'Dock at the station first' : a === 'itemup' ? 'Not enough credits or components' : 'Not enough credits or materials', 'warn'); this.audio.denied(); return; }
+    if (b.classList.contains('dis') && !['toggle', 'quality', 'shakelvl', 'fpscap', 'assist', 'musicmode', 'track', 'reset', 'save', 'autopilot', 'saves', 'pvtier', 'equip', 'buyskill'].includes(a)) { this.toast(b.dataset.block === '1' && !g.docked && ['respec', 'buyitem', 'station', 'tier'].includes(a) ? 'Dock at the station first' : a === 'itemup' ? 'Not enough credits or components' : 'Not enough credits or materials', 'warn'); this.audio.denied(); return; }
     switch (a) {
       case 'sell': { const r = g.sellCargo(); if (r) this.toast(`Sold: +${r.credits} cr`, 'good'); break; }
       case 'sellvault': g.sellVault(b.dataset.k, 10); break;
@@ -843,6 +906,8 @@ export class UI {
       case 'musicmode': g.s.settings.musicMode = b.dataset.m; this.audio.setMusicMode(b.dataset.m); g.save(); break;
       case 'track': this.audio.nextTrack(+b.dataset.d); break;
       case 'quality': g.s.settings.quality = b.dataset.q; this.opts.applySettings(); g.save(); break;
+      case 'shakelvl': g.s.settings.shake = b.dataset.q; g.save(); if (b.dataset.q !== 'off') g.impulse(g.player.x + 1, g.player.z, 0.5); break;
+      case 'fpscap': g.s.settings.fpsCap = +b.dataset.q === 30 ? 30 : 60; g.save(); break;
       case 'assist': g.s.settings.assist = b.dataset.q; g.save(); this.toast(`Flight assist: ${b.dataset.q.toUpperCase()}${b.dataset.q === 'low' ? ' — Newtonian drift, manual braking' : b.dataset.q === 'high' ? ' — arcade handling' : ''}`); break;
       case 'save': { const ok = g.save(); if (ok) this.audio.saved(); this.toast(ok ? 'Game saved' : 'Save failed: storage is unavailable', ok ? 'good' : 'warn'); break; }
       case 'saves': this.open('saves'); return;

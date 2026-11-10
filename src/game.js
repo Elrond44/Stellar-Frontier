@@ -1,28 +1,38 @@
 // Core game: state, player ship, weapons, enemies, economy, quests, saving
 import * as THREE from 'three';
-import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=6';
-import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=6';
-import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=6';
-import { Campaign, FLEET } from './campaign.js?v=6';
-import { roleAI } from './ai.js?v=6';
-import { BOSS_BY_BP } from './bosses.js?v=6';
-import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=6';
-import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=6';
-import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=6';
-import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=6';
-import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=6';
-import { AsteroidField, Minerals } from './world.js?v=6';
-import { Particles, Debris, Rings, Bolts, Flashes, BOLT_TIME } from './fx.js?v=6';
-import { FXManager, Sequencer, EnergyShells, MetalDebris, makeShieldMaterial, ShieldFX, ShieldBubbles, prepareDamage, ensureDamage, releaseDamage, DMG_TIME, DMG_STATS, plasmaMaterial } from './vfx.js?v=6';
-import { STORY, makeContract } from './quests.js?v=6';
-import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=6';
+import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=7';
+import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=7';
+import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=7';
+import { Campaign, FLEET } from './campaign.js?v=7';
+import { roleAI } from './ai.js?v=7';
+import { BOSS_BY_BP } from './bosses.js?v=7';
+import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=7';
+import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=7';
+import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=7';
+import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=7';
+import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=7';
+import { AsteroidField, Minerals } from './world.js?v=7';
+import { Particles, Debris, Rings, Bolts, Flashes, BOLT_TIME } from './fx.js?v=7';
+import { FXManager, Sequencer, EnergyShells, MetalDebris, makeShieldMaterial, ShieldFX, ShieldBubbles, prepareDamage, ensureDamage, releaseDamage, DMG_TIME, DMG_STATS, plasmaMaterial } from './vfx.js?v=7';
+import { STORY, makeContract } from './quests.js?v=7';
+import { Phenomena } from './phenomena.js?v=7';
+import { Wrecks } from './structures.js?v=7';
+import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=7';
 
 const DOCK_R = 28;
 const BEH_TURRET = { beam: 'laser', bolt: 'cannon', missile: 'missile', pulse: 'pulse' };
-const INST_XP = { inst_turret: 15, inst_gen: 40, inst_core: 120 };
+const INST_XP = { inst_turret: 15, inst_gen: 40, inst_core: 120, inst_reactor: 45, inst_hangar: 40 };
 const ENERGY_DMG = { drone: 1, interceptor: 1, sentinel: 1, inst_turret: 0, gunship: 0, boss: 1, sniper: 0, support: 1, ew: 1, capital: 0, commander: 1, flagship: 1, bpart: 0, inst_def: 0 };
 const ENEMY_SFX = { sniper: 'gunship', support: 'drone', ew: 'interceptor', capital: 'boss', commander: 'boss', flagship: 'boss', freighter: 'drone' }; // 1 = energy (laser) shots, 0 = kinetic
 const DRONES = [0, 2, 3, 4, 6, 10];
+// v7 enemy flight envelopes: a = thrust accel, w = max yaw rate, aw = angular accel, lat = lateral thrust share, evade = jinks
+const EFLIGHT = { drone: { a: 26, w: 4.6, aw: 20, lat: 0.55, evade: true }, interceptor: { a: 34, w: 4.2, aw: 16, lat: 0.35, evade: true }, sentinel: { a: 16, w: 3, aw: 10, lat: 0.6 },
+  sniper: { a: 14, w: 1.8, aw: 5, lat: 0.45, evade: true }, support: { a: 13, w: 2.2, aw: 7, lat: 0.5, evade: true }, ew: { a: 15, w: 2.6, aw: 8, lat: 0.5, evade: true },
+  gunship: { a: 7, w: 1.25, aw: 2.6, lat: 0.32 }, freighter: { a: 3.5, w: 0.5, aw: 0.9, lat: 0.15 }, capital: { a: 2.5, w: 0.32, aw: 0.45, lat: 0.1 },
+  commander: { a: 6, w: 0.6, aw: 1.1, lat: 0.15 }, flagship: { a: 3, w: 0.42, aw: 0.6, lat: 0.1 }, boss: { a: 3, w: 0.42, aw: 0.6, lat: 0.1 } };
+// predictive-aim skill (0 = fires at where you are, 1 = perfect lead) by faction doctrine and ship class
+const AIM_SKILL = { eclipse: 0.82, void: 0.7, iron: 0.66, ashen: 0.56, crimson: 0.48 };
+const AIM_TYPE = { sniper: 0.25, drone: -0.25, sentinel: -0.1, gunship: -0.05, capital: 0.1, commander: 0.1, flagship: 0.1 };
 
 export class Game {
   constructor(scene, camera, audio) {
@@ -62,11 +72,13 @@ export class Game {
     // hp bars pool
     this.bars = []; this.initBars();
     this.camp = new Campaign(this);
+    this.phen = new Phenomena(this); this.ripples = []; this.lensArr = []; this.prof = { add() {} }; this.wrecks = new Wrecks(this); // v7 environment hazards, screen ripples, profiler hook
     // offline factory accrual
     this.updateFactory(0, true);
     if (!this.s.contracts.length) for (let i = 0; i < 3; i++) this.s.contracts.push(this.newContract());
     this.camPos = new THREE.Vector3(this.player.x, 40, this.player.z + 25);
     this.camLook = new THREE.Vector3(this.player.x, 0, this.player.z);
+    this.camFx = { lv: new THREE.Vector3(), io: new THREE.Vector3(), iv: new THREE.Vector3(), roll: 0, rollV: 0, zoom: 1, ctx: 'explore', punch: 0, hits: 0, lead: 0, fit: 1 }; // v7 camera state
   }
 
   get liveOutposts() { return this.camp.live; }
@@ -97,7 +109,7 @@ export class Game {
   applyState(st) {
     st.settings = { ...st.settings, ...this.s.settings }; // keep this device's audio/graphics settings
     st.factory.last = Date.now();
-    for (const e of this.enemies) this.removeEnemy(e); this.enemies.length = 0; this.camp.reset(); this.boss = null;
+    for (const e of this.enemies) this.removeEnemy(e); this.enemies.length = 0; this.camp.reset(); this.boss = null; if (this.wrecks) this.wrecks.clear();
     for (const l of this.loot) this.freeLoot(l); this.loot.length = 0; for (const [, c] of this.liveCaches) this.freeCache(c); this.liveCaches.clear(); this.clearAllies();
     this.abil = { cd: {}, last: {} }; this.overT = this.surgeT = this.dashT = 0; this.fxCache = null;
     this.guards.clear(); if (this.pendingGuards) this.pendingGuards.clear();
@@ -424,6 +436,7 @@ export class Game {
   // v6 staged explosion: 1 flash -> 2 energy sphere + fireball -> 3 fragmentation (inherits momentum) -> 4 secondary detonations -> 5 dissipation
   boom(x, y, z, s, tint, ring = true, o = {}) {
     const near = this.vfx.near(x, z); const vx = o.vx || 0, vz = o.vz || 0; const tc = tint || [3, 1.2, 0.45]; const base = this.vfx.base;
+    if (s >= 2.5 && near > 0.3) this.ripple(x, z, 7 * s, 0.006 + 0.002 * Math.min(4, s), 0.55);
     this.fx.emit(x, y + 0.6, z, vx * 0.3, 0, vz * 0.3, 0.12 + s * 0.02, 3 * s, 7 * s, 3, 2.6, 2.2, 0); // 1 flash
     this.flashes.spawn(x, y, z, 30 + 25 * s, 0xff9a4a, 0.3 + 0.08 * s, 18 + 10 * s, s < 0.9);
     if (s >= 0.8 && near > 0.3) this.shells.spawn(x, y, z, 2.2 * s + 1, [tc[0] * 0.8, tc[1] * 0.8, tc[2] * 0.8], 0.3 + 0.07 * s, { vx: vx * 0.5, vz: vz * 0.5 }); // 2 energy sphere
@@ -449,7 +462,7 @@ export class Game {
       const D = ENEMIES[type]; const F = FACTIONS[fac]; let b;
       if (type === 'flagship') b = buildFlagship(variant || fac || 'crimson', F ? factionMats(fac, F.rgb, F.hull) : factionMats('crimson', [3.4, 0.4, 0.4], 0x3a1e22));
       else if (type === 'bpart') { b = buildBossPart(variant || 'core'); if (F) retint(b.group, fac, F.rgb, F.hull); }
-      else if (D.inst && type !== 'inst_core' && type !== 'inst_gen' && type !== 'inst_turret') { b = buildInstallationV5(type.slice(5)); if (F) retint(b.group, fac, F.rgb, F.hull); }
+      else if (D.inst && !['inst_core', 'inst_gen', 'inst_turret', 'inst_reactor', 'inst_hangar'].includes(type)) { b = buildInstallationV5(type.slice(5)); if (F) retint(b.group, fac, F.rgb, F.hull); }
       else { b = D.inst ? buildInstallation(type.slice(5)) : buildPirate(type); if (F && type !== 'boss') tintPirate(b.group, fac, F.rgb, F.hull, b.radius); }
       const fl = makeFlames(b.engines || [], F ? new THREE.Color(F.rgb[0], F.rgb[1] * 0.8 + 0.3, F.rgb[2]) : new THREE.Color(3.4, 0.8, 0.4)); b.group.add(fl.group);
       this.protos[key] = { ...b, hardpoints: b.hardpoints || [], flameMat: fl.mat, flames: fl };
@@ -481,7 +494,7 @@ export class Game {
       group: g, turrets: [], cd: rand(0.5, 2), state: 'attack', t: rand(0, 10), radius: P.radius * (elite ? 1.2 : 1), hard: P.hardpoints, hitT: 0, orbit: rand(0, TAU),
       faction: fac, M, armor: Math.min(0.8, D.armor + M.armor), speedMul: M.speed, shield: hp * M.shield, maxShield: hp * M.shield, shieldT: 0, stunT: 0, burnT: 0, burnDps: 0, shredT: 0, elite, threat: gs.threat, sector: gs.id,
       cloaked: !!M.cloak && !D.inst && !D.part && !D.boss && type !== 'sentinel' && type !== 'freighter', aiAcc: 0, aiTick: 0, scale: elite ? 1.25 : 1, ...opts };
-    delete e.variant; e.D = D;
+    delete e.variant; e.D = D; e.uid = this.uidN = (this.uidN || 0) + 1; e.yawVel = 0;
     g.traverse((c) => { if (c.name === 'eturret') { c.userData = { barrel: c.getObjectByName('barrel'), rec: 0 }; e.turrets.push(c); } });
     if (e.cloaked) g.visible = false;
     g.position.set(x, 0, z);
@@ -545,8 +558,17 @@ export class Game {
     // installations, liberation stages, convoys, commanders, flagships, faction war, friendlies, missions
     this.camp.update(dt);
   }
+  // v7 squad coordination: interceptors attacking the player split into flanks and take staggered attack runs
+  coordinate() {
+    const p = this.player; const groups = {}; this.squads ||= {};
+    for (const e of this.enemies) { if (e.dead || e.type !== 'interceptor' || e.battle || e.hold || (e.tgt && e.tgt !== p) || e.retreatT > 0 || Math.hypot(e.x - p.x, e.z - p.z) > 70) continue; (groups[e.faction || 'none'] ||= []).push(e); }
+    for (const k in groups) { const G = groups[k]; if (G.length < 2) { for (const e of G) e.runAt = 0; continue; } G.sort((a, b) => a.uid - b.uid);
+      const S = this.squads[k] ||= { end: 0 }; const fresh = this.time > S.end; if (fresh) S.end = this.time + G.length * 1.1 + 5;
+      G.forEach((e, i) => { e.flank = i % 2 ? 1 : -1; if (fresh) e.runAt = this.time + i * 1.1; }); }
+  }
   updateEnemies(dt) {
     const p = this.player; const E = this.enemies; const camp = this.camp;
+    this.squadT = (this.squadT || 0) - dt; if (this.squadT <= 0) { this.squadT = 1; this.coordinate(); }
     for (let i = E.length - 1; i >= 0; i--) {
       const e = E[i];
       if (e.dead) { E.splice(i, 1); continue; }
@@ -578,24 +600,35 @@ export class Game {
     return true;
   }
   enemyAI(e, dt, dist, dx, dz, T = this.player) {
-    const p = this.player; const E = this.enemies; const isP = T === p;
+    const p = this.player; const isP = T === p;
     if (!this.enemyStatus(e, dt)) return;
     // Void Reavers stay cloaked until close or hit
     if (e.cloaked) { if (dist < 26 || e.hitT > 0 || !isP) { e.cloaked = false; e.group.visible = true; this.fx.burst(e.x, 0.6, e.z, 18, 8, 0.4, 1.0, 0.1, [1.8, 0.6, 3.6], 3); }
       else if (Math.random() < 0.25 * this.fx.budget) this.fx.emit(e.x + rand(-1, 1), 0.5, e.z + rand(-1, 1), 0, 0.3, 0, 0.5, 1.2, 0.3, 0.5, 0.2, 0.9, 1); }
-    let tx = T.x, tz = T.z, spd = e.D.speed * (e.speedMul || 1), wantFire = !(isP && this.dead) && !T.hold && dist < e.D.range && !e.cloaked, raw = false, face = false;
-    const D = e.D;
+    // v7 sensors: dense nebulae shorten detection and weapon ranges for everyone inside
+    const senseK = this.phen ? 1 - 0.35 * this.phen.sample(e.x, e.z).neb : 1; const range = e.D.range * senseK;
+    let tx = T.x, tz = T.z, spd = e.D.speed * (e.speedMul || 1), wantFire = !(isP && this.dead) && !T.hold && dist < range && !e.cloaked, raw = false, face = false;
+    const D = e.D; const tvx = T.vx || 0, tvz = T.vz || 0;
     const r = e.bc ? this.camp.bossAI(e, dt, dist, dx, dz) : roleAI(this, e, dt, dist, dx, dz, T);
-    if (r) { if (r.raw) raw = true; else { tx = r.tx; tz = r.tz; spd = r.spd; } wantFire = wantFire && r.wantFire; face = !!r.face; }
+    // tactical retreat: badly damaged light/medium ships fall back to regenerate, then return
+    const canRetreat = !e.bc && !D.boss && !e.retreated && e.type !== 'drone' && e.type !== 'freighter' && e.type !== 'capital' && e.type !== 'sentinel' && !e.convoy;
+    if (canRetreat && e.hp < e.maxHp * 0.25 && dist < 40) { e.retreated = true; e.retreatT = rand(4, 6); }
+    if (e.retreatT > 0) {
+      e.retreatT -= dt; const ux = dx / dist, uz = dz / dist; tx = e.x - ux * 30 - uz * 8 * (e.flank || 1); tz = e.z - uz * 30 + ux * 8 * (e.flank || 1); spd *= 1.15; wantFire = false;
+    } else if (r) { if (r.raw) raw = true; else { tx = r.tx; tz = r.tz; spd = r.spd; } wantFire = wantFire && r.wantFire; face = !!r.face; }
     else if (e.type === 'drone') {
-      e.orbit += dt * 0.9; tx = T.x + Math.cos(e.orbit) * 9; tz = T.z + Math.sin(e.orbit) * 9;
+      e.orbit += dt * 0.9; tx = T.x + tvx * 0.4 + Math.cos(e.orbit) * 9; tz = T.z + tvz * 0.4 + Math.sin(e.orbit) * 9;
     } else if (e.type === 'interceptor') {
-      if (e.state === 'attack') { if (dist < 7) { e.state = 'break'; e.bt = 1.4; const a = Math.atan2(dz, dx) + rand(-1, 1); e.bx = e.x + Math.cos(a) * 30; e.bz = e.z + Math.sin(a) * 30; }
-        else if (e.flank && dist > 14) { const ux = dx / dist, uz = dz / dist; tx = T.x - uz * 12 * e.flank; tz = T.z + ux * 12 * e.flank; } } // capital-ship flanking orders
-      else { tx = e.bx; tz = e.bz; e.bt -= dt; wantFire = false; if (e.bt <= 0) e.state = 'attack'; }
+      if (e.runAt && this.time < e.runAt && dist > 14) { // coordinated attack: hold a standoff ring until this ship's run slot opens
+        e.orbit += dt * 0.5; tx = T.x + Math.cos(e.orbit) * 24; tz = T.z + Math.sin(e.orbit) * 24; spd *= 0.75;
+      } else if (e.state === 'attack') {
+        if (dist < 7) { e.state = 'break'; e.bt = 1.4; const a = Math.atan2(dz, dx) + rand(-1, 1); e.bx = e.x + Math.cos(a) * 30; e.bz = e.z + Math.sin(a) * 30; }
+        else { const lead = clamp(dist / (spd + 1), 0, 1.4); tx = T.x + tvx * lead; tz = T.z + tvz * lead; // interception course
+          if (e.flank && dist > 14) { const ux = dx / dist, uz = dz / dist; tx -= uz * 12 * e.flank; tz += ux * 12 * e.flank; } } // flanking
+      } else { tx = e.bx; tz = e.bz; e.bt -= dt; wantFire = false; if (e.bt <= 0) e.state = 'attack'; }
       spd *= e.state === 'break' ? 1.2 : 1;
-    } else if (e.type === 'gunship') {
-      e.orbit += dt * 0.25; const r2 = 17; tx = T.x + Math.cos(e.orbit) * r2; tz = T.z + Math.sin(e.orbit) * r2;
+    } else if (e.type === 'gunship') { // strafing orbit: faces the target and slides on lateral thrusters
+      e.orbit += dt * 0.25; const r2 = 17; tx = T.x + Math.cos(e.orbit) * r2; tz = T.z + Math.sin(e.orbit) * r2; face = dist < range * 1.2;
     } else if (e.type === 'sentinel') {
       const gd = Math.hypot(e.guard.x - p.x, e.guard.z - p.z);
       if (e.state === 'idle' && gd < 24 && !this.dead) { e.state = 'attack'; this.toast('Mining sentinels activated!', 'warn'); }
@@ -605,42 +638,83 @@ export class Game {
     }
     if (T.hold) { spd *= 0.45; }
     if (e.stunT > 0) { wantFire = false; spd *= 0.15; }
-    const heavy = e.D.boss || e.type === 'capital' || e.type === 'freighter';
-    if (e.knockT > 0) { const k = Math.exp(-0.6 * dt); e.vx *= k; e.vz *= k; } // shoved: momentum carries until the pilot recovers
-    else if (!raw) { // steering
-      const sx = tx - e.x, sz = tz - e.z, sd = Math.hypot(sx, sz) || 0.001;
-      const accel = heavy ? 4 : e.type === 'gunship' || e.type === 'support' ? 10 : 30;
-      const desiredV = Math.min(spd, sd * 2);
-      e.vx += ((sx / sd) * desiredV - e.vx) * Math.min(1, accel * dt / Math.max(spd, 1));
-      e.vz += ((sz / sd) * desiredV - e.vz) * Math.min(1, accel * dt / Math.max(spd, 1));
+    const heavy = D.boss || e.type === 'capital' || e.type === 'freighter';
+    const F = EFLIGHT[e.type] || EFLIGHT.drone; e.yawVel ??= 0;
+    // evasive thrust: light ships jink sideways when hit or when the player's nose is on them
+    if (F.evade && !raw && !(e.retreatT > 0) && isP && !this.dead) {
+      const pa = Math.atan2(e.x - p.x, e.z - p.z); const aimed = dist < 30 && Math.abs(angleDiff(p.yaw, pa)) < 0.22;
+      if ((e.hitT > 0 || aimed) && !(e.jinkT > 0) && Math.random() < 0.08) { e.jinkT = rand(0.45, 0.9); e.jinkS = Math.random() < 0.5 ? -1 : 1; }
     }
-    // separation
-    for (let j = 0; j < E.length; j++) { const o = E[j]; if (o === e || o.D.part) continue; const ox = e.x - o.x, oz = e.z - o.z; const od = Math.hypot(ox, oz); const min = e.radius + o.radius + 0.5; if (od < min && od > 0.001) { const k = o.D.boss || o.D.inst ? 10 : 6; e.vx += (ox / od) * (min - od) * k * dt; e.vz += (oz / od) * (min - od) * k * dt; } }
+    let ax = 0, az = 0; let want = null;
+    if (e.knockT > 0) { const k = Math.exp(-0.6 * dt); e.vx *= k; e.vz *= k; } // shoved: momentum carries until the pilot recovers
+    else if (!raw) { // v7 steering: desired velocity -> required acceleration, limited by the hull's thrusters
+      const sx = tx - e.x, sz = tz - e.z, sd = Math.hypot(sx, sz) || 0.001;
+      const desiredV = Math.min(spd, sd * 1.6);
+      let dvx = (sx / sd) * desiredV, dvz = (sz / sd) * desiredV;
+      if (e.jinkT > 0) { e.jinkT -= dt; const ux = dx / dist, uz = dz / dist; dvx += -uz * e.jinkS * spd * 0.9; dvz += ux * e.jinkS * spd * 0.9; }
+      ax = (dvx - e.vx) * 2.6; az = (dvz - e.vz) * 2.6; const am = Math.hypot(ax, az); const amax = F.a * (e.buffT > this.time ? 1.15 : 1); if (am > amax) { ax *= amax / am; az *= amax / am; }
+      if (am > F.a * 0.25) want = Math.atan2(ax, az);
+    }
+    // rotation: torque-limited angular controller (heavy hulls turn slowly and overshoot less)
+    const faceP = ((e.type !== 'interceptor' || e.state === 'attack') && wantFire) || face || (D.boss && !raw);
+    const desiredYaw = faceP ? Math.atan2(dx, dz) : want !== null ? want : Math.atan2(e.vx, e.vz);
+    { const wantVel = clamp(angleDiff(e.yaw, desiredYaw) * 3, -F.w, F.w); const angAcc = clamp((wantVel - e.yawVel) / Math.max(dt, 1e-4), -F.aw, F.aw); e.yawVel += angAcc * dt; e.yaw += e.yawVel * dt; e.angAcc = angAcc / F.aw; }
+    // thrust is applied in the hull frame: strong main engine along the nose, weaker retro and lateral thrusters
+    if (!raw && e.knockT <= 0) {
+      const hx = Math.sin(e.yaw), hz = Math.cos(e.yaw);
+      const fwd = clamp(ax * hx + az * hz, -F.a * 0.4, F.a); const lat = clamp(ax * hz - az * hx, -F.a * F.lat, F.a * F.lat);
+      e.vx += (hx * fwd + hz * lat) * dt; e.vz += (hz * fwd - hx * lat) * dt; e.thrF = fwd / F.a; e.thrL = lat / F.a;
+      const sp = Math.hypot(e.vx, e.vz); const cap = spd * 1.25 + 0.5; if (sp > cap) { const k = Math.max(cap / sp, Math.exp(-3 * dt)); e.vx *= k; e.vz *= k; }
+      const drag = Math.exp(-0.1 * dt); e.vx *= drag; e.vz *= drag;
+    }
     e.x += e.vx * dt; e.z += e.vz * dt;
-    // face: toward the target when firing, else movement direction
-    const faceP = ((e.type !== 'interceptor' || e.state === 'attack') && wantFire) || face || (e.D.boss && !raw);
-    const desiredYaw = faceP ? Math.atan2(dx, dz) : Math.atan2(e.vx, e.vz);
-    const turn = heavy ? 0.6 : e.type === 'gunship' ? 1.5 : 5;
-    const dy = angleDiff(e.yaw, desiredYaw); const step = clamp(dy, -turn * dt, turn * dt); e.yaw += step;
-    e.bank = damp(e.bank, clamp(step / Math.max(dt, 1e-4) * 0.25, -0.7, 0.7), 5, dt);
+    e.bank = damp(e.bank, clamp(e.yawVel * 0.25, -0.7, 0.7), 5, dt);
     e.group.position.set(e.x, Math.sin(e.t * 2) * 0.15, e.z); e.group.rotation.set(0, e.yaw, heavy ? -e.bank * 0.3 : -e.bank);
     const pulse = e.hitT > 0 ? 1 + e.hitT * (heavy ? 0.15 : 0.6) : 1; e.group.scale.setScalar(pulse * e.scale);
     for (const tu of e.turrets) { tu.rotation.y = damp(tu.rotation.y, angleDiff(0, Math.atan2(dx, dz) - e.yaw), 4, dt); if (tu.userData.rec > 0) { tu.userData.rec = Math.max(0, tu.userData.rec - dt * 4); } if (tu.userData.barrel) tu.userData.barrel.position.z = -(tu.userData.rec || 0) * 0.3; }
-    // fire
-    const multi = e.D.boss || e.type === 'capital';
-    if (wantFire && e.cd <= 0 && (multi || Math.abs(angleDiff(e.yaw, Math.atan2(dx, dz))) < (e.type === 'interceptor' ? 0.5 : 1.2))) {
-      const buff = e.buffT > this.time ? 1.3 : 1;
-      e.cd = 1 / (D.fireRate * (e.M.rate || 1) * buff) * rand(0.85, 1.15); this.curShooter = e;
-      const dmg = D.dmg * e.dmgMul; const ux = dx / dist, uz = dz / dist;
-      if (e.type === 'gunship') { for (const off of [-0.18, 0, 0.18]) { const c = Math.cos(off), s = Math.sin(off); this.enemyShot(e.x + ux * 2.5, e.z + uz * 2.5, ux * c - uz * s, uz * c + ux * s, 22, dmg, [3.5, 1.2, 0.3]); } }
-      else if (multi && e.hard.length) { for (const h of e.hard) { const wx = e.x + Math.cos(e.yaw) * h.x + Math.sin(e.yaw) * h.z, wz = e.z - Math.sin(e.yaw) * h.x + Math.cos(e.yaw) * h.z; const ddx = T.x - wx, ddz = T.z - wz, dd = Math.hypot(ddx, ddz) || 1; this.enemyShot(wx, wz, ddx / dd, ddz / dd, 26, dmg / Math.max(1, e.hard.length * 0.5), [3.5, 0.5, 0.4]); } }
-      else this.enemyShot(e.x + ux * e.radius, e.z + uz * e.radius, ux, uz, e.type === 'drone' ? 20 : 30, dmg, e.type === 'sentinel' ? [3.2, 1.8, 0.3] : [3.5, 0.4, 0.4]);
-      for (const tu of e.turrets) tu.userData.rec = 1;
-      this.fx.emit(e.x + ux * e.radius, 0.6, e.z + uz * e.radius, 0, 0, 0, 0.08, 1.2 + Math.min(4, e.radius) * 0.3, 0.3, 3, 0.8, 0.4, 0);
-      this.audio.enemyShoot(multi ? 'boss' : ENEMY_SFX[e.type] || e.type, e.x, e.z);
+    // fire from the real hardpoints with predictive (lead) targeting; skill varies by faction, ship class and threat
+    const multi = D.boss || e.type === 'capital';
+    if (wantFire && e.cd <= 0) {
+      const spd0 = e.type === 'drone' ? 20 : e.type === 'gunship' ? 22 : multi ? 26 : 30; const H = e.hard && e.hard.length ? e.hard : null;
+      const h0 = H ? H[(e.hpI || 0) % H.length] : null; const m0 = h0 ? this.hardpointWorld(e, h0) : { x: e.x + dx / dist * e.radius, z: e.z + dz / dist * e.radius };
+      const aim = this.aimLead(e, m0.x, m0.z, T, spd0);
+      if (multi || Math.abs(angleDiff(e.yaw, Math.atan2(aim.ux, aim.uz))) < (e.type === 'interceptor' ? 0.5 : 1.2)) {
+        const buff = e.buffT > this.time ? 1.3 : 1;
+        e.cd = 1 / (D.fireRate * (e.M.rate || 1) * buff) * rand(0.85, 1.15); this.curShooter = e;
+        const dmg = D.dmg * e.dmgMul; const col = e.type === 'sentinel' ? [3.2, 1.8, 0.3] : e.type === 'gunship' ? [3.5, 1.2, 0.3] : [3.5, 0.4, 0.4];
+        const fire = (h, off, n) => { const m = h ? this.hardpointWorld(e, h) : m0; const a = h === h0 ? aim : this.aimLead(e, m.x, m.z, T, spd0); const c = Math.cos(off), s2 = Math.sin(off);
+          this.enemyShot(m.x, m.z, a.ux * c - a.uz * s2, a.uz * c + a.ux * s2, spd0, dmg / n, multi ? [3.5, 0.5, 0.4] : col);
+          this.fx.emit(m.x, 0.6, m.z, a.ux * 4, 0, a.uz * 4, 0.08, 1.0 + Math.min(4, e.radius) * 0.25, 0.3, 3, 0.8, 0.4, 0); };
+        if (e.type === 'gunship') { const hs = H || [null, null, null]; hs.slice(0, 3).forEach((h, i) => fire(h, (i - 1) * 0.12, 1)); }
+        else if (multi && H) { for (const h of H) fire(h, 0, Math.max(1, H.length * 0.5)); }
+        else { fire(h0, 0, 1); e.hpI = (e.hpI || 0) + 1; }
+        for (const tu of e.turrets) tu.userData.rec = 1;
+        if (heavy && multi) { const m = massOf(e); const kick = 0.25 * (H ? H.length : 1) / Math.max(1, m) * 30; e.vx -= aim.ux * kick; e.vz -= aim.uz * kick; e.vibT = 0.25; } // heavy-weapon recoil
+        this.audio.enemyShoot(multi ? 'boss' : ENEMY_SFX[e.type] || e.type, e.x, e.z);
+      }
     }
-    // engine trail
-    if (Math.random() < 0.3 * this.fx.budget && e.group.visible) this.fx.emit(e.x - Math.sin(e.yaw) * e.radius, 0.2, e.z - Math.cos(e.yaw) * e.radius, -e.vx * 0.2, 0, -e.vz * 0.2, 0.4, 0.7 * (Math.min(4, e.radius) * 0.5 + 0.5), 0.1, 2.5, 0.6, 0.3, 2);
+    if (e.vibT > 0) { e.vibT -= dt; e.group.position.x += rand(-0.06, 0.06) * e.vibT * 4; e.group.position.z += rand(-0.06, 0.06) * e.vibT * 4; } // structural vibration
+    // engine trail follows real thrust
+    const th = Math.max(0.15, e.thrF || 0);
+    if (Math.random() < 0.35 * th * this.fx.budget && e.group.visible) this.fx.emit(e.x - Math.sin(e.yaw) * e.radius, 0.2, e.z - Math.cos(e.yaw) * e.radius, -e.vx * 0.2 - Math.sin(e.yaw) * 4 * th, 0, -e.vz * 0.2 - Math.cos(e.yaw) * 4 * th, 0.4, 0.7 * (Math.min(4, e.radius) * 0.5 + 0.5) * (0.6 + th * 0.6), 0.1, 2.5, 0.6, 0.3, 2);
+    if (heavy && Math.abs(e.angAcc || 0) > 0.6 && Math.random() < 0.3 * this.fx.budget && e.group.visible) { const sgn = Math.sign(e.angAcc); const fx = Math.cos(e.yaw) * sgn, fz = -Math.sin(e.yaw) * sgn; this.fx.emit(e.x + Math.sin(e.yaw) * e.radius * 0.7, 0.5, e.z + Math.cos(e.yaw) * e.radius * 0.7, fx * 6, 0, fz * 6, 0.25, 0.6, 0.2, 1.6, 2, 2.6, 2); } // RCS puffs
+  }
+  // world position of a model hardpoint on an enemy hull
+  hardpointWorld(e, h) { const s = e.scale || 1; const c = Math.cos(e.yaw), sn = Math.sin(e.yaw); return { x: e.x + (c * h.x + sn * h.z) * s, z: e.z + (-sn * h.x + c * h.z) * s }; }
+  // predictive targeting: solve the intercept for projectile speed, scaled by pilot skill, plus aim error
+  aimSkill(e) {
+    if (e.aimSk !== undefined) return e.aimSk;
+    let k = (AIM_SKILL[e.faction] ?? 0.35) + (AIM_TYPE[e.type] || 0) + 0.06 * Math.max(0, (e.threat || 1) - 1) + (e.elite ? 0.15 : 0) + (e.D.boss ? 0.15 : 0);
+    return (e.aimSk = clamp(k, 0.05, 1));
+  }
+  aimLead(e, sx, sz, T, speed, noise = true) {
+    let sk = this.aimSkill(e); let err = (1 - sk) * 0.14;
+    if (this.phen) { const E = this.phen.sample(sx, sz); if (E.ion > 0) { sk *= 1 - 0.6 * E.ion; err += 0.12 * E.ion; } } // ion storms scramble fire control
+    const rx = T.x - sx, rz = T.z - sz, vx = T.vx || 0, vz = T.vz || 0;
+    const a = vx * vx + vz * vz - speed * speed, b = 2 * (rx * vx + rz * vz), c = rx * rx + rz * rz; let t = Math.sqrt(c) / speed;
+    if (Math.abs(a) > 1e-6) { const disc = b * b - 4 * a * c; if (disc >= 0) { const q = Math.sqrt(disc); const t1 = (-b - q) / (2 * a), t2 = (-b + q) / (2 * a); const tt = Math.min(t1 > 0 ? t1 : 1e9, t2 > 0 ? t2 : 1e9); if (tt < 1e8) t = tt; } }
+    t = Math.min(t, 3) * sk; const ang = Math.atan2(rx + vx * t, rz + vz * t) + (noise ? (Math.random() + Math.random() + Math.random() - 1.5) * 1.15 * err : 0);
+    return { ux: Math.sin(ang), uz: Math.cos(ang), t };
   }
   enemyShot(x, z, ux, uz, speed, dmg, color, o = {}) {
     const e = this.curShooter; const F = e && e.faction && e.type !== 'boss' ? FACTIONS[e.faction] : null;
@@ -723,12 +797,18 @@ export class Game {
   arc(x0, z0, x1, z1) { // lightning arc between two points
     const n = 8; for (let i = 0; i <= n; i++) { const t = i / n; const j = i === 0 || i === n ? 0 : 0.8; this.fx.emit(lerp(x0, x1, t) + rand(-j, j), 0.8 + rand(-0.3, 0.3), lerp(z0, z1, t) + rand(-j, j), 0, 0, 0, 0.18, 0.7, 0.2, 1.6, 2.2, 3.6, 0); }
   }
+  updateWrecks(dt) { this.wrecks.update(dt); }
+  // v7: big structures and capital ships go through staged destruction instead of vanishing in one frame
+  stagedDeath(e) { return !!(this.wrecks && !e.bc && (e.D.inst && e.outpost) && e.group.visible && this.vfx.near(e.x, e.z) > 0.05); }
   killEnemy(e) {
     if (e.dead) return;
-    this.removeEnemy(e);
-    const big = e.type === 'flagship' ? 5 : e.type === 'boss' ? 4 : e.type === 'inst_hq' ? 4 : e.D.inst && e.outpost ? 3.2 : e.type === 'commander' || e.type === 'capital' ? 3 : e.type === 'gunship' || e.type === 'freighter' || e.type === 'inst_gen' || e.D.part ? 1.8 : e.D.inst ? 1.4 : 1;
+    const staged = this.stagedDeath(e);
+    if (staged) { e.dead = true; const F0 = FACTIONS[e.faction]; this.wrecks.add(e, { tint: F0 ? F0.rgb.map((v) => v * 0.9) : [3.2, 0.5, 0.4], blastDmg: e.D.inst ? 0.1 : 0.06, dur: e.type === 'inst_hq' ? 6 : undefined }); }
+    else this.removeEnemy(e);
+    const big0 = e.type === 'flagship' ? 5 : e.type === 'boss' ? 4 : e.type === 'inst_hq' ? 4 : e.D.inst && e.outpost ? 3.2 : e.type === 'commander' || e.type === 'capital' ? 3 : e.type === 'gunship' || e.type === 'freighter' || e.type === 'inst_gen' || e.D.part ? 1.8 : e.D.inst ? 1.4 : 1;
+    const big = staged ? 1.5 : big0;
     const F = FACTIONS[e.faction]; const tint = F ? F.rgb.map((v) => v * 0.9) : [3.2, 0.5, 0.4];
-    this.boom(e.x, 0.5, e.z, big, tint, true, { vx: e.vx || 0, vz: e.vz || 0, r: e.radius });
+    this.boom(e.x, 0.5, e.z, big, tint, true, { vx: e.vx || 0, vz: e.vz || 0, r: e.radius, secondary: staged ? 0 : undefined });
     this.debris.spawn(e.x, 0.3, e.z, Math.round(3 * Math.min(big, 4)), 10, 0.6, 0x2a1416);
     this.audio.explode(big > 1, e.x, e.z, big >= 3); this.addShake(0.25 * Math.min(big, 4), e.x, e.z);
     this.s.stats.kills++; this.emit('kill', { type: e.type });
@@ -776,7 +856,7 @@ export class Game {
     const fx = this.skillFx(); const pst = this.stats();
     if (id === 'dash') {
       let dx = this.input.x, dz = this.input.z; let m = Math.hypot(dx, dz); if (m < 0.2) { dx = Math.sin(p.yaw); dz = Math.cos(p.yaw); m = 1; }
-      const dist = 26 * (1 + (fx.dashLen || 0)); this.dashT = 0.22; this.dashV = { x: dx / m * dist / 0.22, z: dz / m * dist / 0.22 }; p.yaw = Math.atan2(dx, dz);
+      const dist = 26 * (1 + (fx.dashLen || 0)); this.ripple(p.x, p.z, 9, 0.009, 0.4); this.dashT = 0.22; this.dashV = { x: dx / m * dist / 0.22, z: dz / m * dist / 0.22 }; p.yaw = Math.atan2(dx, dz);
       this.rings.spawn(p.x, 0.3, p.z, 6 + p.radius * 2, [0.5, 3, 1.4], 0.4); this.fx.burst(p.x, 0.6, p.z, 24, 10, 0.4, 1.1, 0.1, [0.5, 3, 1.4], 3);
       this.shells.spawn(p.x, 0.6, p.z, p.radius * 0.4, [0.4, 2.6, 1.2], 0.25, { r0: p.radius * 3, a: 1.2 }); this.ghostAcc = 1; this.flashes.spawn(p.x, 1, p.z, 20, 0x44ff99, 0.25, 18, true);
     } else if (id === 'emp') {
@@ -842,7 +922,8 @@ export class Game {
       const d = Math.hypot(lx, lz) || 1; const R = p.radius * 1.6; this.fx.burst(p.x + lx / d * R, 0.7, p.z + lz / d * R, 5, 7, 0.25, 0.5, 0.08, [0.5, 1.8, 3.2], 3);
       if (Math.random() < 0.4) this.flashes.spawn(p.x + lx / d * R, 0.5, p.z + lz / d * R, 14, 0x55bbff, 0.15, 10, true);
     }
-    this.addShake(0.18); this.audio.hurt(fx !== undefined && p.sh > 0, fx === undefined ? p.x : fx, fz === undefined ? p.z : fz); if (dmg > 0.5) this.ui && this.ui.hurtFlash();
+    if (fx !== undefined) { const dx = p.x - fx, dz = p.z - fz, d = Math.hypot(dx, dz) || 1; this.shake = Math.min(1, this.shake + 0.18); this.impulseDir(dx / d, dz / d, 0.18 + Math.min(0.3, dmg / p.maxHp * 2)); this.ui && this.ui.hurtDir && this.ui.hurtDir(Math.atan2(fx - p.x, fz - p.z), hadSh && p.sh > 0, Math.min(1, 0.35 + dmg / p.maxHp * 6)); } else this.addShake(0.18);
+    this.audio.hurt(fx !== undefined && p.sh > 0, fx === undefined ? p.x : fx, fz === undefined ? p.z : fz); if (dmg > 0.5) this.ui && this.ui.hurtFlash();
     if (p.hp <= 0) this.playerDie();
   }
   shieldCollapse() {
@@ -862,11 +943,22 @@ export class Game {
       this.camPos.set(p.x, 40, p.z + 25);
     }, 2600);
   }
+  // v7: no random shake. Every jolt is a directional impulse into a damped spring (pushed away from its source),
+  // scaled by the player's shake setting (full / reduced / off).
+  shakeK() { const v = this.s.settings.shake; return v === 'off' || v === false ? 0 : v === 'reduced' ? 0.35 : 1; }
   addShake(a, x, z) {
-    if (!this.s.settings.shake) return;
-    if (x !== undefined) { const d = Math.hypot(x - this.player.x, z - this.player.z); a *= clamp(1 - d / 60, 0, 1); }
-    this.shake = Math.min(1, this.shake + a);
+    const p = this.player; let ux, uz;
+    if (x !== undefined) { const dx = p.x - x, dz = p.z - z; const d = Math.hypot(dx, dz); a *= clamp(1 - d / 60, 0, 1); if (d > 0.5) { ux = dx / d; uz = dz / d; } }
+    if (ux === undefined) { const t = rand(0, TAU); ux = Math.cos(t); uz = Math.sin(t); }
+    this.shake = Math.min(1, this.shake + a); this.impulseDir(ux, uz, a);
   }
+  impulse(x, z, a) { const p = this.player; const dx = p.x - x, dz = p.z - z; const d = Math.hypot(dx, dz) || 1; this.impulseDir(dx / d, dz / d, a); }
+  impulseDir(ux, uz, a) {
+    const k = this.shakeK(); if (k <= 0 || a <= 0) return; const C = this.camFx; a = Math.min(1.2, a) * k;
+    C.iv.x += ux * a * 26; C.iv.z += uz * a * 26; C.iv.y += a * 9; C.rollV += (Math.random() < 0.5 ? -1 : 1) * a * 0.5;
+    C.hits++;
+  }
+  zoomPunch(a) { this.camFx.punch = Math.max(this.camFx.punch, a); }
 
   // ---------- asteroids ----------
   damageRock(a, dmg, crit) {
@@ -1042,7 +1134,7 @@ export class Game {
     const J = S.dmg * st.dmg * (S.speed / 60) * (S.cat === 'railgun' ? 0.11 : S.cat === 'plasma' ? 0.07 : 0.035);
     const dv = Math.min(2.2, J / m); p.vx -= ux * dv; p.vz -= uz * dv;
     const lx = muzzle.x - p.x, lz = muzzle.z - p.z; const I = m * p.radius * p.radius * 0.5; p.yawVel = clamp(p.yawVel + (lx * -uz - lz * -ux) * J * 0.15 / I, -6, 6);
-    if (S.cat === 'railgun' || S.cat === 'plasma') { const k = Math.min(0.5, J * 0.04) * (this.s.settings.shake ? 1 : 0.3); this.kick.x -= ux * k; this.kick.z -= uz * k; }
+    if (S.cat === 'railgun' || S.cat === 'plasma') { const k = Math.min(0.5, J * 0.04) * Math.max(0.3, this.shakeK()); this.kick.x -= ux * k; this.kick.z -= uz * k; }
   }
   firePulse(radius, dmg, S, critC) {
     const p = this.player;
@@ -1193,6 +1285,22 @@ export class Game {
         const res = collideCircles(A, Bb, 0.3); if (!res) continue;
         e.x = A.x; e.z = A.z; e.vx = A.vx; e.vz = A.vz; a.x = Bb.x; a.z = Bb.z; a.vx = Bb.vx; a.vz = Bb.vz;
         if (res.vn > 4) { e.knockT = Math.min(0.5, res.vn * 0.03); a.hitT = 0.1; spark(e.x + res.nx * er, e.z + res.nz * er, -res.nx, -res.nz, 4, [3, 2, 1]); }
+      }
+    }
+    // v7 ships vs ships: impulse collisions (mass-weighted; installations are immovable), replaces the old soft separation
+    for (const e of this.enemies) {
+      if (e.dead || e.D.inst || e.D.part || Math.abs(e.x - p.x) > 130 || Math.abs(e.z - p.z) > 130) continue;
+      const me = massOf(e); const er = e.radius * 0.75;
+      this.hashE.query(e.x, e.z, er + 0.5, cand);
+      for (const o of cand) {
+        if (o === e || o.dead || o.D.part || (!o.D.inst && o.uid <= e.uid) || (o.parent && o.parent === e) || (e.parent && e.parent === o)) continue;
+        const mo = massOf(o); const orr = o.radius * (o.D.inst ? 0.6 : 0.75);
+        this.body(A, e, e.x, e.z, e.vx || 0, e.vz || 0, me, er, e.yawVel || 0); this.body(Bb, o, o.x, o.z, o.vx || 0, o.vz || 0, mo, orr, o.yawVel || 0);
+        const res = collideCircles(A, Bb, 0.3); if (!res) continue;
+        e.x = A.x; e.z = A.z; e.vx = A.vx; e.vz = A.vz; if (!e.D.boss) e.yawVel = clamp(A.yawVel, -4, 4);
+        if (mo !== Infinity) { o.x = Bb.x; o.z = Bb.z; o.vx = Bb.vx; o.vz = Bb.vz; if (!o.D.boss) o.yawVel = clamp(Bb.yawVel, -4, 4); }
+        if (res.vn > 3) { this.collisions.n++; this.collisions.ships = (this.collisions.ships || 0) + 1; const lightE = me <= mo; const L = lightE ? e : o; L.knockT = Math.max(L.knockT || 0, Math.min(0.5, res.vn * 0.03));
+          if (res.vn > 6) spark(e.x + res.nx * er, e.z + res.nz * er, res.nx, res.nz, Math.min(8, Math.round(res.vn * 0.5)), [3, 2, 1]); }
       }
     }
     // drifting asteroids bump each other (only the moving ones initiate)
@@ -1387,13 +1495,15 @@ export class Game {
     { const wp = this.s.galaxy.wp; if (wp && Math.hypot(wp.x - p.x, wp.z - p.z) < 12 + p.radius) { this.toast(`Waypoint reached: ${wp.label}`, 'good'); this.audio.click(); this.s.galaxy.wp = null; this.save(); } }
     // world streaming
     this.field.loadR = this.s.tier >= 4 ? 3 : 2;
-    this.field.update(p.x, p.z, this.time, dt);
+    const P = this.prof; let pt = performance.now(); const lap = (k) => { const n = performance.now(); P.add(k, n - pt); pt = n; };
+    this.field.update(p.x, p.z, this.time, dt); lap('world');
     this.director(dt);
-    this.updateEnemies(dt);
-    this.physicsStep(dt);
-    this.updateWeapons(dt);
-    this.updateBolts(dt);
-    this.updateLoot(dt); this.updateCaches(dt); this.updateAllies(dt);
+    this.updateEnemies(dt); lap('ai');
+    this.phen.update(dt); lap('phenomena');
+    this.physicsStep(dt); lap('physics');
+    this.updateWeapons(dt); lap('weapons');
+    this.updateBolts(dt); lap('bolts');
+    this.updateLoot(dt); this.updateCaches(dt); this.updateAllies(dt); lap('world');
     // minerals
     const cap = st.cargo;
     this.minerals.update(dt, p.x, p.z, st.magnet, p.radius + 1.0, () => !this.dead && this.cargoTotal() < cap, (o) => {
@@ -1413,17 +1523,25 @@ export class Game {
     }
     this.updateFactory(dt);
     // fx
-    this.fx.update(dt); this.debris.update(dt); this.rings.update(dt);
+    lap('world'); this.fx.update(dt); this.debris.update(dt); this.rings.update(dt);
     animateStation(this.stationRoot, this.time, dt);
     if (this.smoke.budget > 0) for (const v of this.stationRoot.userData.anim.stacks) if (Math.random() < 0.25) {
       this.smoke.emit(v.x + rand(-0.2, 0.2), v.y, v.z + rand(-0.2, 0.2), rand(-0.3, 0.3) + 0.4, rand(1.2, 2), rand(-0.3, 0.3) - 0.3, 2.6, 0.6, 3.2, 0.24, 0.23, 0.25, 0.3, 0.55);
       if (Math.random() < 0.3) this.fx.emit(v.x, v.y + 0.1, v.z, 0, 0.8, 0, 0.5, 0.9, 0.3, 1.6, 0.6, 0.15, 1);
     }
     this.smoke.update(dt); this.flashes.update(dt);
-    this.seq.update(dt); this.shells.update(dt); this.metal.update(dt, this.smoke, this.fx); this.bubbles.update(dt, this.time); this.damageFx(dt); this.updateGhosts(dt);
+    this.seq.update(dt); this.shells.update(dt); this.metal.update(dt, this.smoke, this.fx); this.bubbles.update(dt, this.time); this.damageFx(dt); this.updateGhosts(dt); this.updateWrecks(dt);
+    lap('particles');
     this.updateBars();
   }
 
+  // screen-space shock ripples (explosions, dash) and phenomenon lenses for the cinematic pass
+  ripple(x, z, R, s, dur) { if (this.ripples.length >= 3) this.ripples.shift(); this.ripples.push({ x, z, R, s, dur, t0: this.time }); }
+  lensList() {
+    const L = this.lensArr; L.length = 0; for (const l of this.phen.lenses) L.push(l);
+    for (let i = this.ripples.length - 1; i >= 0; i--) { const r = this.ripples[i]; const k = (this.time - r.t0) / r.dur; if (k >= 1 || k < 0) { this.ripples.splice(i, 1); continue; } L.push({ x: r.x, y: 0.5, z: r.z, r: r.R * (0.15 + 0.85 * k), s: r.s * (1 - k) * (1 - k), mode: 1 }); }
+    return L;
+  }
   setQuality(q) {
     const low = q === 'low'; this.quality = q; this.vfx.setQuality(q); this.engineLight.visible = !low; this.metal.meshes.forEach((m) => (m.visible = true));
     this.flashes.enabled = !low; for (const o of this.flashes.pool) o.l.visible = !low;
@@ -1432,22 +1550,55 @@ export class Game {
     this.field.hiDist = low ? 22 : q === 'medium' ? 45 : 70;
   }
 
+  // v7 camera: spring-damped follow with a velocity-aware lead, lag under boost, contextual zoom
+  // (exploration / speed / combat fit / boss) and directional impulse springs instead of random shake.
+  camContext() {
+    const p = this.player; let threats = 0, far = 0, boss = !!(this.boss && !this.boss.dead);
+    for (const e of this.enemies) { if (e.dead || !e.group.visible || e.ally) continue; const d = Math.hypot(e.x - p.x, e.z - p.z); if (d > 48) continue;
+      if (e.D.boss || e.type === 'flagship' || e.type === 'commander') boss = true; threats++; if (d > far && threats <= 6) far = d; }
+    const env = this.phen && this.phen.env; const bh = env && (env.bh > 0.2 || env.grav > 0.4);
+    return { threats, far, boss, bh };
+  }
   updateCamera(dt, aspect) {
     if (this.camOverride) { const o = this.camOverride; this.camera.position.set(o.x, o.y, o.z); this.camera.lookAt(o.tx, o.ty, o.tz); return; }
-    const p = this.player; const T = TIERS[this.s.tier - 1];
+    const p = this.player; const T = TIERS[this.s.tier - 1]; const C = this.camFx; dt = Math.min(dt, 0.05);
     const portrait = aspect < 1;
-    const base = portrait ? 42 : 34; const dist = base * T.cam * (portrait ? clamp(0.6 / aspect, 1, 1.2) : 1);
+    const base = portrait ? 42 : 34;
+    // contextual zoom target
+    if ((this._ctxT = (this._ctxT || 0) - dt) <= 0) { this._ctxT = 0.25; this._ctx = this.camContext(); }
+    const X = this._ctx || { threats: 0, far: 0 }; const sp = Math.hypot(p.vx, p.vz); const vmax = 15 * (T.speed || 1); const sf = clamp(sp / (vmax || 15), 0, 1.6);
+    let zt = 0.94, ctx = 'explore';
+    if (sf > 0.6) { zt = 0.98 + (sf - 0.6) * 0.16; ctx = 'speed'; }
+    if (X.threats) { const fit = clamp(X.far / (base * 0.58), 1, 1.28); zt = Math.max(zt, fit); ctx = 'combat'; }
+    if (X.boss) { zt = Math.max(zt, 1.2); ctx = 'boss'; }
+    if (X.bh) { zt = Math.max(zt, 1.12); ctx = 'hazard'; }
+    if (this.dashT > 0) zt += 0.05;
+    C.punch = Math.max(0, C.punch - dt * 0.6); zt += C.punch; C.ctx = ctx;
+    C.zoom = damp(C.zoom, zt, zt > C.zoom ? 1.6 : 0.9, dt);
+    const dist = base * T.cam * (portrait ? clamp(0.6 / aspect, 1, 1.2) : 1) * C.zoom;
     const elev = 1.02; // radians (~58 deg)
-    const lookX = p.x + p.vx * 0.35, lookZ = p.z + p.vz * 0.35 - (portrait ? 2 : 0);
-    this.camLook.x = damp(this.camLook.x, lookX, 4, dt); this.camLook.z = damp(this.camLook.z, lookZ, 4, dt);
+    // look target leads the velocity (more at speed, capped), spring-follow lags behind boosts and dashes
+    const leadK = 0.32 + 0.18 * clamp(sf, 0, 1); C.lead = leadK;
+    let lookX = p.x + p.vx * leadK, lookZ = p.z + p.vz * leadK - (portrait ? 2 : 0);
+    const ld = Math.hypot(lookX - p.x, lookZ - p.z), lmax = dist * 0.28; if (ld > lmax) { lookX = p.x + (lookX - p.x) * lmax / ld; lookZ = p.z + (lookZ - p.z) * lmax / ld; }
+    const boosting = this.dashT > 0 || (p.boostT > 0) || sf > 1.05; const w = boosting ? 3.2 : 5.5, z2 = 1.0;
+    if (!isFinite(this.camLook.x)) this.camLook.set(p.x, 0, p.z);
+    C.lv.x += (w * w * (lookX - this.camLook.x) - 2 * z2 * w * C.lv.x) * dt; C.lv.z += (w * w * (lookZ - this.camLook.z) - 2 * z2 * w * C.lv.z) * dt;
+    this.camLook.x += C.lv.x * dt; this.camLook.z += C.lv.z * dt;
+    // keep the ship on screen even under heavy lag
+    const ox = p.x - this.camLook.x, oz = p.z - this.camLook.z, od = Math.hypot(ox, oz), omax = dist * 0.36; if (od > omax) { this.camLook.x += ox * (1 - omax / od); this.camLook.z += oz * (1 - omax / od); }
     const tx = this.camLook.x, ty = Math.sin(elev) * dist, tz = this.camLook.z + Math.cos(elev) * dist;
-    this.camPos.x = damp(this.camPos.x, tx, 6, dt); this.camPos.y = damp(this.camPos.y, ty, 2.5, dt); this.camPos.z = damp(this.camPos.z, tz, 6, dt);
+    this.camPos.x = damp(this.camPos.x, tx, 9, dt); this.camPos.y = damp(this.camPos.y, ty, 2.5, dt); this.camPos.z = damp(this.camPos.z, tz, 9, dt);
+    // directional impulse spring (underdamped: a short, readable recoil in the direction of the hit)
+    { const ws = 15, zs = 0.42; const io = C.io, iv = C.iv;
+      iv.x += (-ws * ws * io.x - 2 * zs * ws * iv.x) * dt; iv.y += (-ws * ws * io.y - 2 * zs * ws * iv.y) * dt; iv.z += (-ws * ws * io.z - 2 * zs * ws * iv.z) * dt;
+      io.x += iv.x * dt; io.y += iv.y * dt; io.z += iv.z * dt; const m = 2.2; io.x = clamp(io.x, -m, m); io.y = clamp(io.y, -m, m); io.z = clamp(io.z, -m, m);
+      C.rollV += (-180 * C.roll - 2 * 0.5 * 13.4 * C.rollV) * dt; C.roll = clamp(C.roll + C.rollV * dt, -0.05, 0.05); }
     this.camera.position.copy(this.camPos);
-    this.camera.lookAt(this.camLook.x, 0, this.camLook.z);
+    this.camera.position.x += C.io.x; this.camera.position.y += C.io.y; this.camera.position.z += C.io.z;
+    this.camera.lookAt(this.camLook.x + C.io.x * 0.6, 0, this.camLook.z + C.io.z * 0.6);
+    if (C.roll) this.camera.rotateZ(C.roll);
     { const kk = this.kick; this.camera.position.x += kk.x; this.camera.position.z += kk.z; const d = Math.exp(-10 * dt); kk.x *= d; kk.z *= d; }
-    if (this.shake > 0) {
-      const s = this.shake * this.shake * 1.2; this.camera.position.x += rand(-s, s); this.camera.position.y += rand(-s, s) * 0.5; this.camera.position.z += rand(-s, s);
-      this.shake = Math.max(0, this.shake - dt * 1.8);
-    }
+    this.shake = Math.max(0, this.shake - dt * 1.8);
   }
 }

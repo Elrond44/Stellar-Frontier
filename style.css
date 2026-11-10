@@ -426,3 +426,45 @@ ol.stages em span{font-size:9px;padding:1px 5px;border-radius:4px;background:rgb
 #bossBar .bbHead{flex-direction:column;align-items:flex-start;gap:0}#bossBar .bbHead span{max-width:100%}
 #battleTag{position:absolute;left:10px;bottom:calc(var(--sab) + 128px);width:min(60vw,280px);display:none;padding:6px 9px;border-radius:10px;background:rgba(14,6,30,.72);border:1px solid #a07cff;color:#e6d8ff;font-size:10px;letter-spacing:.08em;pointer-events:none}
 #battleTag.show{display:block}#battleTag small{display:block;font-size:8px;opacity:.7;margin-top:3px;letter-spacing:.04em}
+
+/* ================= v7 HUD: notification column, toast stack, damage direction, ghost bars, hazards ================= */
+#notify{position:absolute;top:calc(var(--sat) + 392px);left:12px;right:76px;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none;z-index:4}
+#notify > *{position:static!important;transform:none!important;top:auto!important;bottom:auto!important;left:auto!important;right:auto!important;margin:0}
+#notify #bossBar,#notify #battleTag{width:100%;max-width:340px;text-align:left}
+#notify #bossBar{background:rgba(10,4,16,.62);border-radius:10px;padding:5px 8px;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+#notify #banner{display:block;opacity:0;max-height:0;overflow:hidden;width:100%;max-width:340px;font-size:21px;line-height:1.08;letter-spacing:.08em;padding:0 10px;border-radius:12px;background:rgba(4,10,20,.58);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);transition:opacity .35s,max-height .35s,padding .35s;text-shadow:0 0 12px var(--fc),0 2px 2px #000;overflow-wrap:anywhere}
+#notify #banner.show{opacity:1;max-height:220px;padding:8px 10px}
+#notify #banner.boss{font-size:20px}
+#notify #banner small{font-size:10px;letter-spacing:.18em;margin-bottom:2px}#notify #banner em{font-size:10.5px;letter-spacing:.12em;margin-top:2px}
+#notify #banner .bIns .ins{width:28px;height:28px}
+#notify #bossWarn{display:none;white-space:normal;text-align:center;max-width:320px;font-size:12px}
+#notify #bossWarn.show{display:block;animation:warnPulse 1s infinite alternate}
+@keyframes warnPulse{to{box-shadow:0 0 16px rgba(255,74,90,.7)}}
+#hazWarn{display:none;align-items:center;gap:7px;padding:5px 10px;border-radius:9px;background:rgba(6,10,22,.74);border:1px solid var(--hc,#8fb4ff);color:#eef4ff;font-size:11px;font-weight:800;letter-spacing:.06em;max-width:320px;box-shadow:0 0 10px color-mix(in srgb,var(--hc,#8fb4ff) 45%,transparent)}
+#hazWarn.show{display:flex}#hazWarn.in{animation:warnPulse .8s infinite alternate}
+#hazWarn b{font-size:16px;color:var(--hc,#8fb4ff);text-shadow:0 0 8px var(--hc,#8fb4ff)}
+#hazWarn span{flex:1;line-height:1.2}#hazWarn span small{display:block;font-size:9px;font-weight:600;opacity:.8;letter-spacing:.02em}
+#hazWarn .bar{width:46px;height:6px;flex:none}#hazWarn .bar i{background:var(--hc,#8fb4ff);box-shadow:0 0 6px var(--hc,#8fb4ff)}
+/* toasts: bottom-left stack above the cargo panel, newest at the bottom, never under the banner */
+#toasts{top:auto;left:10px;right:auto;transform:none;bottom:calc(var(--sab) + 136px);width:min(62vw,250px);flex-direction:column;align-items:flex-start;gap:5px;z-index:4;pointer-events:none}
+#toasts.up{bottom:calc(var(--sab) + 182px)}
+#toasts .toast{font-size:12px;padding:5px 9px;text-align:left;max-width:100%;line-height:1.25;text-shadow:0 1px 1px #000}
+#toasts .toast.level{font-size:13px}
+#toasts .toast .n{display:inline-block;margin-left:6px;padding:0 5px;border-radius:6px;background:rgba(255,255,255,.14);font-size:10px}
+#toasts .toast.out{transform:translateX(-10px)}
+#hint.gone,#hint.busy{opacity:0;pointer-events:none}
+/* damage direction arcs around the ship */
+#dmgDir{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;z-index:3}
+#dmgDir i{position:absolute;left:-70px;top:-70px;width:140px;height:140px;border-radius:50%;border:5px solid transparent;border-top-color:#ff3b4e;filter:drop-shadow(0 0 6px #ff3b4e);opacity:0;transition:opacity .5s}
+#dmgDir i.sh{border-top-color:#5fd4ff;filter:drop-shadow(0 0 6px #5fd4ff)}
+#dmgDir i.on{opacity:var(--a,1);transition:none}
+/* lagging ghost bars show recent damage */
+.bar b.ghost{position:absolute;left:0;top:0;bottom:0;width:0;background:#fff;opacity:.55;transition:width .45s ease-out}
+#cargoPanel .hull .bar b.ghost{background:#ffd3d8}#cargoPanel .hull.sh .bar b.ghost{background:#cdeeff}
+/* readability: stronger contrast on small HUD labels */
+#cargoPanel .hull span,#cargoPanel .lbl,#libWrap,#heatWrap span{text-shadow:0 1px 2px #000,0 0 4px #000}
+#fps{white-space:pre;text-align:center;font:600 10px/1.25 ui-monospace,monospace;opacity:.85;background:rgba(0,0,0,.45);padding:2px 6px;border-radius:6px;bottom:calc(var(--sab) + 96px);pointer-events:none}
+#fps:empty{display:none}
+.card.gfx .row{display:flex;justify-content:space-between;align-items:center;gap:8px}.card.gfx p{margin:6px 0 0}.muted.small{font-size:11px}
+@media (max-height:700px){#notify{top:calc(var(--sat) + 330px)}#notify #banner{font-size:18px}}
+@media (min-width:700px){#notify{left:50%;right:auto;width:420px;transform:translateX(-50%);top:calc(var(--sat) + 250px)}}

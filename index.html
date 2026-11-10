@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>Stellar Frontier</title>
 <link rel="preload" href="fonts/rajdhani-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 <link rel="icon" href="data:,">
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
 </head>
@@ -32,8 +32,14 @@
       <button id="libWrap" aria-label="Liberation stages"><div id="stagePips"></div><span id="libLbl">LIBERATION 0%</span><div class="bar lib"><i id="libFill"></i></div><small id="libObj"></small></button>
     </div>
     <div id="abilities"></div>
-    <div id="bossBar"><div class="bbHead"><span id="bossName">☠</span><em id="bossPhase"></em></div><div class="bar"><i id="bossFill"></i><b id="bossShield"></b></div><div id="bossParts"></div></div>
-    <div id="bossWarn"></div><div id="battleTag"><b id="btTitle"></b><div class="tug"><i id="btA"></i><i id="btD"></i></div><small>Destroy either side to tip the battle · they ignore you unless you attack</small></div>
+    <div id="notify"><!-- v7: one flow column, so status lines stack instead of overlapping -->
+      <div id="bossBar"><div class="bbHead"><span id="bossName">☠</span><em id="bossPhase"></em></div><div class="bar"><i id="bossFill"></i><b id="bossShield"></b></div><div id="bossParts"></div></div>
+      <div id="battleTag"><b id="btTitle"></b><div class="tug"><i id="btA"></i><i id="btD"></i></div><small>Destroy either side to tip the battle · they ignore you unless you attack</small></div>
+      <div id="banner"></div>
+      <div id="bossWarn"></div>
+      <div id="hazWarn"><b id="hzIcon"></b><span id="hzText"></span><div class="bar"><i id="hzFill"></i></div></div>
+    </div>
+    <div id="dmgDir"></div>
     <div id="leftCol">
       <button id="questCard" class="panel">
         <div class="qhead">◈ ACTIVE QUEST</div>
@@ -46,16 +52,15 @@
     </div>
     <button id="btnTrade" class="panel">⚖ TRADER<small>Liberated-sector stock</small></button>
     <div id="dockTag">◆ DOCKED · CARGO SOLD · HULL REPAIRING</div>
-    <div id="toasts"></div>
-    <div id="banner"></div>
+    <div id="toasts" aria-live="polite"></div>
     <div id="homeArrow"><i>➤</i><span></span></div>
     <div id="wpArrow"><i>➤</i><span></span></div>
     <div id="libNotice" class="hidden"></div>
     <div id="hint">Drag anywhere to fly · weapons fire automatically</div>
     <div id="cargoPanel" class="panel">
       <div class="cargoMain"><div class="lbl">CARGO</div><div id="cargoNum">0 / 40</div><div class="bar"><i id="cargoFill"></i></div>
-        <div class="hull"><span>HULL</span><div class="bar"><i id="hullFill"></i></div></div>
-        <div class="hull sh"><span>SHIELD</span><div class="bar"><i id="shFill"></i></div></div>
+        <div class="hull"><span>HULL</span><div class="bar"><b class="ghost" id="hullGhost"></b><i id="hullFill"></i></div></div>
+        <div class="hull sh"><span>SHIELD</span><div class="bar"><b class="ghost" id="shGhost"></b><i id="shFill"></i></div></div>
         <div class="hull en"><span>ENERGY</span><div class="bar"><i id="enFill"></i></div></div></div>
       <div class="cargoSide"><svg viewBox="0 0 32 32"><path fill="none" stroke="#5fe3ff" stroke-width="1.6" d="M16 3l11 6v14l-11 6-11-6V9zM5 9l11 6 11-6M16 15v14"/></svg><div id="cargoType">EMPTY</div></div>
     </div>
@@ -84,6 +89,6 @@
   </div>
   <noscript>This game needs JavaScript and WebGL.</noscript>
 </div>
-<script type="module" src="src/main.js?v=6"></script>
+<script type="module" src="src/main.js?v=7"></script>
 </body>
 </html>

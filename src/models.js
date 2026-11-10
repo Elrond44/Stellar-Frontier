@@ -1,7 +1,7 @@
 // Procedural models v2: detailed ships, turrets, pirates, station, asteroid geometry + materials.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
-import { mulberry, fbm3 } from './util.js?v=6';
+import { mulberry, fbm3 } from './util.js?v=7';
 
 // ================= Procedural textures =================
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -244,8 +244,8 @@ export class Kit {
   }
 }
 export function animateNavLights(group, t) {
-  const lg = group.getObjectByName('navLights'); if (!lg) return;
-  for (const s of lg.children) {
+  let L = group._navs; if (!L) { L = group._navs = []; group.traverse((o) => { if (o.name === 'navLights') L.push(o); }); }
+  for (const lg of L) for (const s of lg.children) {
     const u = s.userData; let a;
     if (u.mode === 'strobe') a = ((t * 1.3 + u.phase) % 1.5) < 0.08 ? 1 : 0.05;
     else a = 0.25 + 0.75 * Math.max(0, Math.sin(t * 3.2 + u.phase));
@@ -863,6 +863,18 @@ export function buildInstallation(kind) {
     for (let i = 0; i < 3; i++) { const a = i * Math.PI * 2 / 3; k.box('pirateBone', 0.2, 2.2, 0.4, Math.sin(a) * 0.9, 1.3, Math.cos(a) * 0.9, 0.2 * Math.cos(a), a, -0.2 * Math.sin(a)); }
     k.sphere('glow', 0.75, 0, 3.3, 0); k.add('glowSoft', new THREE.TorusGeometry(1.1, 0.06, 6, 24), 0, 3.3, 0, Math.PI / 2);
     radius = 2.2;
+  } else if (kind === 'reactor') { // v7: fusion reactor (damage -> unstable discharges, destroyed -> core crippled)
+    k.cyl('pirateDark', 2.0, 2.4, 0.7, 10, 0, 0.05, 0); k.cyl('pirate', 1.3, 1.6, 1.8, 10, 0, 1.2, 0);
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.4; k.box('pirateBone', 0.25, 2.6, 0.9, Math.cos(a) * 1.7, 1.4, Math.sin(a) * 1.7, 0, -a, 0); k.vent(Math.cos(a) * 2.1, 0.45, Math.sin(a) * 2.1, 0.5, 0.8, 3, -a); }
+    k.add('amber', new THREE.TorusGeometry(1.25, 0.14, 6, 24), 0, 2.2, 0, Math.PI / 2); k.add('amber', new THREE.TorusGeometry(1.0, 0.1, 6, 24), 0, 1.0, 0, Math.PI / 2);
+    k.sphere('amber', 0.85, 0, 2.6, 0, 1, 1, 1, 14, 8); k.hazard(2.6, 0.05, 0.4, 0, 0.42, 1.9); k.pipe(-2.2, 0.5, 0.6, 2.2, -0.6, 0.12);
+    k.lights.push({ x: 0, y: 3.7, z: 0, color: 0xffa020, mode: 'pulse', size: 2.6 }); radius = 2.4;
+  } else if (kind === 'hangar') { // v7: fighter hangar (destroyed -> no more launches)
+    k.slab('pirateDark', [[-2.8, -2.2], [2.8, -2.2], [2.8, 2.2], [-2.8, 2.2]], 0.5, -0.1);
+    const arch = new THREE.CylinderGeometry(1.9, 1.9, 4.2, 12, 1, false, 0, Math.PI); arch.rotateZ(Math.PI / 2); arch.rotateY(Math.PI / 2); k.add('pirate', arch, 0, 0.2, -0.2, 0, 0, 0, 1.2, 0.8, 1);
+    k.box('glowSoft', 3.0, 1.2, 0.06, 0, 0.75, 1.92); k.hazard(3.4, 0.06, 0.35, 0, 0.18, 2.4); k.hazard(0.35, 0.06, 2.0, -1.9, 0.18, 1.4); k.hazard(0.35, 0.06, 2.0, 1.9, 0.18, 1.4);
+    k.box('pirateBone', 0.3, 1.6, 4.4, -2.5, 0.8, 0); k.box('pirateBone', 0.3, 1.6, 4.4, 2.5, 0.8, 0); k.antenna(2.2, 1.6, -1.6, 1.4);
+    k.lights.push({ x: -1.6, y: 0.3, z: 2.6, color: 0xffb030, mode: 'blink', size: 1 }, { x: 1.6, y: 0.3, z: 2.6, color: 0xffb030, mode: 'blink', size: 1 }); radius = 2.8;
   } else {
     k.cyl('pirateDark', 1.2, 1.5, 0.9, 8, 0, 0.1, 0); k.hazard(2.2, 0.06, 0.4, 0, 0.58, 0.9); k.box('pirateAccent', 1.6, 0.25, 1.6, 0, 0.62, 0);
     radius = 1.9;
@@ -948,6 +960,15 @@ export function buildInstallationV5(kind) {
     k.antenna(0.4, 4.6, 0, 1.6, false); k.lights.push({ x: 0, y: 4.8, z: 0, color: 0x30ff70, mode: 'pulse', size: 2.6 }); radius = 4;
   }
   const g = k.build();
+  if (kind !== 'relay') { // v7: rotating radar mast + docking pad with landing lights
+    const R = { comm: 3.2, yard: 5.4, res: 3.9, def: 4.2, hq: 7.8 }[kind] || 4; const rk = new Kit();
+    rk.cyl('pirateDark', 0.12, 0.16, 1.4, 6, 0, 0.7, 0); rk.box('pirate', 2.6, 0.12, 0.3, 0, 1.45, 0); rk.box('pirateBone', 0.25, 0.7, 0.35, 1.2, 1.7, 0); rk.box('pirateBone', 0.25, 0.7, 0.35, -1.2, 1.7, 0); rk.dish(0, 1.45, 0.35, 0.6, 1.2, 0);
+    rk.lights.push({ x: 0, y: 2.3, z: 0, color: 0xff3030, mode: 'blink', size: 1 });
+    const radar = rk.build(); radar.name = 'spin'; radar.position.set(-R * 0.55, kind === 'hq' ? 2.8 : 1.0, R * 0.62); g.add(radar);
+    const pk = new Kit(); pk.cyl('pirateDark', 2.1, 2.2, 0.3, 12, 0, 0, 0); pk.add('hazard', new THREE.RingGeometry(1.5, 1.8, 24), 0, 0.17, 0, -Math.PI / 2); pk.box('pirateBone', 0.4, 0.4, 2.4, 0, -0.05, -2.2);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; pk.lights.push({ x: Math.cos(a) * 1.95, y: 0.25, z: Math.sin(a) * 1.95, color: 0x40ff90, mode: 'blink', size: 0.7 }); }
+    const pad = pk.build(); pad.name = 'pad'; pad.position.set(R * 0.95 + 1.6, 0.2, -R * 0.25); g.add(pad);
+  }
   if (kind === 'def') { const tu = makeTurret('cannon', 3.4, 'pirate'); tu.position.y = 1.9; tu.name = 'eturret'; g.add(tu); }
   return { group: g, hardpoints: [{ x: 0, y: 2, z: 0 }], engines: [], radius };
 }

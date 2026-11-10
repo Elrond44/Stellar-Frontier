@@ -13,5 +13,5 @@ export const shipK = (lv, L0) => Math.pow(1.19, 0.75 * Math.max(0, lv - L0));
 export const dmgK = (lv, L0) => Math.pow(1.04, Math.max(0, lv - L0));
 // target seconds-to-kill at reference effective DPS
 // (measured with real auto-fire: stationary/huge targets take ~full paper DPS, so these sit ~2x above the 'effective' design time)
-export const TTK = { inst_comm: 18, inst_res: 20, inst_yard: 26, inst_def: 26, inst_hq: 60, inst_gen: 5, inst_turret: 4, commander: 70, flagship: 230 };
+export const TTK = { inst_comm: 18, inst_res: 20, inst_yard: 26, inst_def: 26, inst_hq: 60, inst_gen: 5, inst_turret: 4, inst_reactor: 6, inst_hangar: 6, commander: 70, flagship: 230 };
 export const ttkHp = (key, lv, L0, armor = 0) => TTK[key] * refDps(effLevel(lv, L0)) / Math.max(0.2, 1 - armor);

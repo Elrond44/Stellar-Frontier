@@ -1,5 +1,5 @@
 // Dynamic missions: generated from the live galaxy state, scaled by ship level and sector threat.
-import { FACTIONS, GSECTORS, SECTOR_BY_ID, installations, libStages, isPirate, neighbours, sectorCenter, instName, INST_KINDS } from './galaxy.js?v=6';
+import { FACTIONS, GSECTORS, SECTOR_BY_ID, installations, libStages, isPirate, neighbours, sectorCenter, instName, INST_KINDS } from './galaxy.js?v=7';
 
 export const MTYPES = {
   patrol: { name: 'Eliminate Patrol', icon: '✷', color: '#ff6b6b', obj: (m) => `Destroy the ${FACTIONS[m.fac] ? FACTIONS[m.fac].name : 'pirate'} patrol`, unit: 'ships' },

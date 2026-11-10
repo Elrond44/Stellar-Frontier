@@ -1,7 +1,7 @@
 // v5 enemy AI roles. Each returns movement intent {tx, tz, spd, wantFire} (or null for the default behaviour).
 // dx/dz/dist point from the ship to its current target T (the player, an escorted civilian, or a rival ship).
-import { ABILITY_ORDER, ABILITIES } from './rpg.js?v=6';
-import { FACTIONS } from './galaxy.js?v=6';
+import { ABILITY_ORDER, ABILITIES } from './rpg.js?v=7';
+import { FACTIONS } from './galaxy.js?v=7';
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function roleAI(G, e, dt, dist, dx, dz, T) {
@@ -22,7 +22,7 @@ function sniper(G, e, dt, dist, dx, dz, T, spd) {
   if (dist < want - 8) { tx = e.x - ux * 20; tz = e.z - uz * 20; } else if (dist > e.D.range - 2) { tx = T.x - ux * want; tz = T.z - uz * want; } else { tx = e.x - uz * 10 * e.strafe; tz = e.z + ux * 10 * e.strafe; spd *= 0.4; }
   if (e.aimT > 0) {
     e.aimT -= dt; spd *= 0.15;
-    if (e.aimT > 0.25) { e.aimUx = ux; e.aimUz = uz; } // track until the last moment, then lock
+    if (e.aimT > 0.25) { const a = G.aimLead(e, e.x, e.z, T, 85, e.aimT < 0.3); e.aimUx = a.ux; e.aimUz = a.uz; } // track with a lead solution until the last moment, then lock
     if (e.tele) { e.tele.x = e.x; e.tele.z = e.z; e.tele.ang = Math.atan2(e.aimUx, e.aimUz); }
     if (e.aimT <= 0) {
       G.curShooter = e; G.enemyShot(e.x + e.aimUx * 2, e.z + e.aimUz * 2, e.aimUx, e.aimUz, 85, e.D.dmg * e.dmgMul, [3.6, 0.6, 2.4], { life: 0.9, len: 3.4, w: 1.0 });

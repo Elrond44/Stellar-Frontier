@@ -1,6 +1,6 @@
 // Galaxy layer: named sectors (wedges in distance rings) owned by factions, threat, outposts, caches, liberation.
 // Sits on top of the distance-ring SECTORS (which still drive asteroid density & minerals).
-import { BOSS_LAIR } from './data.js?v=6';
+import { BOSS_LAIR } from './data.js?v=7';
 
 export const FACTIONS = {
   crimson: { id: 'crimson', name: 'Crimson Marauders', short: 'CRIMSON', color: '#ff3b4a', rgb: [3.4, 0.35, 0.4], hull: 0x5c2428, desc: 'Brutal raiders: tougher hulls, heavier guns, more gunships.', tactic: 'Aggressive: +20% hull, +25% damage, gunship-heavy raids.' },

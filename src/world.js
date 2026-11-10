@@ -1,8 +1,8 @@
 // Background (nebula skybox, wrapped star layers, dust), asteroid chunk streaming, mineral pickups
 import * as THREE from 'three';
-import { mulberry, hash2, rand, TAU } from './util.js?v=6';
-import { MINERALS, sectorAt } from './data.js?v=6';
-import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=6';
+import { mulberry, hash2, rand, TAU } from './util.js?v=7';
+import { MINERALS, sectorAt } from './data.js?v=7';
+import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=7';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
 
 export function makeSky() {
@@ -34,6 +34,15 @@ export function makeSky() {
         }
         return vec4(res, a);
       }
+      vec3 galaxy(vec3 d, vec3 c, float size, vec3 tint, float seed){
+        float cd = dot(d,c); if (cd < cos(size*2.0)) return vec3(0.0);
+        vec3 up = abs(c.y)<0.99?vec3(0,1,0):vec3(1,0,0); vec3 bx=normalize(cross(up,c)); vec3 by=cross(c,bx);
+        vec2 q = vec2(dot(d,bx), dot(d,by))/size; float ca=cos(seed*1.7), sa=sin(seed*1.7); q = vec2(ca*q.x - sa*q.y, sa*q.x + ca*q.y); q.y *= 1.6 + 0.6*sin(seed);
+        float r = length(q); float ang = atan(q.y, q.x);
+        float arms = 0.5 + 0.5*cos(2.0*ang - 5.5*log(r+0.06) + seed);
+        float core = exp(-r*r*28.0); float disk = exp(-r*3.2) * (0.35 + 0.65*pow(arms, 2.0));
+        return tint*(core*0.9 + disk*0.22)*(0.7 + 0.3*n(d*160.0+seed));
+      }
       void main(){
         vec3 d=normalize(vDir);
         float a=fbm(d*2.2+vec3(0.0,0.0,uTime*0.004));
@@ -57,6 +66,15 @@ export function makeSky() {
           col = mix(col, gp.rgb, gp.a) + (1.0-gp.a)*gp.rgb;
           vec4 mp = body(d, normalize(vec3(0.5,-0.74,-0.45)), 0.045, sunDir, vec3(0.35,0.36,0.4), vec3(0.6,0.6,0.62), 0.0, vec3(0.4,0.5,0.7));
           col = mix(col, mp.rgb, mp.a) + (1.0-mp.a)*mp.rgb;
+        }
+        // v7 far background: distant spiral galaxies and cosmic dust lanes
+        if (uDetail > 0.5) {
+          col += galaxy(d, normalize(vec3(0.25,-0.86,-0.45)), 0.055, vec3(0.9,0.75,1.0), 1.0);
+          col += galaxy(d, normalize(vec3(-0.34,-0.78,-0.52)), 0.035, vec3(0.7,0.85,1.1), 2.0);
+          col += galaxy(d, normalize(vec3(0.06,-0.96,-0.27)), 0.022, vec3(1.0,0.85,0.7), 3.0);
+          col += galaxy(d, normalize(vec3(-0.12,-0.66,-0.74)), 0.028, vec3(0.85,0.8,1.0), 4.0);
+          float lane = smoothstep(0.5, 0.75, fbm(d*7.0+vec3(2.0,5.0,1.0))) * smoothstep(0.3, 0.7, a);
+          col *= 1.0 - lane*0.45;
         }
         // sun + halo (bloom adds lens glow)
         float sd = max(dot(d,sunDir),0.0);
@@ -210,9 +228,11 @@ export class AsteroidField {
     const ch = a.chunk && this.chunks.get(a.chunk); if (ch) { const i = ch.list.indexOf(a); if (i >= 0) ch.list.splice(i, 1); }
   }
   spawnFragment(x, z, r, type, sector) {
+    // v7: live fragments are capped per quality preset (oldest crumble first)
+    this.frags ||= []; this.maxFrag ||= 80; this.frags = this.frags.filter((f) => f.alive); while (this.frags.length >= this.maxFrag) { const o = this.frags.shift(); o.alive = false; }
     const hp = Math.round(16 * r * r * (1 + (sector - 1) * 0.9));
     const a = this.makeAsteroid({ id: null, chunk: null, x, y: rand(-0.5, 0.5), z, r, type, rich: false, variant: Math.floor(rand(0, 100)), rx: rand(0, 6), ry: rand(0, 6), sector, hp, maxHp: hp, spin: rand(-0.9, 0.9) });
-    a.hitT = 0.15; return a;
+    a.hitT = 0.15; this.frags.push(a); return a;
   }
   setTime(t) { rockUniforms.uTime.value = t; }
 }

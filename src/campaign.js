@@ -2,19 +2,19 @@
 // flagship bosses (phases, telegraphed attacks, destructible components), autonomous faction warfare with visible
 // skirmishes, friendly activity in liberated space and the dynamic mission runtime.
 import * as THREE from 'three';
-import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=6';
-import { ENEMIES } from './data.js?v=6';
-import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=6';
-import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=6';
-import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=6';
-import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=6';
-import { makeItem, RARITIES, rollTemplate } from './items.js?v=6';
-import { INV_CAP } from './save.js?v=6';
-import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=6';
+import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=7';
+import { ENEMIES } from './data.js?v=7';
+import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=7';
+import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=7';
+import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=7';
+import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=7';
+import { makeItem, RARITIES, rollTemplate } from './items.js?v=7';
+import { INV_CAP } from './save.js?v=7';
+import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=7';
 
 const TAU = Math.PI * 2; const rand = (a, b) => a + Math.random() * (b - a); const randInt = (a, b) => Math.floor(rand(a, b + 1));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
-const PARTS = { comm: { gens: 1, tur: 2 }, res: { gens: 1, tur: 2 }, yard: { gens: 2, tur: 3 }, def: { gens: 2, tur: 2 }, hq: { gens: 3, tur: 4 } };
+const PARTS = { comm: { gens: 1, tur: 2, hangar: 0 }, res: { gens: 1, tur: 2, hangar: 1 }, yard: { gens: 2, tur: 3, hangar: 1 }, def: { gens: 2, tur: 2, hangar: 0 }, hq: { gens: 3, tur: 4, hangar: 2 } }; // v7: every base also has a fusion reactor
 // faction fleet doctrine: ship roles used by skirmishes, probes and mission spawns
 export const FLEET = {
   crimson: ['interceptor', 'gunship', 'gunship', 'interceptor', 'capital', 'support'],
@@ -109,12 +109,14 @@ export class Campaign {
   }
   despawnInst(L) { for (const part of L.parts) if (!part.dead) { this.instHp.set(part.partId, part.hp); this.g.removeEnemy(part); } else this.instHp.set(part.partId, 0); this.live.delete(L.o.id); }
   spawnInst(o, sec) {
-    const g = this.g; const fac = sec.faction; const spec = PARTS[o.kind]; const L = { o, sec, fac, parts: [], gens: [], core: null, callT: 12, buildT: 10, summonT: 8, reinf: 0 };
+    const g = this.g; const fac = sec.faction; const spec = PARTS[o.kind]; const L = { o, sec, fac, parts: [], gens: [], reactors: [], hangars: [], hangarSpec: spec.hangar || 0, core: null, callT: 12, buildT: 10, summonT: 8, reinf: 0, unstT: 3, powerDown: this.instHp.get(o.id + ':r0') === 0 };
     const add = (type, x, z, partId, extra = {}) => { const hp0 = this.instHp.get(partId); if (hp0 === 0) return null; const e = g.spawnEnemy(type, x, z, { faction: fac, inst: o.id, partId, state: 'attack', ...extra }); e.yaw = type === 'inst_gen' || type === 'inst_turret' ? 0 : rand(0, TAU); if (hp0 > 0) e.hp = Math.min(e.maxHp, hp0); e.vx = e.vz = 0; L.parts.push(e); return e; };
     L.core = add('inst_' + o.kind, o.x, o.z, o.id + ':core', { variant: o.kind, kind: o.kind });
     const R0 = L.core ? L.core.radius : 5;
     for (let k = 0; k < spec.gens; k++) { const a = k / spec.gens * TAU + 0.4; const ge = add('inst_gen', o.x + Math.cos(a) * (R0 + 7), o.z + Math.sin(a) * (R0 + 7), o.id + ':g' + k); if (ge) L.gens.push(ge); }
     const nt = spec.tur + (sec.ringI >= 3 ? 1 : 0); for (let k = 0; k < nt; k++) { const a = k / nt * TAU; add('inst_turret', o.x + Math.cos(a) * (R0 + 14), o.z + Math.sin(a) * (R0 + 14), o.id + ':t' + k); }
+    { const a = 0.4 + Math.PI / Math.max(1, spec.gens); const re = add('inst_reactor', o.x + Math.cos(a) * (R0 + 6), o.z + Math.sin(a) * (R0 + 6), o.id + ':r0'); if (re) L.reactors.push(re); }
+    for (let k = 0; k < (spec.hangar || 0); k++) { const a = 0.4 + Math.PI / Math.max(1, spec.gens) + (k + 1) * TAU / ((spec.hangar || 0) + 2); const hx = o.x + Math.cos(a) * (R0 + 7.5), hz = o.z + Math.sin(a) * (R0 + 7.5); const he = add('inst_hangar', hx, hz, o.id + ':h' + k); if (he) { he.yaw = Math.atan2(hx - o.x, hz - o.z); L.hangars.push(he); } }
     if (!L.core) { this.G.inst[o.id] = 1; for (const part of L.parts) g.removeEnemy(part); return; }
     const F = FACTIONS[fac]; L.dome = makeDome(F ? F.rgb : [3, 0.4, 0.4]); const ds = R0 + 3.5; L.dome.scale.set(ds, ds * 0.75, ds); L.core.group.add(L.dome);
     if (o.kind === 'hq') { L.sdome = makeDome([1.6, 2.4, 3.6]); const s2 = R0 + 8; L.sdome.scale.set(s2, s2 * 0.7, s2); L.core.group.add(L.sdome); }
@@ -125,6 +127,8 @@ export class Campaign {
     const g = this.g; if (!g.enemyStatus(e, dt)) return;
     const L = this.live.get(e.inst); e.group.position.set(e.x, 0, e.z); const pulse = e.hitT > 0 ? 1 + e.hitT * 0.25 : 1; e.group.scale.setScalar(pulse);
     if (e.type === 'inst_gen') { e.group.rotation.y += dt * 0.6; return; }
+    if (e.type === 'inst_reactor') return this.reactorAI(e, dt, L);
+    if (e.type === 'inst_hangar') { e.group.rotation.y = e.yaw; if (e.doorT > 0) e.doorT -= dt; return; }
     if (e.type === 'inst_turret') return this.turretAI(e, dt, dist, dx, dz);
     e.group.rotation.y = e.yaw; const spin = e.group.getObjectByName('spin'); if (spin) spin.rotation.y += dt * 0.5;
     if (!L) return;
@@ -132,9 +136,11 @@ export class Campaign {
     if (L.sdome) { L.sdome.visible = this.hqShield(L); L.sdome.material.uniforms.uT.value = g.time; const u = L.sdome.material.uniforms.uHit; u.value = Math.max(0, u.value - dt * 3); }
     if (g.dead || e.stunT > 0) return;
     const k = e.kind; const danger = Math.max(1, Math.min(3, L.sec.ringI));
+    const bay = this.launchBay(L); // v7: fighters launch from a hangar; with every hangar destroyed the base cannot launch
+    if (!bay && (k === 'yard' || k === 'res' || k === 'hq')) { L.noLaunch = true; }
     if (k === 'comm' && dist < 85) { L.callT -= dt; if (L.callT <= 0) { L.callT = 32; if (!this.crowded(4)) g.spawnWave(danger, false, { x: e.x, z: e.z }, '📡 Comm array called in reinforcements!'); } }
-    else if (k === 'yard' && dist < 110) { L.buildT -= dt; if (L.buildT <= 0) { L.buildT = 24; const n = g.enemies.filter((x) => !x.dead && x.yard === L.o.id).length; if (n < 5 && !this.crowded(1)) { const t = L.fac === 'iron' ? 'gunship' : L.fac === 'void' ? pick(['interceptor', 'ew']) : L.fac === 'eclipse' ? pick(['sniper', 'interceptor']) : danger >= 2 && Math.random() < 0.4 ? 'gunship' : 'interceptor'; const s = g.spawnEnemy(t, e.x + rand(-4, 4), e.z + rand(-4, 4), { faction: L.fac, yard: L.o.id }); s.cloaked = false; s.group.visible = true; g.rings.spawn(e.x, 0.5, e.z, e.radius * 2, FACTIONS[L.fac] ? FACTIONS[L.fac].rgb : [3, 0.5, 0.4], 0.5); g.toast(`⚙ Shipyard launched a new ${s.D.name}`, 'warn'); } } }
-    else if (k === 'res' && dist < 80) { L.summonT -= dt; if (L.summonT <= 0) { L.summonT = 26; const n = g.enemies.filter((x) => !x.dead && x.mother === e).length; if (n < 4 && !this.crowded(2)) for (let j = 0; j < 2; j++) g.spawnEnemy('drone', e.x + rand(-5, 5), e.z + rand(-5, 5), { faction: L.fac, mother: e }); } }
+    else if (k === 'yard' && dist < 110 && bay) { L.buildT -= dt; if (L.buildT <= 0) { L.buildT = 24; const n = g.enemies.filter((x) => !x.dead && x.yard === L.o.id).length; if (n < 5 && !this.crowded(1)) { const t = L.fac === 'iron' ? 'gunship' : L.fac === 'void' ? pick(['interceptor', 'ew']) : L.fac === 'eclipse' ? pick(['sniper', 'interceptor']) : danger >= 2 && Math.random() < 0.4 ? 'gunship' : 'interceptor'; const s = g.spawnEnemy(t, bay.x + bay.ux * 4, bay.z + bay.uz * 4, { faction: L.fac, yard: L.o.id }); s.vx = bay.ux * 14; s.vz = bay.uz * 14; s.yaw = Math.atan2(bay.ux, bay.uz); s.cloaked = false; s.group.visible = true; this.launchFx(bay); g.rings.spawn(e.x, 0.5, e.z, e.radius * 2, FACTIONS[L.fac] ? FACTIONS[L.fac].rgb : [3, 0.5, 0.4], 0.5); g.toast(`⚙ Shipyard launched a new ${s.D.name}`, 'warn'); } } }
+    else if (k === 'res' && dist < 80 && bay) { L.summonT -= dt; if (L.summonT <= 0) { L.summonT = 26; const n = g.enemies.filter((x) => !x.dead && x.mother === e).length; if (n < 4 && !this.crowded(2)) { this.launchFx(bay); for (let j = 0; j < 2; j++) { const d = g.spawnEnemy('drone', bay.x + bay.ux * 4 + rand(-1.5, 1.5), bay.z + bay.uz * 4 + rand(-1.5, 1.5), { faction: L.fac, mother: e }); d.vx = bay.ux * 16; d.vz = bay.uz * 16; } } } }
     else if (k === 'def' && dist < e.D.range) {
       const tu = e.turrets[0]; if (tu) tu.rotation.y = THREE.MathUtils.damp(tu.rotation.y, Math.atan2(dx, dz) - e.yaw, 3, dt);
       if (e.cd <= 0) { e.cd = 1 / e.D.fireRate * rand(0.85, 1.15); const p = g.player; const tx = p.x + p.vx * 1.1 + rand(-3, 3), tz = p.z + p.vz * 1.1 + rand(-3, 3); const dmg = e.D.dmg * e.dmgMul * 1.6;
@@ -142,16 +148,32 @@ export class Campaign {
         this.teleCircle(tx, tz, 5.5, 1.7, (T) => { g.boom(T.x, 0.5, T.z, 1.5, [3.6, 1.2, 0.4]); if (this.inCircle(T)) g.hurtPlayer(dmg, T.x, T.z, { energy: false }); this.splashFriends(T.x, T.z, T.r, dmg); }, WARN_COL.def); }
     }
     else if (k === 'hq' && dist < 75) {
-      L.summonT -= dt; if (L.summonT <= 0) { L.summonT = 15; const n = g.enemies.filter((x) => x.type === 'drone' && !x.dead).length; if (n < 6 && !this.crowded(3)) for (let j = 0; j < 3; j++) g.spawnEnemy('drone', e.x + rand(-7, 7), e.z + rand(-7, 7), { faction: L.fac }); }
+      if (bay) { L.summonT -= dt; if (L.summonT <= 0) { L.summonT = 15; const n = g.enemies.filter((x) => x.type === 'drone' && !x.dead).length; if (n < 6 && !this.crowded(3)) { this.launchFx(bay); for (let j = 0; j < 3; j++) { const d = g.spawnEnemy('drone', bay.x + bay.ux * 4 + rand(-1.5, 1.5), bay.z + bay.uz * 4 + rand(-1.5, 1.5), { faction: L.fac }); d.vx = bay.ux * 16; d.vz = bay.uz * 16; } } } }
       const f = e.hp / e.maxHp; if ((L.reinf === 0 && f < 0.66) || (L.reinf === 1 && f < 0.33)) { L.reinf++; if (!this.crowded(4)) g.spawnWave(Math.min(3, danger + 1), true, { x: e.x, z: e.z }, '☗ The stronghold calls its garrison!'); }
     }
+  }
+  launchBay(L) { // returns the mouth of a live hangar (bases without hangars launch from the core)
+    if (!L.hangarSpec) return L.core ? { x: L.core.x, z: L.core.z, ux: 1, uz: 0, h: null } : null;
+    const live = L.hangars.filter((h) => !h.dead); if (!live.length) return null; const h = live[(L.bayI = ((L.bayI || 0) + 1) % live.length)];
+    return { x: h.x + Math.sin(h.yaw) * 2.6, z: h.z + Math.cos(h.yaw) * 2.6, ux: Math.sin(h.yaw), uz: Math.cos(h.yaw), h };
+  }
+  launchFx(bay) { const g = this.g; if (bay.h) bay.h.doorT = 1.2; g.fx.burst(bay.x, 0.8, bay.z, 10, 9, 0.35, 0.6, 0.08, [3.2, 2.0, 0.6], 2); g.flashes.spawn(bay.x, 1, bay.z, 24, 0xffc060, 0.3, 14, true); }
+  reactorAI(e, dt, L) { // v7: a damaged reactor goes unstable: arcs, venting plasma and telegraphed discharges
+    const g = this.g; const f = e.hp / e.maxHp; e.group.rotation.y = e.yaw; const near = g.vfx.near(e.x, e.z);
+    if (Math.random() < (f < 0.5 ? 0.5 : 0.15) * near) g.fx.emit(e.x + rand(-0.6, 0.6), 3.4, e.z + rand(-0.6, 0.6), rand(-0.4, 0.4), rand(2, 4), rand(-0.4, 0.4), 0.5, 0.7, 0.1, 3.2, 1.8, 0.5, 2);
+    e.unstable = f < 0.5; if (!e.unstable || !L || g.dead || e.stunT > 0) return;
+    if (Math.random() < dt * 3) { const a = rand(0, TAU), r = rand(4, 9); g.arc(e.x, e.z, e.x + Math.cos(a) * r, e.z + Math.sin(a) * r); }
+    L.unstT -= dt * (1.5 - f); if (L.unstT <= 0) { L.unstT = rand(3.5, 5); const r = 7 + (0.5 - f) * 8; const dmg = g.player.maxHp * 0.06;
+      g.ui && g.ui.float(e.x, 3, e.z, 'REACTOR UNSTABLE', '#ffb347');
+      this.teleCircle(e.x, e.z, r, 1.5, (T) => { g.boom(T.x, 0.6, T.z, 1.6, [3.4, 2.2, 0.6], true, { secondary: 0 }); g.shells.spawn(T.x, 1, T.z, T.r, [3.4, 2.2, 0.8], 0.4); for (let j = 0; j < 4; j++) { const a = rand(0, TAU); g.arc(T.x, T.z, T.x + Math.cos(a) * T.r, T.z + Math.sin(a) * T.r); }
+        if (this.inCircle(T)) g.hurtPlayer(dmg, T.x, T.z, { energy: true, drain: 20 }); for (const x of g.enemies) if (!x.dead && !x.D.inst && Math.hypot(x.x - T.x, x.z - T.z) < T.r) g.damageEnemy(x, x.maxHp * 0.08, false, null, true, 'rival'); }, [3.6, 2.2, 0.4]); }
   }
   turretAI(e, dt, dist, dx, dz) {
     const g = this.g; const yaw = Math.atan2(dx, dz);
     for (const tu of e.turrets) { tu.rotation.y = THREE.MathUtils.damp(tu.rotation.y, yaw - e.yaw, e.stunT > 0 ? 0 : 3, dt); if (tu.userData.rec > 0) tu.userData.rec = Math.max(0, tu.userData.rec - dt * 4); tu.userData.barrel.position.z = -(tu.userData.rec || 0) * 0.3; }
     if (!g.dead && dist < e.D.range && e.cd <= 0 && e.stunT <= 0) {
-      e.cd = 1 / e.D.fireRate * rand(0.8, 1.2); g.curShooter = e; const ux = dx / dist, uz = dz / dist;
-      for (const off of [-0.06, 0.06]) { const c = Math.cos(off), s2 = Math.sin(off); g.enemyShot(e.x + ux * 2.2, e.z + uz * 2.2, ux * c - uz * s2, uz * c + ux * s2, 26, e.D.dmg * e.dmgMul, [3.5, 1.2, 0.3]); }
+      const L0 = this.live.get(e.inst); e.cd = 1 / e.D.fireRate * rand(0.8, 1.2) * (L0 && L0.powerDown ? 1.7 : 1); g.curShooter = e; const a = g.aimLead(e, e.x, e.z, g.player, 26); const ux = a.ux, uz = a.uz; // v7: predictive fire from the barrel tips
+      for (const off of [-0.06, 0.06]) { const c = Math.cos(off), s2 = Math.sin(off); g.enemyShot(e.x + ux * 2.2 - uz * off * 6, e.z + uz * 2.2 + ux * off * 6, ux * c - uz * s2, uz * c + ux * s2, 26, e.D.dmg * e.dmgMul, [3.5, 1.2, 0.3]); }
       for (const tu of e.turrets) tu.userData.rec = 1; g.audio.enemyShoot('gunship', e.x, e.z);
     }
   }
@@ -165,11 +187,17 @@ export class Campaign {
   instDestroyed(e) {
     const g = this.g; const L = this.live.get(e.inst); this.instHp.set(e.partId, 0); if (!L) return;
     if (e.type === 'inst_gen') { const left = L.gens.filter((x) => !x.dead).length; g.toast(left ? `Shield generator destroyed (${left} left)` : `All generators down: the ${INST_KINDS[L.o.kind].name} is exposed!`, 'good'); if (!left) { g.audio.shieldDown(); g.rings.spawn(L.o.x, 1, L.o.z, 16, [0.6, 2, 3.4], 0.8); } }
+    if (e.type === 'inst_reactor') { // reactor breach cripples the core and browns out the turrets
+      L.powerDown = true; const c = L.core; g.shells.spawn(e.x, 1, e.z, 12, [3.4, 2.2, 0.8], 0.6, { a: 1.6 }); g.rings.spawn(e.x, 0.4, e.z, 22, [3.4, 2.0, 0.6], 0.8);
+      if (c && !c.dead) { c.hp = Math.max(c.maxHp * 0.05, c.hp - c.maxHp * 0.15); g.arc(e.x, e.z, c.x, c.z); }
+      g.toast(`Reactor breached: ${INST_KINDS[L.o.kind].name} core crippled (-15%), turrets on backup power`, 'good'); }
+    if (e.type === 'inst_hangar') { const left = L.hangars.filter((x) => !x.dead).length; g.toast(left ? `Hangar destroyed (${left} left)` : `All hangars destroyed: the ${INST_KINDS[L.o.kind].name} can no longer launch fighters`, 'good'); }
     if (e !== L.core) return;
     const G = this.G; const o = L.o; G.inst[o.id] = 1; G.spot[o.id] = 1; g.s.stats.outposts++;
-    for (const part of L.parts) if (!part.dead && part !== e) { part.hp = 0; part.noLoot = true; g.killEnemy(part); }
+    // v7 staged destruction: the core's wreck runs its own sequence; the remaining systems fail one after another
+    const rest = L.parts.filter((part) => !part.dead && part !== e); rest.forEach((part, i) => { part.noLoot = true; part.cd = 99; g.seq.at(0.25 + i * Math.min(0.35, 2.2 / rest.length), () => { if (!part.dead) { part.hp = 0; g.killEnemy(part); } }); });
     this.live.delete(o.id);
-    for (let k = 0; k < 5; k++) g.seq.at(0.12 + k * 0.16, () => g.boom(e.x + rand(-9, 9), 0.5, e.z + rand(-9, 9), 1.8, FACTIONS[e.faction] ? FACTIONS[e.faction].rgb : [3.2, 0.6, 0.4], k % 2 === 0, { secondary: 0 }));
+    if (!g.wrecks || !g.wrecks.list.some((W) => W.e === e)) for (let k = 0; k < 5; k++) g.seq.at(0.12 + k * 0.16, () => g.boom(e.x + rand(-9, 9), 0.5, e.z + rand(-9, 9), 1.8, FACTIONS[e.faction] ? FACTIONS[e.faction].rgb : [3.2, 0.6, 0.4], k % 2 === 0, { secondary: 0 }));
     g.flashes.spawn(e.x, 3, e.z, 120, 0xffb070, 0.6, 50);
     const th = Math.max(1, L.sec.threat); g.dropLoot(e.x, e.z, 'installation', th, o.kind === 'hq' ? 2 : 1); if (th >= 4 || o.kind === 'hq') g.dropLoot(e.x, e.z, 'installation', th);
     if (o.kind === 'res') { const keys = ['stellarite', 'viridium', 'crimsonite', 'voidstone']; for (let k = 0; k < 3; k++) g.minerals.spawn(e.x, e.z, pick(keys), 6, 12); }
