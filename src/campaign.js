@@ -2,18 +2,18 @@
 // flagship bosses (phases, telegraphed attacks, destructible components), autonomous faction warfare with visible
 // skirmishes, friendly activity in liberated space and the dynamic mission runtime.
 import * as THREE from 'three';
-import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=8';
-import { ENEMIES } from './data.js?v=8';
-import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=8';
-import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=8';
-import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=8';
-import { HULLS, buildHull } from './hulls.js?v=8';
+import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=9';
+import { ENEMIES } from './data.js?v=9';
+import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=9';
+import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=9';
+import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=9';
+import { HULLS, buildHull } from './hulls.js?v=9';
 const BS = 2; // installation build scale (v8)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=8';
-import { makeItem, RARITIES, rollTemplate } from './items.js?v=8';
-import { INV_CAP } from './save.js?v=8';
-import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=8';
+import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=9';
+import { makeItem, RARITIES, rollTemplate } from './items.js?v=9';
+import { INV_CAP } from './save.js?v=9';
+import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=9';
 
 const TAU = Math.PI * 2; const rand = (a, b) => a + Math.random() * (b - a); const randInt = (a, b) => Math.floor(rand(a, b + 1));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];

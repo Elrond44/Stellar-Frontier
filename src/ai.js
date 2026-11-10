@@ -1,7 +1,7 @@
 // v5 enemy AI roles. Each returns movement intent {tx, tz, spd, wantFire} (or null for the default behaviour).
 // dx/dz/dist point from the ship to its current target T (the player, an escorted civilian, or a rival ship).
-import { ABILITY_ORDER, ABILITIES } from './rpg.js?v=8';
-import { FACTIONS } from './galaxy.js?v=8';
+import { ABILITY_ORDER, ABILITIES } from './rpg.js?v=9';
+import { FACTIONS } from './galaxy.js?v=9';
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function roleAI(G, e, dt, dist, dx, dz, T) {

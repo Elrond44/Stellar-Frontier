@@ -22,8 +22,8 @@
 <div id="cls"></div>
 <script type="module">
 import * as THREE from 'three';
-import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=8';
-import { makeFlames, animateNavLights } from './src/models.js?v=8';
+import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=9';
+import { makeFlames, animateNavLights } from './src/models.js?v=9';
 const q = new URLSearchParams(location.search); const mode = q.get('mode') || 'lineup';
 const canvas = document.getElementById('c'); const R = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.1; R.outputColorSpace = THREE.SRGBColorSpace; R.setPixelRatio(Math.min(2, devicePixelRatio));

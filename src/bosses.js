@@ -1,7 +1,7 @@
 // Faction flagships (multi-phase bosses) and sector commanders.
 // Attack primitives are executed by the campaign runtime (telegraphed: every damaging attack is preceded by a
 // visible warning zone): bombard, salvo, spread, nova, charge, lance, sweep, cloak, drain, gravity, mines.
-import { FACTIONS } from './galaxy.js?v=8';
+import { FACTIONS } from './galaxy.js?v=9';
 
 export const ATTACKS = {
   bombard: { name: 'Heavy Bombardment', warn: 'BOMBARDMENT' },

@@ -1,10 +1,11 @@
 // v7: staged destruction for stations, pirate bases and capital ships.
 // A dying structure is handed over here instead of vanishing: its systems fail, modules chain-explode and
 // shed chunks, the frame buckles and sinks, the reactor overloads (telegraphed blast) and the core breaches.
-import { ensureDamage, releaseDamage } from './vfx.js?v=8';
+import { ensureDamage, releaseDamage } from './vfx.js?v=9';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const TAU = Math.PI * 2;
+export const STATION_STEPS = ['shields collapse', 'weapons fail', 'hull sections detonate', 'components separate', 'reactor destabilises', 'central discharge', 'structure breaks up', 'debris drifts']; // v9
 export const WRECK_STAGES = ['systems failure', 'chain explosions', 'structural collapse', 'reactor overload', 'core breach'];
 
 export class Wrecks {
@@ -18,6 +19,7 @@ export class Wrecks {
     grp.traverse((c) => { if (c.name === 'dome') c.visible = false; });
     const W = { e, grp, D, x: e.x, z: e.z, y0: grp.position.y, R, dur, t: 0, stage: 0, mods, tint: o.tint || [3.2, 0.7, 0.4], vx: (e.vx || 0) * 0.4, vz: (e.vz || 0) * 0.4,
       spin: rand(-0.35, 0.35), tx: rand(-1, 1), tz: rand(-1, 1), yaw: grp.rotation.y, blastR: o.blastR || R * 2.2 + 6, blastDmg: o.blastDmg ?? 0.1, overload: false, onEnd: o.onEnd, scale0: grp.scale.x };
+    W.step = 0; if (g.xm) g.xm.shieldCollapse({ x: e.x, z: e.z, bound: R, radius: R }, [0.6, 1.8, 3.4]); // v9 step 1: shields collapse
     this.list.push(W); this.stats.started++; g.toast && o.label && g.toast(o.label, 'warn');
     return W;
   }
@@ -28,6 +30,8 @@ export class Wrecks {
       W.x += W.vx * dt; W.z += W.vz * dt; W.vx *= 1 - dt * 0.4; W.vz *= 1 - dt * 0.4;
       const grp = W.grp; const st = k < 0.1 ? 0 : k < 0.45 ? 1 : k < 0.7 ? 2 : 3; if (st > W.stage) W.stage = st;
       // 0: systems failure: lights flicker out, hull scorches
+      W.step = Math.max(W.step, k < 0.12 ? 0 : k < 0.25 ? 1 : k < 0.45 ? 2 : k < 0.7 ? 3 : 4); // v9 8-step station sequence
+      if (W.step >= 3 && !W.sep && g.xm) { W.sep = true; for (let q = 0; q < 3; q++) { const a = rand(0, TAU); g.xm.debris.spawn(W.x + Math.cos(a) * W.R * 0.8, 0.8, W.z + Math.sin(a) * W.R * 0.8, W.vx, W.vz, Math.cos(a), Math.sin(a), 3, 1.5 + W.R * 0.12, 'slab', 0.6); } }
       W.D.U.uDmg.value = Math.min(1, 0.55 + k * 0.6); W.D.U.uFlick.value = Math.random() < 0.25 + k * 0.5 ? rand(0, 0.25) : Math.max(0, 0.9 - k);
       const c = Math.cos(W.yaw), s = Math.sin(W.yaw);
       // fires and smoke from failing modules
@@ -52,13 +56,14 @@ export class Wrecks {
     }
   }
   breach(W) {
-    const g = this.g; W.stage = 4;
+    const g = this.g; W.stage = 4; W.step = 5;
     g.boom(W.x, 0.6, W.z, Math.min(5, 2.6 + W.R * 0.2), W.tint, true, { secondary: 4, r: W.R });
     g.flashes.spawn(W.x, 3, W.z, 140, 0xffc080, 0.7, 60); g.rings.spawn(W.x, 0.4, W.z, W.blastR * 1.4, [3.4, 2.0, 0.8], 1.0); g.ripple(W.x, W.z, W.blastR * 1.6, 0.02, 0.8);
     g.debris.spawn(W.x, 0.3, W.z, 14, 16, 1.0, 0x2a1416); g.audio && g.audio.explode(true, W.x, W.z, true);
     const p = g.player; const d = Math.hypot(p.x - W.x, p.z - W.z);
     if (!g.dead && d < W.blastR) { const f = 1 - d / W.blastR; if (W.blastDmg > 0) g.hurtPlayer(p.maxHp * W.blastDmg * (0.4 + 0.6 * f), W.x, W.z, { energy: true }); const ux = (p.x - W.x) / (d || 1), uz = (p.z - W.z) / (d || 1); p.vx += ux * 18 * f; p.vz += uz * 18 * f; }
     g.addShake(0.8, W.x, W.z); g.zoomPunch && g.zoomPunch(0.08);
+    if (g.xm) { const n = Math.min(10, 4 + Math.round(W.R / 3)); for (let q = 0; q < n; q++) { const a = q / n * TAU + rand(-0.3, 0.3); g.xm.debris.spawn(W.x + Math.cos(a) * W.R * 0.5, 0.7, W.z + Math.sin(a) * W.R * 0.5, W.vx, W.vz, Math.cos(a), Math.sin(a), 3.5, Math.min(6, 1.2 + W.R * 0.18), 'slab', 0.9); } W.step = 7; } // structure breaks up, debris drifts
     this.remove(W); this.stats.finished++; W.onEnd && W.onEnd(W);
   }
   remove(W) { const g = this.g; g.scene.remove(W.grp); releaseDamage(W.grp); }
