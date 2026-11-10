@@ -183,7 +183,7 @@ export class Phenomena {
       // pull: part goes into the hull velocity (flight assist fights it), part is an environmental drift the assist cannot cancel.
       // Drift terminal speed is ~F/2 (<= 10 u/s at the black hole core) so full thrust always escapes.
       const F = this.field(p.x, p.z); const D = this.drift; if (g.dashT <= 0) { p.vx += F.ax * dt; p.vz += F.az * dt; D.x += F.ax * dt; D.z += F.az * dt; }
-      const dk = Math.exp(-2 * dt); D.x *= dk; D.z *= dk; p.x += D.x * dt; p.z += D.z * dt;
+      const dk = Math.exp(-2 * dt); D.x *= dk; D.z *= dk; const dm = Math.hypot(D.x, D.z); if (dm > 5) { D.x *= 5 / dm; D.z *= 5 / dm; } p.x += D.x * dt; p.z += D.z * dt;
       if (E.rad > 0) { const st = g.stats(); const rate = 0.004 + 0.011 * E.rad; const shf = p.sh > 0 ? 0.6 : 1; p.hp -= p.maxHp * rate * shf * dt; g.lastHurt = Math.max(g.lastHurt, t - 3.6); g.radDose = (g.radDose || 0) + rate * dt; if (p.hp <= 0) { p.hp = 0; g.playerDie(); } }
       if (E.horizon) { p.hp -= p.maxHp * 0.06 * dt; g.lastHurt = t; g.addShake(0.05); if (p.hp <= 0) { p.hp = 0; g.playerDie(); } }
       if (E.ion > 0.05) g.jamT = Math.max(g.jamT, t + 0.25);

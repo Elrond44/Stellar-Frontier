@@ -1,0 +1,71 @@
+{
+ "low": {
+  "fps": 2,
+  "frameMs": 497.9,
+  "p95": 1632.7,
+  "draws": 60,
+  "tris": 47400,
+  "texMB": 23.8,
+  "rtMB": 0,
+  "heapMB": 37.2,
+  "gc": 21,
+  "particles": 37,
+  "sections": {
+   "update": 0.895,
+   "ai": 0.103,
+   "physics": 0.857,
+   "weapons": 0.246,
+   "bolts": 0.009,
+   "particles": 0.16,
+   "world": 0.524,
+   "phenomena": 0.739,
+   "render": 62.568
+  }
+ },
+ "medium": {
+  "fps": 2,
+  "frameMs": 491.1,
+  "p95": 1632.7,
+  "draws": 81,
+  "tris": 60413,
+  "texMB": 23.8,
+  "rtMB": 5,
+  "heapMB": 37,
+  "gc": 22,
+  "particles": 48,
+  "sections": {
+   "update": 0.736,
+   "ai": 0.059,
+   "physics": 0.532,
+   "weapons": 0.187,
+   "bolts": 0.005,
+   "particles": 0.105,
+   "world": 0.359,
+   "phenomena": 0.459,
+   "render": 93.893
+  }
+ },
+ "high": {
+  "fps": 2.1,
+  "frameMs": 485.7,
+  "p95": 1632.7,
+  "draws": 85,
+  "tris": 73071,
+  "texMB": 23.8,
+  "rtMB": 5,
+  "heapMB": 34,
+  "gc": 24,
+  "particles": 46,
+  "sections": {
+   "update": 0.671,
+   "ai": 0.034,
+   "physics": 0.336,
+   "weapons": 0.166,
+   "bolts": 0.003,
+   "particles": 0.08,
+   "world": 0.272,
+   "phenomena": 0.293,
+   "render": 118.125
+  }
+ }
+}

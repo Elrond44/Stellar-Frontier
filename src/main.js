@@ -176,6 +176,7 @@ function frame() {
   { const nb = game.phen ? game.phen.env.neb : 0; game.fogK = damp0(game.fogK || 0, nb, 2, dt); scene.fog.density = FOG0 * (1 + game.fogK * 3.2); scene.fog.color.copy(fogCol0).lerp(fogNeb, game.fogK); }
   if (cine) { cine.uniforms.uTint.value.copy(tint); cine.setLenses(game.lensList(), camera, innerWidth / innerHeight); }
   const t1 = performance.now();
+  renderer.info.autoReset = false; renderer.info.reset(); // count every pass of the frame (the composer renders several)
   if (composer) composer.render(); else renderer.render(scene, camera);
   const t2 = performance.now(); prof.add('render', t2 - t1);
   perf.upd = perf.upd * 0.95 + (t1 - t0) * 0.05; perf.calls = renderer.info.render.calls; perf.tris = renderer.info.render.triangles;

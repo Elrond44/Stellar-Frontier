@@ -12,6 +12,34 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 
 Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). All models, effects, music and sound are generated procedurally in code. Progress autosaves to your browser's local storage.
 
+## v7: Living space, destructible bases and polish (Release D)
+- **Environments:** procedural planets sit far below the play plane. There are 7 types (desert, ocean, two gas giants, ice, volcanic, violet rock), with shader-lit terminators, clouds, craters, lava glow, atmosphere rims and ringed giants that cast shadows. Three parallax nebula layers, background asteroid fields, foreground shards and distant galaxies with dust lanes give the scene depth.
+- **Phenomena with visible warnings:** about 37 deterministic hazard zones are spread across the galaxy:
+  - **Ion storms:** lightning is always telegraphed by a warning circle before it strikes. A strike hurts your hull, drains energy and stuns enemies. Storms also jam your sensors: radar contacts drop out, the scope shows static, and enemy fire control gets worse.
+  - **Dense nebulae:** lower visibility (fog) and radar range, and every ship inside has shorter detection and weapon ranges.
+  - **Gravity anomalies:** pull ships, projectiles and small asteroids toward the centre, and visibly bend shots.
+  - **Radiation fields:** deal gradual hull damage, stronger near the core and reduced while your shields are up. They hurt pirates too.
+  - **The black hole (Obsidian Spiral):** has an accretion disc, a photon ring and real gravitational lensing. Its pull strengthens toward the event horizon, which deals tidal damage, but full thrust can always escape it.
+  - **Warnings:** a hazard strip shows the hazard type and distance before you enter, and intensity once you are inside. The first time you enter a zone, a toast explains its effect. Zones also appear on the radar.
+- **Destructible pirate bases:** each base is built from separate parts, each with its own job:
+  - **Shield generators:** destroying them drops the core's dome.
+  - **Turrets:** each destroyed turret is one fewer gun.
+  - **Fusion reactor:** below 50% it goes unstable, with arcs and telegraphed discharges. Destroying it cuts 15% off the core's HP and puts the turrets on slow backup power.
+  - **Fighter hangars:** fighters launch from the hangar mouths. With every hangar destroyed, the base cannot launch.
+  - **Detail:** bases also have rotating radar masts and docking pads with landing lights.
+- **Staged destruction:** a base core goes through 5 stages: systems failure (lights flicker, fires start), chain explosions that shed chunks, structural collapse (it tilts and sinks), a telegraphed reactor overload, and a core breach with a shockwave. Its other systems fail one by one along the way.
+- **Enemy AI:** every hull has thrust and torque limits, and heavy ships turn slowly. Enemies steer by acceleration rather than snapping to a speed. Damaged ships retreat tactically, interceptors coordinate flanking runs, and gunships strafe. Light ships jink when you aim at them. Enemies use predictive (lead) targeting, and its accuracy depends on faction and threat level: Eclipse is the sharpest, Crimson raiders the sloppiest. They fire from their real hardpoints, heavy weapons have recoil, and enemy ships collide with each other by impulse.
+- **Camera:** a spring-damped follow camera leads in your direction of travel and lags behind boosts and dashes. Contextual zoom pulls in while exploring, widens with speed, fits nearby threats in combat and widens further for bosses and black holes. Random shake has been replaced by directional impulses that push the view away from each hit or blast. Settings → **Camera shake**: Full / Reduced / Off.
+- **HUD:**
+  - Banners, the boss bar, battle tag, attack warnings and the hazard strip now stack in one column, so they never overlap.
+  - Banners queue by priority: boss banners interrupt, and other banners wait their turn.
+  - Toasts stack bottom-left (at most 4), and repeated messages merge into one with a ×N counter.
+  - Red (hull) and cyan (shield) arcs around the ship point toward the source of each hit, and lagging "ghost" bars show recent damage.
+  - Labels have stronger contrast, and the layout respects mobile safe areas.
+- **Quality presets:** Low / Medium / High, with AUTO choosing one from the GPU, CPU cores, memory and screen size. AUTO also steps down a level if frames stay slow. The settings page shows what each preset does and what was detected. There is also a **30 FPS cap** to save battery and heat, and a **performance overlay**.
+- **Profiler:** tracks frame time (average and 95th percentile), time spent in update, AI, physics, weapons, particles, environment and rendering, plus draw calls, triangles, texture and render-target memory, heap size, GC events and a 10-second thermal (sustained frame rate) ratio. Open it from Settings → Performance overlay.
+- **Saves:** v1–v6 saves migrate automatically. The old shake on/off setting becomes a shake level, and the frame cap defaults to 60. Export codes are now `SF7.`.
+
 ## v6: Cinematic combat and physics (Release C)
 - **Flight model:** Newtonian-hybrid handling. Each ship tier has mass. The main engine pushes along the nose, the hull turns with angular inertia, and stabilisers bleed off sideways drift. With no input, retro-thrusters brake progressively instead of the ship stopping dead. Settings → **Flight assist** (Low / Normal / High) trades momentum and drift for arcade-style vectored thrust. Normal keeps the joystick about as snappy as v5. Autopilot always flies on High.
 - **Thrusters tied to real forces:** main-engine length and brightness follow actual thrust. Nose and tail RCS jets fire when the ship turns, lateral jets fire to cancel drift, and retro jets fire when braking. Boost (emergency thrust or hyperdrive autopilot) lengthens the flames. The player ship now casts a dynamic engine light.

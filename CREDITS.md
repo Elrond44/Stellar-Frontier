@@ -7,3 +7,5 @@
 - **v6 effects:** the flight model, impulse physics, impact-shield, hull-damage and plasma shaders, staged explosions and all particle effects are original code written for this game. No third-party assets or code beyond three.js.
 - **v5 art:** the five flagship hulls, installation types, civilian ships, telegraph markers, stage tracker and map glyphs are original and built in code (three.js geometry, shaders, canvas). No third-party art is used.
 - **Optional soundtrack:** `music/tracks.json` lists songs to play in order. It is empty by default, so the game plays its generated music.
+
+- **v7 environments:** planets, nebulae, phenomena (including the black-hole lensing shader), staged structure destruction, the camera system, quality presets and the profiler are original code written for this game. No third-party assets or code beyond three.js.

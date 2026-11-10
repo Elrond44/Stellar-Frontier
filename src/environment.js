@@ -51,7 +51,7 @@ export class NebulaLayers {
   constructor(scene) {
     this.scene = scene; this.layers = []; this.tex = nebulaTexture();
     // far: huge diffuse formations; mid: filaments + dust closer to the play plane; near (high only): faint particulate veil
-    const defs = [{ y: -520, half: 1500, scale: 1 / 1400, alpha: 1.0, dust: 0.75, gain: 0.55, fil: 0.6, ro: -9 }, { y: -210, half: 700, scale: 1 / 520, alpha: 0.7, dust: 0.45, gain: 0.42, fil: 1.0, ro: -7 }, { y: -70, half: 320, scale: 1 / 210, alpha: 0.35, dust: 0.0, gain: 0.22, fil: 0.5, ro: -6 }];
+    const defs = [{ y: -520, half: 1500, scale: 1 / 1400, alpha: 1.0, dust: 0.75, gain: 0.16, fil: 0.6, ro: -9 }, { y: -210, half: 700, scale: 1 / 520, alpha: 0.5, dust: 0.45, gain: 0.06, fil: 1.0, ro: -7 }, { y: -70, half: 320, scale: 1 / 210, alpha: 0.3, dust: 0.0, gain: 0.03, fil: 0.5, ro: -6 }];
     const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2); geo.userData.shared = true;
     defs.forEach((d, i) => {
       const m = new THREE.ShaderMaterial({ vertexShader: NEB_VS, fragmentShader: NEB_FS, transparent: true, depthWrite: false, premultipliedAlpha: true, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, fog: false,
