@@ -36,7 +36,6 @@ Branch `v8-wip` holds local WIP commits. `main` stays at v7 (45689c9) until v8 p
   - audio failed once because the old spawn point was inside the new dock radius; the spawn was then moved to z 62.
 
 ## Next
-1. Re-run audio, play, smoke5 and v8 after the spawn move and the dimmer carrier deck strips.
-2. Refresh shots/v8 with `node tests/v8.js` (lineup, factions, catalog, dreadnought, carrier launch, shipyard, station vs battlecruiser).
+1. (done 9:52 PM EST) Re-ran audio, play, smoke5 and v8 after the spawn move: all pass. shots/v8 refreshed.
 3. Merge v8-wip into main (fast-forward or squash), push, check the Pages build, then run the live tests: `SF_URL=https://elrond44.github.io/Stellar-Frontier/index.html node v8.js` (with NO_SHOTS=1) and smoke5.
 4. Report. The 4 promised songs are still outstanding: `tools/build_music.py` is ready and `music/tracks.json` is `[]`.
