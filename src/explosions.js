@@ -22,7 +22,7 @@ export const PROFILES = {
   frigate:     { name: 'frigate',     dur: [2.5, 5.0], size: 2.5, sec: 4,  frags: 22, slabs: 4,  keep: 0.7,  shake: 0.45, light: 2.2, fail: 3 },
   cruiser:     { name: 'cruiser',     dur: [4.0, 6.5], size: 3.3, sec: 6,  frags: 28, slabs: 6,  keep: 0.75, shake: 0.6,  light: 2.8, fail: 4 },
   battleship:  { name: 'battleship',  dur: [6.0, 8.0], size: 4.2, sec: 8,  frags: 34, slabs: 8,  keep: 0.78, shake: 0.75, light: 3.4, fail: 5 },
-  dreadnought: { name: 'dreadnought', dur: [11, 13],   size: 5.2, sec: 12, frags: 40, slabs: 10, keep: 0.72, shake: 1.0,  light: 4.0, fail: 6, steps: true },
+  dreadnought: { name: 'dreadnought', dur: [11, 13],   size: 5.2, sec: 18, frags: 40, slabs: 10, keep: 0.72, shake: 1.0,  light: 4.0, fail: 6, steps: true },
   module:      { name: 'module',      dur: [0.8, 1.4], size: 1.4, sec: 1,  frags: 10, slabs: 1,  keep: 0,    shake: 0.2,  light: 1.4, fail: 1 },
 };
 export const DREAD_STEPS = ['shields collapse', 'weapons fail', 'hull sections detonate', 'components separate', 'reactor destabilises', 'central discharge', 'hull breaks up', 'debris drifts'];
@@ -331,7 +331,7 @@ export class ExplosionManager {
     // 5: staggered secondaries at real positions along the keel, bow/stern alternating out from the breach
     const nSec = Math.round(P.sec * B.sec * (busy ? 0.5 : 1)); const t5a = t1 + 0.1, t5b = keep ? S.breakT * 0.98 : dur * 0.8;
     for (let i = 0; i < nSec; i++) { const u = (i + rand(0.1, 0.9)) / Math.max(1, nSec); at(t5a + (t5b - t5a) * u, () => { this.stats0.secondaries++; const q = this.hullPt(S, rand(-1, 1), rand(-0.8, 0.8)); if (this.log) this.log.push({ k: 'sec', x: q.x, z: q.z, cx: S.x, cz: S.z, hx: S.hx, hz: S.hz, z0: S.z0, z1: S.z1, beam: S.beam, t: g.time });
-      this.blast(q.x, S.grp ? S.top : 0.6, q.z, Math.max(0.7, sz * rand(0.3, 0.48)), { vx: S.vx, vz: S.vz, tint: S.tint, ix: q.ox, iz: q.oz, light: P.light * 0.45, shake: 0.05 * Math.min(4, sz), sound: i % 2 === 0, frags: Math.round(4 + sz), ring: false });
+      this.blast(q.x, S.grp ? S.top : 0.6, q.z, Math.max(0.7, sz * rand(0.3, 0.48), S.len / 40 * rand(0.8, 1.2)), { vx: S.vx, vz: S.vz, tint: S.tint, ix: q.ox, iz: q.oz, light: P.light * 0.45, shake: 0.05 * Math.min(4, sz), sound: i % 2 === 0, frags: Math.round(4 + sz), ring: false });
       if (S.grp && i % 2 === 1) { const q2 = this.hullPt(S, rand(-1, 1), 1); this.debris.spawn(q2.x, 0.7, q2.z, S.vx, S.vz, q2.ox, q2.oz, 3 + sz, 0.25 + 0.05 * sz, 'plate', 0.8); } }); }
     if (keep) {
       if (P.steps) this.dreadSteps(S, at);
