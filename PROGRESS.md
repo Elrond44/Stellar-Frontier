@@ -35,7 +35,14 @@ Branch `v8-wip` holds local WIP commits. `main` stays at v7 (45689c9) until v8 p
   - play, v4, v5, v6, v7, smoke5, compat and smoke pass;
   - audio failed once because the old spawn point was inside the new dock radius; the spawn was then moved to z 62.
 
-## Next
-1. (done 9:52 PM EST) Re-ran audio, play, smoke5 and v8 after the spawn move: all pass. shots/v8 refreshed.
-3. Merge v8-wip into main (fast-forward or squash), push, check the Pages build, then run the live tests: `SF_URL=https://elrond44.github.io/Stellar-Frontier/index.html node v8.js` (with NO_SHOTS=1) and smoke5.
-4. Report. The 4 promised songs are still outstanding: `tools/build_music.py` is ready and `music/tracks.json` is `[]`.
+## Status: v8 released
+- Commit 0b3b130 was pushed to main at 9:40 PM EST on Nov 9, 2026. Pages built it and the live site serves v8.
+- Live tests passed: v8.js with NO_SHOTS=1, and smoke5 against https://elrond44.github.io/Stellar-Frontier/.
+- Local suites passed: v8, play, v4, v5, v6, v7, audio, smoke, smoke5, compat.
+
+## Next (optional)
+- The 4 promised songs are still outstanding: `tools/build_music.py` is ready and `music/tracks.json` is `[]`.
+- Possible polish:
+  - Turrets look oversized on the Frigate and Destroyer.
+  - Carrier fighters are hard to see at full zoom-out.
+  - Gameplay balance for capital hulls has not been checked on real devices.
