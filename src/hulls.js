@@ -2,8 +2,8 @@
 // Every hull is designed at a normalised length of 10 (nose +z, tail -z) and built by a scaled Kit at its real length.
 // 1 world unit = 5 m. Scout = 4 u (20 m) ... Dreadnought = 144 u (720 m).
 import * as THREE from 'three';
-import { Kit, materials, hullTextures, makeTurret } from './models.js?v=8';
-import { mulberry } from './util.js?v=8';
+import { Kit, materials, hullTextures, makeTurret } from './models.js?v=9';
+import { mulberry } from './util.js?v=9';
 
 export const UNIT_M = 5;
 export const HULL_CLASSES = { small: 'Small Ships', medium: 'Medium Ships', large: 'Large Ships', special: 'Specialized Ships', capital: 'Capital Ships', titan: 'Titan Class' };

@@ -3,16 +3,16 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
-import { Game } from './game.js?v=8';
-import { UI } from './ui.js?v=8';
-import { Audio } from './audio.js?v=8';
-import { makeSky, makeStarLayer, makeDust } from './world.js?v=8';
-import { Environment } from './environment.js?v=8';
-import { CinematicPass } from './post.js?v=8';
-import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=8';
-import { Profiler } from './profiler.js?v=8';
-import { SECTORS, sectorAt } from './data.js?v=8';
-import { owner } from './galaxy.js?v=8';
+import { Game } from './game.js?v=9';
+import { UI } from './ui.js?v=9';
+import { Audio } from './audio.js?v=9';
+import { makeSky, makeStarLayer, makeDust } from './world.js?v=9';
+import { Environment } from './environment.js?v=9';
+import { CinematicPass } from './post.js?v=9';
+import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=9';
+import { Profiler } from './profiler.js?v=9';
+import { SECTORS, sectorAt } from './data.js?v=9';
+import { owner } from './galaxy.js?v=9';
 
 const canvas = document.getElementById('c');
 let renderer;
@@ -186,7 +186,7 @@ const damp0 = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const perf = { upd: 0, calls: 0, tris: 0 };
 // soundtrack: the manifest is tiny; each song streams only when it is about to play
 audio.musicMode = game.s.settings.musicMode;
-fetch('music/tracks.json?v=8').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
+fetch('music/tracks.json?v=9').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
   if (!Array.isArray(list) || !list.length) return; const s = game.s.settings;
   audio.setTracks(list, s.trackIdx < list.length ? s.trackIdx : 0, s.trackIdx < list.length ? s.trackPos : 0);
 }).catch((e) => console.info('No soundtrack, using generated music:', e.message));

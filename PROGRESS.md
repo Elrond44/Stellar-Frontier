@@ -46,3 +46,16 @@ Branch `v8-wip` holds local WIP commits. `main` stays at v7 (45689c9) until v8 p
   - Turrets look oversized on the Frigate and Destroyer.
   - Carrier fighters are hard to see at full zoom-out.
   - Gameplay balance for capital hulls has not been checked on real devices.
+
+## v9 — Cinematic Explosion & Destruction System 2.0 (released to main)
+Plan:
+- [x] src/explosions.js: ExplosionManager, PROFILES, PlasmaSystem (instanced noise/temperature billboards), ArcSystem, DebrisPhysics (momentum inheritance, hit-side impulse, wreck slabs w/ cap), ExplosionLighting (light budget), DestructionSequence (6 stages, per-class, dreadnought/station 8 steps), ExplosionAudio (layered, voice limit)
+- [x] Hooks: killEnemy, damageEnemy (hit dir / shield hit / collapse), impactFx (weapon signatures), playerDie, structures (modules/HQ)
+- [x] Quality budgets + exposure clamp
+- [x] ?v=9 bump, About v9, README/CREDITS
+- [x] tests/v9.js (10 scenarios + leaks) ALL PASS; shots/v9 taken
+- [x] rerun old suites: play, v4, v5, v6, v7, v8, audio, smoke, smoke5, compat, v9 all pass (v4 outpost and v6 ramming checks are timing-flaky under SwiftShader: they failed once and passed on rerun; that code is untouched)
+- [x] README/CREDITS v9 sections
+- [x] merge to main, push, verify Pages (see git log)
+
+Next / known limitations: Low preset has no dynamic lights (point-light pool disabled on Low, same as v8); dreadnought mid-sequence detonations read small at full-hull zoom; plasma is billboarded sprites (not volumetric); no real-device perf test yet; the 4 soundtrack songs are still outstanding.

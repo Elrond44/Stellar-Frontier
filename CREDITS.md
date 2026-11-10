@@ -11,3 +11,6 @@
 - **v7 environments:** planets, nebulae, phenomena (including the black-hole lensing shader), staged structure destruction, the camera system, quality presets and the profiler are original code written for this game. No third-party assets or code beyond three.js.
 
 - **v8 fleet:** the ship designs follow the "Stellar Odyssey" concept sheet that Elrond supplied for this project (`art/ship-concepts.jpg`). The sheet is used for the shipyard cards. All 3D hulls, faction liveries, emblems, LODs and the Fleet Registry are original code (three.js geometry, canvas textures). No third-party assets or code beyond three.js.
+
+## v9
+- The explosion and destruction system (plasma noise shader, temperature ramp, debris physics, destruction sequences) and the layered explosion sound effects are original, procedurally generated code. No third-party assets were added.

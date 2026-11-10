@@ -1,7 +1,7 @@
 // v6 cinematic VFX: particle budget manager, staged-explosion sequencer, energy shells, hot metal debris,
 // impact shields (player + enemy bubbles), health-driven hull damage shader, plasma bolt material.
 import * as THREE from 'three';
-import { rand, TAU, clamp } from './util.js?v=8';
+import { rand, TAU, clamp } from './util.js?v=9';
 
 // ---------------------------------------------------------------- budget manager
 // One place decides how much eye candy we can afford: quality tier x particle pool load x frame time.

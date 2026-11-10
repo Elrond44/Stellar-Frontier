@@ -12,6 +12,32 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 
 Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). All models, effects, music and sound are generated procedurally in code. Progress autosaves to your browser's local storage.
 
+## v9: Cinematic explosions and destruction 2.0
+
+Every destruction now runs through `src/explosions.js` (ExplosionManager), in six stages: structural failure (sparks, electrical arcs, venting gas) → a localized flash → plasma expansion (an instanced noise shader with a white → yellow → orange → deep-red temperature ramp) → fragmentation → staggered secondary detonations → fast dissipation (no lingering smoke, it's vacuum).
+
+- **Per-class profiles sized from the v8 hulls:** fighters 0.6–1.2 s, medium ships 1.2–2.5 s, frigates/destroyers 2.5–5 s, cruisers 4–6.5 s, battleships 6–8 s. Ships from medium up keep their hull on screen while it fails, drifting with their momentum and spinning away from the hit side. Secondaries go off at real points along the keel. At the end the hull splits into wreck slabs that drift for 25–40 s (capped per quality preset).
+- **Dreadnoughts and flagships:** an 11–13 s, 8-step sequence: shields collapse → weapons fail at the turret mounts → hull sections detonate → bow and stern components separate → the reactor destabilises (pulsing core and a rising hum) → central discharge → the hull breaks up → the debris drifts.
+- **Pirate bases:** each module explodes where it sits. The core runs the same 8 steps on top of the v7 staged wreck (the telegraphed reactor blast is unchanged).
+- **Debris physics:** fragments inherit the ship's velocity, plus an impulse ∝ 1/√mass biased away from the side that was hit. Spin ∝ 1/mass, and hot pieces cool from orange to bare metal. Big pieces bounce off asteroids.
+- **Hits:** a shield hit shows the hex ripple, a flare and arcs that skate over the bubble, with no debris. A shield collapse adds discharge filaments around the shield. Hull hits show the weapon's signature:
+  - laser: a focused burn
+  - plasma: a superheated splash
+  - railgun: penetration, with chunks blown out the far side
+  - missile: a concussive mini-blast
+  - ion: arcs with no fire
+  - experimental: a violet implosion
+- **Lighting:** the shared point-light pool now has a brightness budget and priorities, so a capital-ship blast is never cut short by a fighter pop. The light lands on nearby hulls, asteroids and stations.
+- **Readability:**
+  - Overlapping blasts share an exposure budget, so a big battle doesn't white out.
+  - Plasma near the player's ship is dimmed.
+  - Shockwave rings are softer.
+  - Effect size and light energy scale with the class.
+- **Camera:** the impulse scales with blast size and distance. Screen shake is set to Full, Reduced or Off in Settings.
+- **Audio:** each blast is layered (crack + body, sub-bass impact, metallic rupture, electrical crackle, reactor resonance), attenuated by distance and filtered with range. An explosion-event limiter keeps big battles clean. The soundtrack ducks gently and never drops below 55%.
+- **Performance:** everything is pooled: one instanced plasma mesh, one instanced debris mesh, one line buffer for arcs and the existing light pool. No scene objects or materials are created per explosion. Low, Medium and High set the budgets (plasma 40/90/140, fragments 90/180/280, wreck slabs 14/28/44, active sequences 4/8/12). Far-away blasts are scaled down.
+- Damage, AI, controls, progression and saves are unchanged (save format v8).
+
 ## v8: Concept-sheet fleet at true scale
 - **15 hulls from the "Stellar Odyssey" concept sheet** (`art/ship-concepts.jpg`): Scout, Interceptor, Strike Fighter, Bomber, Corvette, Gunship, Engineer, Explorer, Frigate, Destroyer, Intercept Carrier, Cruiser, Battlecruiser, Fleet Carrier and Dreadnought. Each is built in code (`src/hulls.js`) to match the sheet's silhouette, colours, panel lines, engines, turrets, emissive strips and greebles. The v6 PBR materials and damage states are kept.
 - **True relative scale** (1 unit = 5 m; Scout = 20 m):

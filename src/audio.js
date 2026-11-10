@@ -114,6 +114,14 @@ const RECIPES = {
     s.osc({ type: 'sawtooth', f: 90, f1: 55, t: 0.3, a: 0.2, d: 1.5, v: 0.1, to: s.filt('lowpass', 400, 2) });
     for (let k = 0; k < 22; k++) { const t = rv(0.1, 2.8); s.nz({ t, d: rv(0.01, 0.05), v: 0.25 * (1 - t / 3) + 0.04, type: 'bandpass', f: rv(1800, 7000), q: rv(4, 10) }); }
     for (let k = 0; k < 16; k++) s.nz({ t: rv(0.05, 1.0), d: 0.008, v: 0.35, type: 'bandpass', f: rv(1200, 3000), q: 3 }); }],
+  // v9 explosion layers (mixed per blast by size): sub-bass impact, metallic rupture, electrical crackle, reactor resonance
+  xDeep: [2.2, 2, (s) => { const d = s.shaper(1.6); s.osc({ f: rv(44, 52), f1: 18, a: 0.01, d: 1.8, v: 1, to: d }); s.nz({ kind: 'brown', a: 0.02, d: 2.0, v: 0.8, type: 'lowpass', f: 160, f1: 40 }); }],
+  xRupture: [1.4, 3, (s) => { s.partials(rv(160, 240), [1, 1.47, 2.09, 2.76, 3.9], [0.3, 0.22, 0.16, 0.1, 0.06], [0.8, 0.6, 0.5, 0.35, 0.25], 0.01);
+    s.nz({ kind: 'pink', d: 0.5, v: 0.6, type: 'bandpass', f: 900, f1: 300, q: 2 }); for (let k = 0; k < 10; k++) s.nz({ t: rv(0.05, 1.0), d: rv(0.01, 0.04), v: 0.3, type: 'bandpass', f: rv(1200, 3500), q: 6 }); }],
+  xArc: [0.7, 3, (s) => { for (let k = 0; k < 14; k++) s.nz({ t: rv(0, 0.55), d: rv(0.004, 0.02), v: rv(0.2, 0.6), type: 'highpass', f: rv(3000, 7000) });
+    s.osc({ type: 'sawtooth', f: 120, f1: 90, d: 0.5, v: 0.12, to: s.filt('bandpass', 1800, 4) }); }],
+  xReactor: [3.0, 1, (s) => { s.osc({ f: 70, f1: 140, a: 1.6, d: 1.2, v: 0.5 }); s.osc({ f: 105, f1: 210, a: 1.6, d: 1.2, v: 0.3 }); s.osc({ type: 'sawtooth', f: 35, f1: 70, a: 1.8, d: 1.0, v: 0.18, to: s.filt('lowpass', 500, 2) });
+    s.nz({ kind: 'pink', a: 2.0, d: 0.8, v: 0.3, type: 'bandpass', f: 400, f1: 2400, q: 2 }); }],
   // --- mining ---
   rockHit: [0.25, 4, (s) => { for (let k = ri(3, 6); k > 0; k--) s.nz({ t: rv(0, 0.12), d: rv(0.008, 0.03), v: rv(0.3, 0.8), type: 'bandpass', f: rv(1800, 5000), q: rv(2, 6) });
     s.nz({ kind: 'brown', d: 0.12, v: 0.6, type: 'lowpass', f: 400, f1: 100 }); s.osc({ f: rv(90, 140), f1: 50, d: 0.08, v: 0.4 }); }],
@@ -201,6 +209,7 @@ const MIX = {
   pd: [0.28, 0.05, 3, 0, 0.1, 0.08, 0.2], droneShot: [0.22, 0.06, 3, 0, 0.1, 0.1, 0.2],
   enemyLaser: [0.32, 0.05, 4, 0, 0.15, 0.08, 0.2], enemyHeavy: [0.45, 0.08, 3, 1, 0.2, 0.06, 0.15],
   hitHull: [0.33, 0.035, 4, 0, 0.12, 0.1, 0.25], shieldHit: [0.5, 0.08, 2, 2, 0.25, 0.06, 0.1], hullCrunch: [0.62, 0.1, 2, 2, 0.15, 0.06, 0.1],
+  xDeep: [0.8, 0.12, 2, 3, 0.2, 0.05, 0.05], xRupture: [0.42, 0.08, 3, 2, 0.3, 0.08, 0.15], xArc: [0.35, 0.06, 3, 1, 0.15, 0.1, 0.2], xReactor: [0.7, 1.5, 1, 4, 0.3, 0, 0],
   boomS: [0.75, 0.03, 4, 2, 0.3, 0.1, 0.12], boomL: [1.0, 0.1, 2, 3, 0.35, 0.06, 0.05],
   rockHit: [0.22, 0.09, 2, 0, 0.08, 0.12, 0.25], rockS: [0.55, 0.04, 3, 1, 0.2, 0.1, 0.15], rockL: [0.8, 0.08, 2, 2, 0.3, 0.06, 0.1],
   pickup: [0.26, 0.03, 3, 0, 0.25, 0, 0.1], coins: [0.5, 0.15, 1, 3, 0.2, 0.02, 0], upgrade: [0.5, 0.1, 2, 3, 0.25, 0.01, 0],
@@ -212,7 +221,7 @@ const MIX = {
   lootDrop: [0.35, 0.15, 2, 3, 0.3, 0.05, 0], loot: [0.45, 0.1, 2, 4, 0.3, 0, 0], lootRare: [0.55, 0.3, 1, 5, 0.4, 0, 0], sector: [0.5, 2, 1, 4, 0.4, 0, 0], skill: [0.5, 0.2, 1, 5, 0.3, 0, 0],
   overheat: [0.35, 1, 1, 3, 0.1, 0, 0], denied: [0.3, 0.2, 1, 5, 0, 0, 0], shieldDown: [0.45, 1, 1, 4, 0.2, 0, 0], liberate: [0.8, 3, 1, 6, 0.45, 0, 0],
 };
-const LOWRATE = new Set(['liberate', 'emp', 'sector', 'surge', 'overload', 'boomL', 'rockL', 'impact', 'kick', 'pulse', 'warp', 'fanfare', 'boomS', 'quest', 'levelUp', 'boost', 'hullCrunch']); // long, mostly low-frequency sounds
+const LOWRATE = new Set(['xDeep', 'xReactor', 'liberate', 'emp', 'sector', 'surge', 'overload', 'boomL', 'rockL', 'impact', 'kick', 'pulse', 'warp', 'fanfare', 'boomS', 'quest', 'levelUp', 'boost', 'hullCrunch']); // long, mostly low-frequency sounds
 const PENT = [0, 3, 5, 7, 10]; // minor pentatonic steps for pickup combo chimes
 
 // ---------- continuous loops (built on demand, torn down when silent) ----------
@@ -619,7 +628,20 @@ export class Audio {
   missileBoom(x, z) { this.play('boomS', { x, z, rate: 1.35, vol: 0.55 }); }
   rockHit(x, z) { this.play('rockHit', { x, z }); }
   rockBreak(big, x, z) { this.play(big ? 'rockL' : 'rockS', { x, z }); }
-  explode(big, x, z, boss) { this.play(big ? 'boomL' : 'boomS', { x, z, vol: boss ? 1.3 : 1, rate: boss ? 0.8 : 1 }); if (big) this.duck(boss ? 0.35 : 0.55, boss ? 1 : 0.35); }
+  explode(big, x, z, boss) { this.play(big ? 'boomL' : 'boomS', { x, z, vol: boss ? 1.3 : 1, rate: boss ? 0.8 : 1 }); if (big) this.duck(boss ? 0.55 : 0.7, boss ? 0.8 : 0.3); }
+  // v9: layered, distance-attenuated blast with an explosion-event limiter (overlapping battles never stack into mush);
+  // the soundtrack is ducked gently and never below 55% so it stays audible
+  blast(size, x, z, o = {}) {
+    if (!this.ctx || !Number.isFinite(size) || (x !== undefined && !(Number.isFinite(x) && Number.isFinite(z)))) return; const now = this.ctx.currentTime; const W = this._xw || (this._xw = []); while (W.length && now - W[0] > 0.3) W.shift();
+    if (W.length >= (this.low ? 3 : 5) && size < 3) { this.stats.dropped++; return; } W.push(now);
+    const big = size >= 1.6, cap = size >= 3.5;
+    this.play(big ? 'boomL' : 'boomS', { x, z, vol: Math.min(1.3, 0.55 + size * 0.17), rate: cap ? 0.74 : big ? 0.92 : 1.18 - Math.min(0.2, size * 0.1) });
+    if (size >= 1.1 && !this.low) this.play('xDeep', { x, z, vol: Math.min(1, 0.25 + size * 0.15), rate: cap ? 0.75 : 1 });
+    if (size >= 1.3) this.play('xRupture', { x, z, vol: 0.45 + Math.min(0.4, size * 0.08), rate: cap ? 0.8 : 1, delay: 0.06 });
+    if (o.electric) this.play('xArc', { x, z, vol: 0.6 });
+    if (o.reactor) this.play('xReactor', { x, z, vol: 0.7, rate: 1.3 });
+    if (big) this.duck(cap ? 0.55 : 0.75, cap ? 0.5 : 0.2);
+  }
   hurt(shielded, x, z) { if (shielded) { this.play('shieldHit', { x, z }); this.play('hitHull', { x, z, vol: 0.5, rate: 0.8 }); } else this.play('hullCrunch', { x, z }); }
   pickup(n = 0) { const step = n % 10; const semi = PENT[step % 5] + 12 * Math.floor(step / 5); this.play('pickup', { rate: Math.pow(2, (semi - 5) / 12) }); }
   click() { this.play('tap'); }

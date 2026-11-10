@@ -1,7 +1,7 @@
 // Pooled visual effects: GPU points particles, debris, shockwave rings, instanced bolts, floating text
 import * as THREE from 'three';
-import { rand, TAU } from './util.js?v=8';
-import { glowTexture } from './models.js?v=8';
+import { rand, TAU } from './util.js?v=9';
+import { glowTexture } from './models.js?v=9';
 
 export class Particles {
   constructor(scene, max = 4000, opts = {}) {
@@ -211,10 +211,13 @@ export class Flashes {
     this.pool = []; this.enabled = true;
     for (let i = 0; i < n; i++) { const l = new THREE.PointLight(0xffaa55, 0, 30, 1.6); l.position.set(0, -999, 0); scene.add(l); this.pool.push({ l, life: 0, max: 1, i0: 0 }); }
   }
-  spawn(x, y, z, intensity = 40, color = 0xffaa55, life = 0.35, dist = 30, weak = false) {
+  spawn(x, y, z, intensity = 40, color = 0xffaa55, life = 0.35, dist = 30, weak = false, prio = 1) {
     if (!this.enabled) return;
-    let o = this.pool[0]; for (const p of this.pool) if (p.life < o.life) o = p;
+    // v9: steal the light with the least remaining energy x priority, so a capital-ship blast is never cut by a fighter pop
+    let o = this.pool[0], best = Infinity; for (const p of this.pool) { const sc = p.life <= 0 ? -1 : (p.life / p.max) * p.i0 * (p.prio || 1); if (sc < best) { best = sc; o = p; } }
     if (weak && o.life > 0) return; // muzzle/impact lights never steal an explosion's light
+    if (o.life > 0 && (o.prio || 1) > prio * 1.5 && o.life / o.max > 0.3) return;
+    o.prio = prio;
     this.used = (this.used || 0) + 1;
     o.life = o.max = life; o.i0 = intensity; o.l.color.setHex(color); o.l.distance = dist; o.l.position.set(x, y + 2, z); o.l.intensity = intensity;
   }
