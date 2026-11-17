@@ -43,7 +43,7 @@ function prep(scene) {
   const out = new THREE.Group(); const S = new THREE.Matrix4().makeScale(GLB_UNIT, GLB_UNIT, GLB_UNIT);
   for (const m of meshes) {
     const g = new THREE.BufferGeometry();
-    for (const k of ['position', 'normal', 'uv', 'color', 'tangent']) { const a = m.geometry.attributes[k]; if (!a) continue; const n = k === 'color' ? 3 : a.itemSize; // tangent: vec4 (xyz + handedness) const f = new Float32Array(a.count * n);
+    for (const k of ['position', 'normal', 'uv', 'color', 'tangent']) { const a = m.geometry.attributes[k]; if (!a) continue; const n = k === 'color' ? 3 : a.itemSize; /* tangent: vec4 */ const f = new Float32Array(a.count * n);
       for (let i = 0; i < a.count; i++) for (let j = 0; j < n; j++) f[i * n + j] = a.getComponent(i, j); g.setAttribute(k, new THREE.BufferAttribute(f, n)); }
     if (m.geometry.index) g.setIndex(m.geometry.index.clone());
     g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(S, m.matrixWorld)); g.computeBoundingSphere();
