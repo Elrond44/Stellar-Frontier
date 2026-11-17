@@ -72,4 +72,10 @@ Next / known limitations: Low preset has no dynamic lights (point-light pool dis
 - [x] blender-test.html viewer: procedural (left) vs glb (right) in the game's renderer/tonemapping/env; hull, paint, view, damage, spin, flames; URL params hull/view/paint/dmg
 - [x] comparison shots: tests/blender_viewer.js -> blender/shots/compare-*.png (also asserts glb loaded, damage clones, 404 fallback, no console errors); tests/blender_ingame.js (?hulls=glb in the real game)
 - [x] v8 + smoke5 pass with toggle off
+### Blender batch 1 (approved by Elrond, fleet conversion in batches)
+- Kit: `slab` (extruded outlines for wings/fins/armour scales), `strips` (thin broken window/light lines that follow the hull wall), `skin` (segmented armour plates with real gaps = panel lines that survive the game's lighting), baked vertex colours (12-ray AO x top-light gradient x per-panel tint) -> COLOR_0; `parts.py` fighter parts + `warship()` layered capital hull; `crops.py` crops each concept-sheet panel; `compare.py` builds concept | Blender | in-game sheets (`blender/shots/concept-vs-<id>.png`).
+- Game: glb meshes with vertex colours get a per-material clone (vertexColors, metalness <= 0.62, base colour x1.3) so AO/panels read in game; GLB_IDS now 8 hulls; cache-bust ?v=bt2; viewer: all 8 hulls, `view=concept`, `solo=1`.
+- Hulls (tris / meshopt glb): scout v2 1,260 / 49 KB; interceptor 1,082 / 47 KB; strike 1,642 / 59 KB; corvette 2,632 / 87 KB; gunship 2,116 / 75 KB; frigate v2 3,240 / 104 KB; destroyer 4,558 / 141 KB; dreadnought v2 10,824 / 313 KB. All 8 = 875 KB.
+- Tests: tests/blender_viewer.js (8 hulls, damage clones, 404 fallback, solo concept-angle renders), blender_ingame.js, v8, smoke5 -> all pass.
+- Next batches: engineer, cruiser, bomber, intercept carrier, explorer, battlecruiser, fleet carrier (+ procedural far-LOD from the glb, shipyard turret overlap).
 - Known gaps: player weapon turrets in the shipyard preview still bolt on over the modelled ones; far LOD (`lo`) is still procedural; only 3 of 15 hulls converted
