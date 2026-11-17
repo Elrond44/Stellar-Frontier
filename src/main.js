@@ -4,6 +4,7 @@ import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
 import { Game } from './game.js?v=9';
+import { GLB, preloadGlbHulls } from './glbhulls.js?v=9';
 import { UI } from './ui.js?v=9';
 import { Audio } from './audio.js?v=9';
 import { makeSky, makeStarLayer, makeDust } from './world.js?v=9';
@@ -58,6 +59,7 @@ const prof = new Profiler(renderer, scene); const adapt = new AdaptiveQuality();
 if (window.SF_FORCE_QUALITY && PRESETS[window.SF_FORCE_QUALITY]) { detected.q = window.SF_FORCE_QUALITY; detected.why += ' (pinned by test harness)'; adapt.off = true; } // automated tests pin AUTO so software rendering stays comparable
 
 const audio = new Audio();
+if (GLB.enabled) { try { await preloadGlbHulls(); } catch (e) { console.warn('glb hulls off', e); } } // blender-test toggle (?hulls=glb)
 const game = new Game(scene, camera, audio); game.prof = prof;
 const opts = { canvas, showFps: false, fpsText: () => '', applySettings: null, isPlaying: () => playing, onLoaded: null };
 const ui = new UI(game, audio, opts);

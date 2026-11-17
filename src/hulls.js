@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { Kit, materials, hullTextures, makeTurret } from './models.js?v=9';
 import { mulberry } from './util.js?v=9';
+import { applyGlb } from './glbhulls.js?v=9';
 
 export const UNIT_M = 5;
 export const HULL_CLASSES = { small: 'Small Ships', medium: 'Medium Ships', large: 'Large Ships', special: 'Specialized Ships', capital: 'Capital Ships', titan: 'Titan Class' };
@@ -353,10 +354,13 @@ export function buildHull(id, opts = {}) {
   const o = B[id](k, M, rng); const v = M.scheme.variant; if (v && opts.variant !== false) variantParts(k, M, v, H);
   const lo = k.buildLo(); const group = k.build(); group.name = 'hull:' + id;
   const sc = (p) => ({ ...p, x: p.x * S, y: p.y * S, z: p.z * S, size: (p.size || 1) * S });
-  const hard = (o.hard || []).map(sc), pd = (o.pd || []).map(sc), bays = (o.bays || []).map(sc);
+  let hard = (o.hard || []).map(sc), pd = (o.pd || []).map(sc); const bays = (o.bays || []).map(sc);
+  // blender-test: swap in the Blender glb (same hitboxes/stats); modelled turrets replace the bolt-on ones
+  const gl = opts.glb === false ? null : applyGlb(id, group, M, k.engines.length ? Math.max(...k.engines.map((e) => e.r)) : 0.3);
+  if (gl) { if (gl.engines.length) k.engines = gl.engines; if (gl.hard.length >= hard.length) hard = gl.hard; pd = []; group.userData.glb = true; }
   if (opts.turrets === 'enemy') {
     const pal = { D: M.D, A: M.A, H: M.H }; const n = Math.max(1, Math.min(hard.length, H.slots + 2));
-    for (let i = 0; i < n; i++) { const h = hard[i]; const tu = makeTurret(H.rank >= 4 ? 'cannon' : i % 2 ? 'laser' : 'cannon', h.size, pal); tu.position.set(h.x, h.y, h.z); tu.name = 'eturret'; group.add(tu); }
+    for (let i = 0; i < n; i++) { const h = hard[i]; const tu = makeTurret(H.rank >= 4 ? 'cannon' : i % 2 ? 'laser' : 'cannon', h.size, pal); tu.position.set(h.x, h.y, h.z); tu.name = 'eturret'; if (gl) tu.visible = false; group.add(tu); } // glb hulls carry modelled turrets
     for (const h of pd) { const tu = makeTurret('cannon', h.size, pal); tu.position.set(h.x, h.y, h.z); group.add(tu); }
   }
   const segs = hullSegs(H);

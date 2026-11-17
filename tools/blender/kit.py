@@ -130,7 +130,7 @@ class Ship:
         ob = bpy.data.objects.new(self.name, me); bpy.context.scene.collection.objects.link(ob)
         ems = []
         for i, (kind, p, s) in enumerate(self.empties):
-            e = bpy.data.objects.new(f'{kind}_{i}', None); e.location = p; e.empty_display_size = s; e.parent = ob; bpy.context.scene.collection.objects.link(e); ems.append(e)
+            e = bpy.data.objects.new(f'{kind}_{i}', None); e.location = p; e.empty_display_size = s; e['size'] = float(s); e.parent = ob; bpy.context.scene.collection.objects.link(e); ems.append(e)
         tris = sum(len(p.vertices) - 2 for p in me.polygons)
         return ob, tris
 
@@ -193,6 +193,9 @@ def run(build, name, pal, length, tile, detail):
     reset(); mats = make_materials(pal); s = build(); ob, tris = s.finish(mats, tile=tile)
     print('TRIS', name, tris)
     export_glb(os.path.join(out, name + '.glb'), draco=False)
+    import subprocess  # meshopt + quantization (three r170 GLTFLoader + vendored MeshoptDecoder); ~3x smaller
+    gt = '/tmp/gt/node_modules/.bin/gltf-transform'
+    if os.path.exists(gt): subprocess.run([gt, 'meshopt', os.path.join(out, name + '.glb'), os.path.join(out, name + '.mo.glb'), '--level', 'medium'], check=False, capture_output=True)
     if '--render' in sys.argv:
         detail_materials(detail)
         for v in ('3q', 'side'): render(ob, os.path.join(out, '..', 'shots', f'blender-{name}-{v}.png'), length, view=v)
