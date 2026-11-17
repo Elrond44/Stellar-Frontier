@@ -29,6 +29,10 @@ def make_materials(pal):
         m = bpy.data.materials.get(k) or bpy.data.materials.new(k)
         m.use_nodes = True; b = m.node_tree.nodes.get('Principled BSDF')
         b.inputs['Base Color'].default_value = (*base, 1); b.inputs['Metallic'].default_value = met; b.inputs['Roughness'].default_value = rough
+        if k in ('H', 'P', 'D', 'A'):
+            ca = m.node_tree.nodes.new('ShaderNodeVertexColor'); ca.layer_name = 'Col'
+            mx_ = m.node_tree.nodes.new('ShaderNodeMix'); mx_.data_type = 'RGBA'; mx_.blend_type = 'MULTIPLY'; mx_.inputs['Factor'].default_value = 1.0
+            mx_.inputs['A'].default_value = (*base, 1); m.node_tree.links.new(ca.outputs['Color'], mx_.inputs['B']); m.node_tree.links.new(mx_.outputs['Result'], b.inputs['Base Color'])
         if em:
             mx = max(em); b.inputs['Emission Color'].default_value = (em[0] / mx, em[1] / mx, em[2] / mx, 1); b.inputs['Emission Strength'].default_value = es * mx
         mats.append(m)
@@ -110,13 +114,97 @@ class Ship:
         for _ in range(n):
             w, l, h = r.uniform(0.3, 1) * scale, r.uniform(0.3, 1.4) * scale, r.uniform(0.15, 0.7) * scale
             self.box((r.uniform(x0, x1), r.uniform(y0, y1), z + h / 2), (w, l, h), r.choice(mats), ch=min(w, h) * 0.15)
+    def slab(self, outline, t, mat, M=None, inset=0.0):
+        """extrude a 2D outline [(u,v)...] (local XY plane) by thickness t along local Z, centred; the top face can be
+        inset (scaled toward the centroid) for a chamfered plate. M maps local -> ship space (use mirror() for side -1)."""
+        bm = self.bm; M = M or Matrix.Identity(4)
+        cu = sum(p[0] for p in outline) / len(outline); cv = sum(p[1] for p in outline) / len(outline)
+        lo = [bm.verts.new(M @ Vector((u, v, -t / 2))) for u, v in outline]
+        k = 1 - inset
+        hi = [bm.verts.new(M @ Vector((cu + (u - cu) * k, cv + (v - cv) * k, t / 2))) for u, v in outline]
+        n = len(outline)
+        for ring_, flip in ((lo, True), (hi, False)):
+            try: f = bm.faces.new(list(reversed(ring_)) if flip else ring_); f.material_index = mat
+            except ValueError: pass
+        for i in range(n):
+            j = (i + 1) % n
+            try: f = bm.faces.new((lo[i], lo[j], hi[j], hi[i])); f.material_index = mat
+            except ValueError: pass
+    def quad(self, c, w, h, side, mat=5, axis='X', off=None):
+        """a flat emissive quad (2 tris) on a wall: axis X -> faces +-X (w along Y, h along Z); axis Z -> faces +Z (w along Y, h along X)."""
+        x, y, z = c; bm = self.bm
+        if axis == 'X':
+            pts = [(x, y - w / 2, z - h / 2), (x, y + w / 2, z - h / 2), (x, y + w / 2, z + h / 2), (x, y - w / 2, z + h / 2)]
+            if side < 0: pts.reverse()
+        elif axis == 'Y':  # faces -Y (the nose)
+            pts = [(x - w / 2, y, z - h / 2), (x + w / 2, y, z - h / 2), (x + w / 2, y, z + h / 2), (x - w / 2, y, z + h / 2)]
+        else:
+            pts = [(x - h / 2, y - w / 2, z), (x + h / 2, y - w / 2, z), (x + h / 2, y + w / 2, z), (x - h / 2, y + w / 2, z)]
+        f = bm.faces.new([bm.verts.new(p) for p in pts]); f.material_index = mat
+    def strips(self, y0, y1, x, z, side, h, seg=(0.04, 0.12), gap=(0.01, 0.04), mat=5, fill=0.85):
+        """broken light strips along a wall (the concept sheet's thin amber window lines); seg/gap as fractions of L."""
+        r = self.rng; y = y0 + r.uniform(*gap) * self.L
+        while y < y1:
+            l = min(r.uniform(*seg) * self.L, y1 - y)
+            if r.random() < fill and l > h: self.quad((x * side, y + l / 2, z), l, h, side, mat)
+            y += l + r.uniform(*gap) * self.L
+    def skin(self, secs, y0, y1, n, gap, grow, matf, zclip=None):
+        """segmented armour skin over a reference loft: n plates between y0..y1 separated by gaps (reads as deep panel
+        lines in game); grow (m) pushes the plates out of the base hull; matf(i) picks each plate's material."""
+        def at(y):
+            for a, b in zip(secs, secs[1:]):
+                if a[0] <= y <= b[0]:
+                    t = (y - a[0]) / (b[0] - a[0]); return [a[k] + (b[k] - a[k]) * t for k in range(1, 6)]
+            e = secs[0] if y < secs[0][0] else secs[-1]; return list(e[1:6])
+        L = (y1 - y0) / n
+        for i in range(n):
+            ya, yb = y0 + i * L + gap / 2, y0 + (i + 1) * L - gap / 2
+            rr = []
+            for yy in (ya, ya + gap, yb - gap, yb):
+                wb, wt, zb, zt, c = at(yy); g = grow * (0.4 if yy in (ya, yb) else 1)
+                if zclip is not None: zb = max(zb, zclip)
+                rr.append((yy, wb + 2 * g, wt + 2 * g, zb - g * 0.5, zt + g, c + g * 0.5))
+            m = matf(i)
+            if m is not None: self.loft(rr, m)
     def empty(self, kind, p, size=1.0):
         self.empties.append((kind, p, size))
+    def bake_colors(self, bm, rays=12):
+        """vertex colours = ambient occlusion x top-light gradient x per-panel tint. Multiplied into the hull colour in
+        game (vertexColors) and in the Blender render, so recesses, plate seams and stacked decks read under the game's
+        single sun light instead of turning into one flat dark mass."""
+        from mathutils.bvhtree import BVHTree
+        bm.faces.ensure_lookup_table(); tree = BVHTree.FromBMesh(bm)
+        col = bm.loops.layers.float_color.new('Col'); r = random.Random(5)
+        d = max(0.6, self.L * 0.045); eps = self.L * 0.0008
+        ga = math.pi * (3 - math.sqrt(5)); dirs = []
+        for i in range(rays):  # fibonacci hemisphere, cosine-ish
+            zz = 1 - (i + 0.5) / rays; rad = math.sqrt(1 - zz * zz); th = i * ga
+            dirs.append(Vector((math.cos(th) * rad, math.sin(th) * rad, zz)))
+        cache = {}
+        for f in bm.faces:
+            n = f.normal.copy()
+            if n.length < 1e-6: n = Vector((0, 0, 1))
+            q = n.to_track_quat('Z', 'Y'); ctr = f.calc_center_median()
+            emiss = f.material_index in (4, 5, 6)
+            tint = 1.0 if emiss else r.uniform(0.86, 1.06)
+            for lp in f.loops:
+                key = (lp.vert.index, round(n.x, 2), round(n.y, 2), round(n.z, 2))
+                if key not in cache:
+                    o = lp.vert.co * 0.9 + ctr * 0.1 + n * eps; occ = 0.0
+                    for dd in dirs:
+                        hit = tree.ray_cast(o, q @ dd, d)
+                        if hit[0] is not None: occ += 1 - hit[3] / d
+                    cache[key] = occ / rays
+                ao = 1 - 0.85 * cache[key]
+                g = 0.84 + 0.16 * (n.z * 0.5 + 0.5)
+                v = 1.0 if emiss else max(0.18, min(1.0, ao * g * tint))
+                lp[col] = (v, v, v, 1.0)
     # -------- finish: UVs, normals, object, export --------
     def finish(self, mats, tile):
         bm = self.bm
         bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=self.L * 1e-5)
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        self.bake_colors(bm)
         uv = bm.loops.layers.uv.new('UVMap')
         for f in bm.faces:  # box projection in metres / tile
             n = f.normal; ax = max(range(3), key=lambda i: abs(n[i]))
@@ -126,6 +214,7 @@ class Ship:
                 lp[uv].uv = (u / tile, v / tile)
         me = bpy.data.meshes.new(self.name); bm.to_mesh(me); bm.free()
         for m in mats: me.materials.append(m)
+        if me.color_attributes.get('Col'): me.color_attributes.active_color = me.color_attributes['Col']; me.color_attributes.render_color_index = me.color_attributes.active_color_index
         for p in me.polygons: p.use_smooth = False
         ob = bpy.data.objects.new(self.name, me); bpy.context.scene.collection.objects.link(ob)
         ems = []
@@ -140,7 +229,8 @@ def reset():
 def export_glb(path, draco=True):
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True, export_apply=True, export_draco_mesh_compression_enable=draco,
                               export_draco_mesh_compression_level=6, export_draco_position_quantization=14, export_draco_normal_quantization=10,
-                              export_draco_texcoord_quantization=12, export_extras=True, export_cameras=False, export_lights=False)
+                              export_draco_texcoord_quantization=12, export_extras=True, export_cameras=False, export_lights=False,
+                              export_vertex_color='ACTIVE')
 
 def render(ob, path, length, view='3q', res=(1280, 720), samples=48):
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.device = 'CPU'; sc.cycles.samples = samples
@@ -160,7 +250,7 @@ def render(ob, path, length, view='3q', res=(1280, 720), samples=48):
     light('fill', (-L * 0.4, -L * 1.0, -L * 0.2), 1.5 * k, (0.7, 0.75, 1), L * 0.8)
     cam = bpy.data.cameras.new('cam'); cam.lens = 50; co = bpy.data.objects.new('cam', cam); sc.collection.objects.link(co); sc.camera = co
     bb = [ob.matrix_world @ Vector(c) for c in ob.bound_box]; ctr = sum(bb, Vector()) / 8; rad = max((v - ctr).length for v in bb)
-    d = {'3q': Vector((0.62, -0.55, 0.42)), 'side': Vector((1, 0.0, 0.12)), 'top': Vector((0, 0.001, 1)), 'front': Vector((0.35, -1, 0.3))}[view].normalized()
+    d = {'3q': Vector((0.62, -0.55, 0.42)), 'side': Vector((1, 0.0, 0.12)), 'top': Vector((0, 0.001, 1)), 'front': Vector((0.35, -1, 0.3)), 'concept': Vector((0.55, -0.72, 0.5))}[view].normalized()
     fov = 2 * math.atan(36 / 2 / cam.lens) * res[1] / res[0]
     pos = ctr + d * rad / math.sin(fov / 2) * 0.6
     co.location = pos; co.rotation_euler = (ctr - pos).to_track_quat('-Z', 'Y').to_euler()
@@ -181,6 +271,7 @@ def detail_materials(scale):
         nz = nt.nodes.new('ShaderNodeTexNoise'); nz.inputs['Scale'].default_value = 3.0; nt.links.new(mp.outputs['Vector'], nz.inputs['Vector'])
         mix = nt.nodes.new('ShaderNodeMix'); mix.data_type = 'RGBA'; mix.blend_type = 'MULTIPLY'; mix.inputs['Factor'].default_value = 1.0
         mix.inputs['A'].default_value = b.inputs['Base Color'].default_value[:]; nt.links.new(br.outputs['Color'], mix.inputs['B'])
+        if b.inputs['Base Color'].links: nt.links.new(b.inputs['Base Color'].links[0].from_socket, mix.inputs['A'])
         nt.links.new(mix.outputs['Result'], b.inputs['Base Color'])
         rm = nt.nodes.new('ShaderNodeMapRange'); rm.inputs['To Min'].default_value = b.inputs['Roughness'].default_value * 0.7; rm.inputs['To Max'].default_value = min(1, b.inputs['Roughness'].default_value * 1.3)
         nt.links.new(nz.outputs['Fac'], rm.inputs['Value']); nt.links.new(rm.outputs['Result'], b.inputs['Roughness'])
@@ -198,5 +289,20 @@ def run(build, name, pal, length, tile, detail):
     if os.path.exists(gt): subprocess.run([gt, 'meshopt', os.path.join(out, name + '.glb'), os.path.join(out, name + '.mo.glb'), '--level', 'medium'], check=False, capture_output=True)
     if '--render' in sys.argv:
         detail_materials(detail)
-        for v in ('3q', 'side'): render(ob, os.path.join(out, '..', 'shots', f'blender-{name}-{v}.png'), length, view=v)
+        for v in ('concept', 'side'): render(ob, os.path.join(out, '..', 'shots', f'blender-{name}-{v}.png'), length, view=v)
     return tris
+
+# -------- placement helpers --------
+def mirror(side):
+    return Matrix.Diagonal((side, 1, 1, 1))
+def T(x, y, z):
+    return Matrix.Translation((x, y, z))
+def R(deg, axis):
+    return Matrix.Rotation(math.radians(deg), 4, axis)
+FIN = Matrix(((0, 0, 1, 0), (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 0, 1)))  # slab local (u,v,w) -> ship (w,u,v): outline in (y, z), thickness along x
+def wingM(side, root, dihedral=0.0, sweep=0.0):
+    """slab outline in (outboard x, y); dihedral in degrees (tip up +)."""
+    return mirror(side) @ T(*root) @ R(-dihedral, 'Y') @ R(sweep, 'Z')
+def finM(side, root, cant=0.0):
+    """slab outline in (y, z up); cant in degrees, tilting the fin outboard."""
+    return mirror(side) @ T(*root) @ R(cant, 'Y') @ FIN
