@@ -140,8 +140,10 @@ def port(s, x, y, z, r, side, depth=None, mat=D, glow=G, seg=12):
     """round side port / turbine disk facing +-X with a glowing core (the battlecruiser's blue flank rings)."""
     d = depth or r * 0.5
     s.cyl((x + side * d / 2, y, z), r, d, mat, 'X', seg)
-    s.cyl((x + side * (d + r * 0.02), y, z), r * 0.72, r * 0.04, glow, 'X', seg)
-    s.cyl((x + side * (d + r * 0.05), y, z), r * 0.3, r * 0.08, mat, 'X', seg)
+    s.cyl((x + side * (d + r * 0.02), y, z), r * 0.82, r * 0.04, glow, 'X', seg)
+    s.cyl((x + side * (d + r * 0.05), y, z), r * 0.62, r * 0.08, mat, 'X', seg)
+    s.cyl((x + side * (d + r * 0.08), y, z), r * 0.18, r * 0.1, glow, 'X', 8)
+    s.cyl((x + side * d * 0.4, y, z), r * 1.12, d * 0.8, 0, 'X', seg)
 
 def hangar(s, x, y, z, w, h, side, axis='X'):
     """lit hangar mouth: dark recess + glow lip, plus a 'bay' empty where fighters launch."""
