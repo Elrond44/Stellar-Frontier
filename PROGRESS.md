@@ -87,3 +87,8 @@ Next / known limitations: Low preset has no dynamic lights (point-light pool dis
 - Game: GLB_IDS = all 15; cache-bust ?v=bt3; far LOD built from the glb (merged vertex-coloured mesh, cached per hull+scheme); carriers' fighter launch bays come from the glb hangar empties; enemy/faction variant parts kept on glb hulls; duplicate bolt-on turrets hidden (enemy, player in-game, shipyard preview); dedicated dark-blue glass material for canopies (fixes salmon canopy).
 - Go-live switch: `export const GLB_DEFAULT = false` in src/glbhulls.js -> set true (and bump ?v=) to ship. `?hulls=proc` still opts out.
 - Tests: v4-v9, smoke, smoke5, compat, blender_viewer, blender_ingame run in both modes via SF_HULLS=proc|glb (tests/_lib.js, smoke.js, compat.js init-script hook).
+- Suite results (Nov 17, both SF_HULLS=proc and SF_HULLS=glb): v5, v6, v7, v8, v9, smoke, smoke5, compat (3/3), blender_viewer (all 15 hulls + variants + 404 fallback), blender_ingame all PASS.
+  - v4: 2 FAILs in both modes ("pirate outpost spawns…", "music goes intense near an outpost"). Pre-existing: identical failure on current main (checked in a main worktree), not caused by the glb work. Probably the v8 rescale vs the test's outpost setup; fix separately.
+  - v6 capital-ram check failed once in a loaded full run, passes when run alone (timing flake under load).
+- Fixed this session: preview.js syntax error (a comment had swallowed the shipyard turret loop) that stopped the game booting on this branch.
+- Go live: set `GLB_DEFAULT = true` in src/glbhulls.js, bump the module ?v= / glb ?v=bt3 cache-busters, merge blender-test into main, push, check https://elrond44.github.io/Stellar-Frontier/ on a phone.
