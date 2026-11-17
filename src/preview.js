@@ -38,7 +38,7 @@ export class Preview {
       for (const h of b.pointDefense || []) { const t = makeTurret('cannon', h.size, 'player'); t.position.set(h.x, h.y, h.z); b.group.add(t); }
       const fl = makeFlames(b.engines, b.engColor); fl.mat.uniforms.uPower.value = 0.8; for (const f of fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.7); f.sprite.scale.setScalar(f.r * 3); }
       b.group.add(fl.group); g.userData.flames = fl; g.userData.nav = b.group;
-      if (id !== 'scout') { const gh = buildHull('scout').group; const gm = new THREE.MeshBasicMaterial({ color: 0x6fd8ff, transparent: true, opacity: 0.35, depthWrite: false });
+      if (id !== 'scout') { const gh = buildHull('scout', { tex: null }).group; const gm = new THREE.MeshBasicMaterial({ color: 0x6fd8ff, transparent: true, opacity: 0.35, depthWrite: false });
         gh.traverse((c) => { if (c.isMesh) c.material = gm; if (c.isSprite) c.visible = false; }); gh.position.set(H.beam * 0.5 + 3.2, 0, -H.len * 0.3); gh.name = 'scaleGhost'; b.group.add(gh); }
     } else {
       const st = buildStation(arg, this.rockMat); g.add(st); anim = st; g.userData.nav = st.userData.main;
