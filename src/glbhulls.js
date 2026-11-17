@@ -35,14 +35,25 @@ function prep(scene) {
     else if (/^engine_/.test(o.name) || /^hard_/.test(o.name)) { o.getWorldPosition(v); const s = (o.userData && o.userData.size) || o.scale.x;
       const p = { x: v.x * GLB_UNIT, y: v.y * GLB_UNIT, z: v.z * GLB_UNIT, r: ((o.userData && o.userData.size) || 1) * GLB_UNIT }; (o.name[0] === 'e' ? engines : hard).push(p); }
   });
-  return { scene, engines, hard, tris: Math.round(tris), meshes: meshes.length };
+  // bake to plain float geometry in game units at identity transforms: the damage shader works in object space
+  // (vDmgP = position), so quantized/scaled meshopt nodes would put its noise at the wrong scale
+  const out = new THREE.Group(); const S = new THREE.Matrix4().makeScale(GLB_UNIT, GLB_UNIT, GLB_UNIT);
+  for (const m of meshes) {
+    const g = new THREE.BufferGeometry();
+    for (const k of ['position', 'normal', 'uv']) { const a = m.geometry.attributes[k]; if (!a) continue; const f = new Float32Array(a.count * a.itemSize);
+      for (let i = 0; i < a.count; i++) for (let j = 0; j < a.itemSize; j++) f[i * a.itemSize + j] = a.getComponent(i, j); g.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); }
+    if (m.geometry.index) g.setIndex(m.geometry.index.clone());
+    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(S, m.matrixWorld)); g.computeBoundingSphere();
+    const mm = new THREE.Mesh(g, m.material); mm.name = m.name; out.add(mm);
+  }
+  return { scene: out, engines, hard, tris: Math.round(tris), meshes: meshes.length };
 }
 const SLOT = { H: 'H', P: 'P', D: 'D', A: 'A', C: 'W', W: 'Wn', G: 'G' };
 // replace the procedural meshes of a built hull group with the glb; returns {engines, hard} in game units or null
 export function applyGlb(id, group, M, engR) {
   if (!GLB.enabled) return null; const c = GLB.cache[id]; if (!c) return null;
   for (let i = group.children.length - 1; i >= 0; i--) group.remove(group.children[i]);
-  const root = c.scene.clone(true); root.scale.multiplyScalar(GLB_UNIT); root.name = 'glb:' + id;
+  const root = c.scene.clone(true); root.name = 'glb:' + id;
   root.traverse((o) => { if (!o.isMesh) return; const n = o.material && o.material.name; const key = SLOT[n] || 'H'; o.material = M[key] || M.H; o.castShadow = o.receiveShadow = false; });
   group.add(root);
   return { engines: c.engines.map((e) => ({ ...e, r: e.r || engR || 0.3 })), hard: [...c.hard].sort((a, b) => b.r - a.r).map((h) => ({ x: h.x, y: h.y, z: h.z, size: h.r * 1.4 })) };

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stellar Frontier · Blender hull test</title>
+<style>
+html,body{margin:0;height:100%;background:#05070c;color:#cfe3ff;font:13px system-ui,sans-serif;overflow:hidden}
+canvas{display:block;width:100vw;height:100vh}
+#ui{position:fixed;left:0;right:0;top:0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:8px 12px;background:linear-gradient(#05070cdd,#05070c00)}
+#ui select,#ui input,#ui button{background:#101827;color:#cfe3ff;border:1px solid #2a3b57;border-radius:6px;padding:4px 6px}
+.lab{position:fixed;bottom:14px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;font-size:12px;opacity:.85}
+#l0{left:12px}#l1{left:calc(50% + 12px)}#st{position:fixed;right:12px;bottom:14px;font-size:11px;opacity:.7;text-align:right}
+#div{position:fixed;left:50%;top:0;bottom:0;width:1px;background:#2a3b57}
+</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+</head><body>
+<canvas id="c"></canvas><div id="div"></div>
+<div id="ui">
+ <b>Blender hull test</b>
+ <label>Hull <select id="hull"><option>scout</option><option>frigate</option><option>dreadnought</option></select></label>
+ <label>Paint <select id="paint"></select></label>
+ <label>View <select id="view"><option>3q</option><option>side</option><option>top</option><option>front</option><option>rear</option></select></label>
+ <label>Damage <input id="dmg" type="range" min="0" max="1" step="0.05" value="0"></label>
+ <label><input id="spin" type="checkbox"> spin</label>
+ <label><input id="flames" type="checkbox" checked> flames</label>
+</div>
+<div class="lab" id="l0">Procedural (live game, v9)</div><div class="lab" id="l1">Blender glb (test)</div><div id="st">loading…</div>
+<script type="module">
+import * as THREE from 'three';
+import { buildHull, schemeIds, HULLS } from './src/hulls.js?v=9';
+import { GLB, preloadGlbHulls } from './src/glbhulls.js?v=9';
+import { makeFlames } from './src/models.js?v=9';
+import { ensureDamage, DMG_TIME } from './src/vfx.js?v=9';
+const P = new URLSearchParams(location.search);
+const cv = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05; renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setScissorTest(true);
+function makeScene() { // same look as the game: gradient-nebula PMREM env + sun key + rim
+  const s = new THREE.Scene(); s.background = new THREE.Color(0x05070c);
+  const envScene = new THREE.Scene();
+  const em = new THREE.ShaderMaterial({ side: THREE.BackSide, vertexShader: 'varying vec3 vP; void main(){ vP=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+    fragmentShader: 'varying vec3 vP; void main(){ float t=vP.y*0.5+0.5; vec3 c=mix(vec3(0.05,0.03,0.08),vec3(0.35,0.5,0.8),t); c+=vec3(1.4,0.9,0.6)*pow(max(0.0,dot(vP,normalize(vec3(-0.5,0.8,0.4)))),12.0); c+=vec3(0.2,0.5,1.0)*pow(max(0.0,dot(vP,normalize(vec3(0.7,0.2,-0.7)))),6.0)*0.6; gl_FragColor=vec4(c,1.0);}' });
+  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), em));
+  const pm = new THREE.PMREMGenerator(renderer); s.environment = pm.fromScene(envScene, 0.02).texture; s.environmentIntensity = 0.8; pm.dispose();
+  const key = new THREE.DirectionalLight(0xfff1dc, 2.6); key.position.set(-5, 8, 4); s.add(key);
+  const rim = new THREE.DirectionalLight(0x6fa6ff, 1.2); rim.position.set(6, 2, -7); s.add(rim);
+  s.add(new THREE.AmbientLight(0x31405a, 0.6)); return s;
+}
+const L = [{ scene: makeScene() }, { scene: makeScene() }];
+const cam = new THREE.PerspectiveCamera(32, 1, 0.05, 5000);
+const paintSel = document.getElementById('paint');
+const paints = ['(hull default)', ...schemeIds()]; for (const p of paints) { const o = document.createElement('option'); o.textContent = p; paintSel.appendChild(o); }
+const $ = (id) => document.getElementById(id);
+for (const k of ['hull', 'paint', 'view', 'dmg']) if (P.get(k)) $(k).value = P.get(k);
+if (P.get('spin') === '1') $('spin').checked = true; if (P.get('flames') === '0') $('flames').checked = false;
+GLB.enabled = true; await preloadGlbHulls();
+const st = $('st');
+function build() {
+  const id = $('hull').value, paint = $('paint').value, opts = paint.startsWith('(') ? {} : { scheme: paint };
+  for (let i = 0; i < 2; i++) {
+    const S = L[i]; if (S.obj) S.scene.remove(S.obj);
+    const b = buildHull(id, { ...opts, glb: i === 1 ? undefined : false }); const o = b.group;
+    if ($('flames').checked) { const fl = makeFlames(b.engines, b.engColor); o.add(fl.group); S.fl = fl; } else S.fl = null;
+    S.D = ensureDamage(o); S.obj = o; S.b = b; S.scene.add(o);
+  }
+  const g = L[1].obj.userData.glb, c = GLB.cache[id];
+  st.textContent = (g ? `glb ${id}: ${c.tris} tris, ${c.engines.length} engines, ${c.hard.length} hardpoints` : `glb ${id} FAILED → procedural fallback (${GLB.failed[id] || 'not loaded'})`) + ` · length ${HULLS[id].len} u = ${HULLS[id].len * 5} m`;
+  window.BT.ready = true;
+}
+window.BT = { GLB, L, build, ready: false };
+for (const k of ['hull', 'paint', 'flames']) $(k).onchange = build;
+build();
+const VIEWS = { '3q': [0.85, 0.42, 1.0], side: [1, 0.08, 0.0001], top: [0.001, 1, 0.12], front: [0.35, 0.18, 1], rear: [0.55, 0.25, -1] };
+let t0 = performance.now(), ang = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - t0) / 1000); t0 = now; DMG_TIME.value += dt; if ($('spin').checked) ang += dt * 0.35;
+  const w = innerWidth, h = innerHeight; if (cv.width !== Math.floor(w * renderer.getPixelRatio())) renderer.setSize(w, h, false);
+  const H = HULLS[$('hull').value]; const R = Math.max(H.len, H.beam || 0) * 0.5;
+  const v = new THREE.Vector3(...VIEWS[$('view').value]).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), ang);
+  cam.aspect = (w / 2) / h; const dist = R / Math.sin(THREE.MathUtils.degToRad(cam.fov * 0.5)) * (cam.aspect < 1 ? 1.15 / cam.aspect : 1.05);
+  cam.position.copy(v.multiplyScalar(dist)); cam.lookAt(0, 0, 0); cam.near = dist * 0.01; cam.far = dist * 10; cam.updateProjectionMatrix();
+  const d = +$('dmg').value;
+  for (let i = 0; i < 2; i++) { const S = L[i]; if (S.D) { S.D.U.uDmg.value = d; S.D.U.uFlick.value = d > 0.5 ? (Math.random() < 0.15 ? 0.2 : 0.9) : 1; }
+    if (S.fl) { S.fl.mat.uniforms.uPower.value = 0.8; if (S.fl.mat.uniforms.uTime) S.fl.mat.uniforms.uTime.value = now / 1000; for (const f of S.fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.7); if (f.sprite) f.sprite.scale.setScalar(f.r * 3); } }
+    const x = i * w / 2; renderer.setViewport(x, 0, w / 2, h); renderer.setScissor(x, 0, w / 2, h); renderer.render(S.scene, cam); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>

@@ -64,7 +64,12 @@ Next / known limitations: Low preset has no dynamic lights (point-light pool dis
 - Blender 5.3 as the pip `bpy` module in /workspace/stellar-frontier/blender/.venv (Python 3.13). Builders: tools/blender/*.py (source of truth in /workspace/stellar-frontier/blender/src), exported glbs in models/.
 - Run: `cd /workspace/stellar-frontier/blender && .venv/bin/python src/<ship>.py --render && ./sync.sh`
 - [x] kit.py (loft/box/cyl/nozzle/turret/windows/greebles, material slots H P D A C W G, box-projected UVs, glb export, Cycles render)
-- [x] scout (1.6k tris), frigate (7.0k tris)
-- [ ] dreadnought (<=25k)
-- [ ] GLTFLoader + test toggle (?hulls=glb), slot->game material swap, fallback, viewer blender-test.html
-- [ ] comparison shots (old vs new in engine)
+- [x] scout 1,616 tris (48 KB), frigate 6,984 tris (157 KB), dreadnought 19,616 tris (419 KB) - meshopt+quantized glbs (gltf-transform), plain glbs were 107 KB / 449 KB / 1.28 MB
+- [x] src/glbhulls.js: GLTFLoader + MeshoptDecoder, toggle `?hulls=glb` (sticky in localStorage 'sf-hulls'; `?hulls=proc` turns it off). Default OFF -> live behaviour unchanged.
+  - buildHull keeps HULLS stats/keel hitbox chain/procedural far-LOD; only visible meshes, engine anchors (engine_* empties) and hardpoints (hard_* empties) come from the glb
+  - slot materials swapped for hullMats(scheme) (C->W glass, W->Wn windows, G->G glow) so faction paint + damage shader work; geometry baked to float game units at load (damage noise is object-space)
+  - any load failure / 404 / 15 s timeout -> procedural hull; enemy bolt-on turrets kept (aim/fire origins) but hidden since the glb models turrets
+- [x] blender-test.html viewer: procedural (left) vs glb (right) in the game's renderer/tonemapping/env; hull, paint, view, damage, spin, flames; URL params hull/view/paint/dmg
+- [x] comparison shots: tests/blender_viewer.js -> blender/shots/compare-*.png (also asserts glb loaded, damage clones, 404 fallback, no console errors); tests/blender_ingame.js (?hulls=glb in the real game)
+- [x] v8 + smoke5 pass with toggle off
+- Known gaps: player weapon turrets in the shipyard preview still bolt on over the modelled ones; far LOD (`lo`) is still procedural; only 3 of 15 hulls converted
