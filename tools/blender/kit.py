@@ -20,7 +20,7 @@ def make_materials(pal):
         'P': (hexrgb(pal['plate']), 0.6, 0.42, None, 0),
         'D': (hexrgb(pal['dark']), 0.9, 0.55, None, 0),
         'A': (hexrgb(pal['accent']), 0.4, 0.4, None, 0),
-        'C': ((0.02, 0.05, 0.09), 0.9, 0.06, tuple(v * 0.1 for v in pal['glow']), 1),
+        'C': ((0.03, 0.08, 0.16), 0.9, 0.06, (0.03, 0.09, 0.2), 1),
         'W': ((1, 0.8, 0.5), 0.0, 0.5, pal['win'], 1.1),
         'G': ((1, 1, 1), 0.0, 0.5, pal['glow'], 6),
     }
@@ -146,7 +146,8 @@ class Ship:
         r = self.rng; y = y0 + r.uniform(*gap) * self.L
         while y < y1:
             l = min(r.uniform(*seg) * self.L, y1 - y)
-            if r.random() < fill and l > h: self.quad((x * side, y + l / 2, z), l, h, side, mat)
+            xx = x(y + l / 2) if callable(x) else x
+            if r.random() < fill and l > h and xx > 0: self.quad((xx * side, y + l / 2, z), l, h, side, mat)
             y += l + r.uniform(*gap) * self.L
     def skin(self, secs, y0, y1, n, gap, grow, matf, zclip=None):
         """segmented armour skin over a reference loft: n plates between y0..y1 separated by gaps (reads as deep panel
@@ -232,6 +233,7 @@ def export_glb(path, draco=True):
                               export_draco_texcoord_quantization=12, export_extras=True, export_cameras=False, export_lights=False,
                               export_vertex_color='ACTIVE')
 
+CONCEPT_VIEW = [Vector((0.55, -0.72, 0.5)), 0.78]
 def render(ob, path, length, view='3q', res=(1280, 720), samples=48):
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.device = 'CPU'; sc.cycles.samples = samples
     try: sc.cycles.use_denoising = True
@@ -245,14 +247,14 @@ def render(ob, path, length, view='3q', res=(1280, 720), samples=48):
         o = bpy.data.objects.new(d.name, d); o.location = loc; sc.collection.objects.link(o)
         o.rotation_euler = (Vector((0, 0, 0)) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler(); return o
     k = L * L
-    light('key', (L * 0.8, -L * 0.6, L * 0.9), 15 * k, (1, 0.95, 0.88), L * 0.6)
+    light('key', (L * 0.8, -L * 0.6, L * 0.9), 22 * k, (1, 0.95, 0.88), L * 0.6)
     light('rim', (-L * 0.9, L * 0.7, L * 0.4), 7 * k, (0.45, 0.6, 1.0), L * 0.5)
     light('fill', (-L * 0.4, -L * 1.0, -L * 0.2), 1.5 * k, (0.7, 0.75, 1), L * 0.8)
     cam = bpy.data.cameras.new('cam'); cam.lens = 50; co = bpy.data.objects.new('cam', cam); sc.collection.objects.link(co); sc.camera = co
     bb = [ob.matrix_world @ Vector(c) for c in ob.bound_box]; ctr = sum(bb, Vector()) / 8; rad = max((v - ctr).length for v in bb)
-    d = {'3q': Vector((0.62, -0.55, 0.42)), 'side': Vector((1, 0.0, 0.12)), 'top': Vector((0, 0.001, 1)), 'front': Vector((0.35, -1, 0.3)), 'concept': Vector((0.55, -0.72, 0.5))}[view].normalized()
+    d = {'3q': Vector((0.62, -0.55, 0.42)), 'side': Vector((1, 0.0, 0.12)), 'top': Vector((0, 0.001, 1)), 'front': Vector((0.35, -1, 0.3)), 'concept': CONCEPT_VIEW[0]}[view].normalized()
     fov = 2 * math.atan(36 / 2 / cam.lens) * res[1] / res[0]
-    pos = ctr + d * rad / math.sin(fov / 2) * 0.6
+    pos = ctr + d * rad / math.sin(fov / 2) * (CONCEPT_VIEW[1] if view == 'concept' else 0.6)
     co.location = pos; co.rotation_euler = (ctr - pos).to_track_quat('-Z', 'Y').to_euler()
     cam.clip_end = L * 20; cam.clip_start = L * 0.002
     sc.render.filepath = path; bpy.ops.render.render(write_still=True)
@@ -278,7 +280,9 @@ def detail_materials(scale):
         bump = nt.nodes.new('ShaderNodeBump'); bump.inputs['Strength'].default_value = 0.35; bump.inputs['Distance'].default_value = scale * 0.004
         nt.links.new(br.outputs['Fac'], bump.inputs['Height']); nt.links.new(bump.outputs['Normal'], b.inputs['Normal'])
 
-def run(build, name, pal, length, tile, detail):
+def run(build, name, pal, length, tile, detail, view=None, dist=None):
+    if view: CONCEPT_VIEW[0] = Vector(view)
+    if dist: CONCEPT_VIEW[1] = dist
     import sys, os
     out = os.path.join(os.path.dirname(__file__), '..', 'out')
     reset(); mats = make_materials(pal); s = build(); ob, tris = s.finish(mats, tile=tile)

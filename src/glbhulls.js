@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from '../vendor/addons/libs/meshopt_decoder.module.js';
 
-export const GLB_IDS = ['scout', 'frigate', 'dreadnought'];
+export const GLB_IDS = ['scout', 'interceptor', 'strike', 'corvette', 'gunship', 'frigate', 'destroyer', 'dreadnought'];
 export const GLB_UNIT = 1 / 5; // Blender metres -> game units (1 u = 5 m)
 const P = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
 const q = P.get('hulls');
@@ -21,7 +21,7 @@ export function preloadGlbHulls(ids = GLB_IDS, base = 'models/', timeoutMs = 150
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   const one = (id) => new Promise((res) => {
     const t = setTimeout(() => { GLB.failed[id] = 'timeout'; res(); }, timeoutMs);
-    loader.load(base + id + '.glb?v=bt1', (g) => { clearTimeout(t); try { GLB.cache[id] = prep(g.scene); } catch (e) { GLB.failed[id] = String(e); } res(); },
+    loader.load(base + id + '.glb?v=bt2', (g) => { clearTimeout(t); try { GLB.cache[id] = prep(g.scene); } catch (e) { GLB.failed[id] = String(e); } res(); },
       undefined, (e) => { clearTimeout(t); GLB.failed[id] = String(e && e.message || e); console.warn('glb hull fallback', id, e); res(); });
   });
   GLB.loading = Promise.all(ids.map(one)).then(() => GLB);
@@ -40,8 +40,8 @@ function prep(scene) {
   const out = new THREE.Group(); const S = new THREE.Matrix4().makeScale(GLB_UNIT, GLB_UNIT, GLB_UNIT);
   for (const m of meshes) {
     const g = new THREE.BufferGeometry();
-    for (const k of ['position', 'normal', 'uv']) { const a = m.geometry.attributes[k]; if (!a) continue; const f = new Float32Array(a.count * a.itemSize);
-      for (let i = 0; i < a.count; i++) for (let j = 0; j < a.itemSize; j++) f[i * a.itemSize + j] = a.getComponent(i, j); g.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); }
+    for (const k of ['position', 'normal', 'uv', 'color']) { const a = m.geometry.attributes[k]; if (!a) continue; const n = k === 'color' ? 3 : a.itemSize; const f = new Float32Array(a.count * n);
+      for (let i = 0; i < a.count; i++) for (let j = 0; j < n; j++) f[i * n + j] = a.getComponent(i, j); g.setAttribute(k, new THREE.BufferAttribute(f, n)); }
     if (m.geometry.index) g.setIndex(m.geometry.index.clone());
     g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(S, m.matrixWorld)); g.computeBoundingSphere();
     const mm = new THREE.Mesh(g, m.material); mm.name = m.name; out.add(mm);
@@ -49,12 +49,21 @@ function prep(scene) {
   return { scene: out, engines, hard, tris: Math.round(tris), meshes: meshes.length };
 }
 const SLOT = { H: 'H', P: 'P', D: 'D', A: 'A', C: 'W', W: 'Wn', G: 'G' };
+// glb meshes carry baked AO / panel-tint vertex colours: they get a per-material clone with vertexColors on, a little
+// less metalness and a lift in base colour, so the stacked decks and plate seams read under the game's single sun
+// (the shared procedural materials can't turn vertexColors on: meshes without a colour attribute would go black)
+const VC = new WeakMap();
+function vcMat(m) {
+  if (!m || !m.isMeshStandardMaterial) return m; let c = VC.get(m); if (c) return c;
+  c = m.clone(); c.vertexColors = true; c.metalness = Math.min(c.metalness, 0.62); c.color.multiplyScalar(1.3); c.envMapIntensity = (m.envMapIntensity || 1) * 1.15;
+  c.name = (m.name || '') + '+vc'; VC.set(m, c); return c;
+}
 // replace the procedural meshes of a built hull group with the glb; returns {engines, hard} in game units or null
 export function applyGlb(id, group, M, engR) {
   if (!GLB.enabled) return null; const c = GLB.cache[id]; if (!c) return null;
   for (let i = group.children.length - 1; i >= 0; i--) group.remove(group.children[i]);
   const root = c.scene.clone(true); root.name = 'glb:' + id;
-  root.traverse((o) => { if (!o.isMesh) return; const n = o.material && o.material.name; const key = SLOT[n] || 'H'; o.material = M[key] || M.H; o.castShadow = o.receiveShadow = false; });
+  root.traverse((o) => { if (!o.isMesh) return; const n = o.material && o.material.name; const key = SLOT[n] || 'H'; const base = M[key] || M.H; o.material = o.geometry.attributes.color ? vcMat(base) : base; o.castShadow = o.receiveShadow = false; });
   group.add(root);
   return { engines: c.engines.map((e) => ({ ...e, r: e.r || engR || 0.3 })), hard: [...c.hard].sort((a, b) => b.r - a.r).map((h) => ({ x: h.x, y: h.y, z: h.z, size: h.r * 1.4 })) };
 }

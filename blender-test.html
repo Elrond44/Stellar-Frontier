@@ -15,9 +15,9 @@ canvas{display:block;width:100vw;height:100vh}
 <canvas id="c"></canvas><div id="div"></div>
 <div id="ui">
  <b>Blender hull test</b>
- <label>Hull <select id="hull"><option>scout</option><option>frigate</option><option>dreadnought</option></select></label>
+ <label>Hull <select id="hull"><option>scout</option><option>interceptor</option><option>strike</option><option>corvette</option><option>gunship</option><option>frigate</option><option>destroyer</option><option>dreadnought</option></select></label>
  <label>Paint <select id="paint"></select></label>
- <label>View <select id="view"><option>3q</option><option>side</option><option>top</option><option>front</option><option>rear</option></select></label>
+ <label>View <select id="view"><option>3q</option><option>concept</option><option>side</option><option>top</option><option>front</option><option>rear</option></select></label>
  <label>Damage <input id="dmg" type="range" min="0" max="1" step="0.05" value="0"></label>
  <label><input id="spin" type="checkbox"> spin</label>
  <label><input id="flames" type="checkbox" checked> flames</label>
@@ -69,19 +69,21 @@ function build() {
 window.BT = { GLB, L, build, ready: false };
 for (const k of ['hull', 'paint', 'flames']) $(k).onchange = build;
 build();
+const CV = { scout: [0.55, 0.5, 0.72], interceptor: [0.55, 0.5, 0.72], strike: [0.55, 0.5, 0.72], corvette: [0.55, 0.5, 0.72], gunship: [0.55, 0.5, 0.72], frigate: [0.82, 0.3, 0.5], destroyer: [0.82, 0.3, 0.5], dreadnought: [0.85, 0.24, 0.48] };
+const SOLO = P.get('solo') === '1'; if (SOLO) { for (const id of ['l1', 'st']) document.getElementById(id).style.display = 'none'; document.getElementById('div').style.display = 'none'; document.getElementById('l0').style.display = 'none'; document.getElementById('ui').style.display = 'none'; }
 const VIEWS = { '3q': [0.85, 0.42, 1.0], side: [1, 0.08, 0.0001], top: [0.001, 1, 0.12], front: [0.35, 0.18, 1], rear: [0.55, 0.25, -1] };
 let t0 = performance.now(), ang = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - t0) / 1000); t0 = now; DMG_TIME.value += dt; if ($('spin').checked) ang += dt * 0.35;
   const w = innerWidth, h = innerHeight; if (cv.width !== Math.floor(w * renderer.getPixelRatio())) renderer.setSize(w, h, false);
   const H = HULLS[$('hull').value]; const R = Math.max(H.len, H.beam || 0) * 0.5;
-  const v = new THREE.Vector3(...VIEWS[$('view').value]).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), ang);
-  cam.aspect = (w / 2) / h; const dist = R / Math.sin(THREE.MathUtils.degToRad(cam.fov * 0.5)) * (cam.aspect < 1 ? 1.15 / cam.aspect : 1.05);
+  const v = new THREE.Vector3(...($('view').value === 'concept' ? CV[$('hull').value] : VIEWS[$('view').value])).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), ang);
+  const vw = SOLO ? w : w / 2; cam.aspect = vw / h; const dist = R / Math.sin(THREE.MathUtils.degToRad(cam.fov * 0.5)) * (cam.aspect < 1 ? 1.15 / cam.aspect : 1.05);
   cam.position.copy(v.multiplyScalar(dist)); cam.lookAt(0, 0, 0); cam.near = dist * 0.01; cam.far = dist * 10; cam.updateProjectionMatrix();
   const d = +$('dmg').value;
   for (let i = 0; i < 2; i++) { const S = L[i]; if (S.D) { S.D.U.uDmg.value = d; S.D.U.uFlick.value = d > 0.5 ? (Math.random() < 0.15 ? 0.2 : 0.9) : 1; }
     if (S.fl) { S.fl.mat.uniforms.uPower.value = 0.8; if (S.fl.mat.uniforms.uTime) S.fl.mat.uniforms.uTime.value = now / 1000; for (const f of S.fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.7); if (f.sprite) f.sprite.scale.setScalar(f.r * 3); } }
-    const x = i * w / 2; renderer.setViewport(x, 0, w / 2, h); renderer.setScissor(x, 0, w / 2, h); renderer.render(S.scene, cam); }
+    if (SOLO && i === 0) continue; const x = SOLO ? 0 : i * w / 2; renderer.setViewport(x, 0, vw, h); renderer.setScissor(x, 0, vw, h); renderer.render(S.scene, cam); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

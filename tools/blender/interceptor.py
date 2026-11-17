@@ -33,7 +33,7 @@ def build():
         # chin canards
         wing(s, side, (0.7, -7.0, -0.35), [(0, 0), (1.6, 1.4), (1.7, 2.0), (0, 2.4)], 0.1, D, dihedral=-8)
         s.cyl((side * 0.45, -8.6, -0.4), 0.05, 2.6, D, 'Y', 6)
-        s.strips(-7, 8, hwf(0) + 0.04, -0.45, side, 0.09, seg=(0.03, 0.07), gap=(0.02, 0.05), mat=5)
+        s.strips(-7, 8, lambda y: f.z(y, -0.45) + 0.04, -0.45, side, 0.09, seg=(0.03, 0.07), gap=(0.02, 0.05), mat=5)
     # red ventral fin
     blade(s, 1, (0, 6.0, -0.95), [(0, 0), (4.2, 0), (5.8, -1.9), (4.9, -2.0), (1.4, -0.5)], 0.14, A, cant=0)
     # aft engine block + twin engines
