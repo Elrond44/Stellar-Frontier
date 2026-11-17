@@ -79,3 +79,11 @@ Next / known limitations: Low preset has no dynamic lights (point-light pool dis
 - Tests: tests/blender_viewer.js (8 hulls, damage clones, 404 fallback, solo concept-angle renders), blender_ingame.js, v8, smoke5 -> all pass.
 - Next batches: engineer, cruiser, bomber, intercept carrier, explorer, battlecruiser, fleet carrier (+ procedural far-LOD from the glb, shipyard turret overlap).
 - Known gaps: player weapon turrets in the shipyard preview still bolt on over the modelled ones; far LOD (`lo`) is still procedural; only 3 of 15 hulls converted
+### Blender batch 2 (all 15 hulls, release-ready behind the toggle)
+- New hulls (tris / meshopt glb): engineer 2,414 / 76 KB; bomber 1,748 / 61 KB; explorer 2,568 / 84 KB; intercept carrier 3,584 / 113 KB; cruiser 5,660 / 163 KB; battlecruiser 8,814 / 242 KB; fleet carrier 7,268 / 191 KB.
+- Scout + Interceptor rebuilt as the concept's layered multi-hull fighter (core + canopy spine + two side pontoons, canted blades): 1,356 tris / 50 KB each (v2 kept as tools/blender/*_v2.py).
+- Whole fleet: 15 glbs = 1,795 KB.
+- parts.py: `arc` (rings/hoops), `port` (round glowing side ports), `hangar` (lit hangar mouth + `bay_*` empty).
+- Game: GLB_IDS = all 15; cache-bust ?v=bt3; far LOD built from the glb (merged vertex-coloured mesh, cached per hull+scheme); carriers' fighter launch bays come from the glb hangar empties; enemy/faction variant parts kept on glb hulls; duplicate bolt-on turrets hidden (enemy, player in-game, shipyard preview); dedicated dark-blue glass material for canopies (fixes salmon canopy).
+- Go-live switch: `export const GLB_DEFAULT = false` in src/glbhulls.js -> set true (and bump ?v=) to ship. `?hulls=proc` still opts out.
+- Tests: v4-v9, smoke, smoke5, compat, blender_viewer, blender_ingame run in both modes via SF_HULLS=proc|glb (tests/_lib.js, smoke.js, compat.js init-script hook).
