@@ -59,3 +59,12 @@ Plan:
 - [x] merge to main, push, verify Pages (see git log)
 
 Next / known limitations: Low preset has no dynamic lights (point-light pool disabled on Low, same as v8); dreadnought mid-sequence detonations read small at full-hull zoom; plasma is billboarded sprites (not volumetric); no real-device perf test yet; the 4 soundtrack songs are still outstanding.
+
+## Blender test (branch blender-test, NOT on main)
+- Blender 5.3 as the pip `bpy` module in /workspace/stellar-frontier/blender/.venv (Python 3.13). Builders: tools/blender/*.py (source of truth in /workspace/stellar-frontier/blender/src), exported glbs in models/.
+- Run: `cd /workspace/stellar-frontier/blender && .venv/bin/python src/<ship>.py --render && ./sync.sh`
+- [x] kit.py (loft/box/cyl/nozzle/turret/windows/greebles, material slots H P D A C W G, box-projected UVs, glb export, Cycles render)
+- [x] scout (1.6k tris), frigate (7.0k tris)
+- [ ] dreadnought (<=25k)
+- [ ] GLTFLoader + test toggle (?hulls=glb), slot->game material swap, fallback, viewer blender-test.html
+- [ ] comparison shots (old vs new in engine)
