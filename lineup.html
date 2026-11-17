@@ -24,7 +24,8 @@
 import * as THREE from 'three';
 import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=9';
 import { makeFlames, animateNavLights } from './src/models.js?v=9';
-import { GLB, preloadGlbHulls } from './src/glbhulls.js?v=9';
+import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer } from './src/glbhulls.js?v=9';
+import { skyEnv } from './src/shiplight.js?v=9';
 if (GLB.enabled) { try { await preloadGlbHulls(); } catch (e) { /* procedural fallback */ } }
 const q = new URLSearchParams(location.search); const mode = q.get('mode') || 'lineup';
 const canvas = document.getElementById('c'); const R = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -33,10 +34,11 @@ const scene = new THREE.Scene(); scene.background = new THREE.Color(0x03060d);
 scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x2a1830, 0.75)); const key = new THREE.DirectionalLight(0xffe6c8, 2.6); key.position.set(-30, 60, 40); scene.add(key); const rim = new THREE.DirectionalLight(0x5aa0ff, 1.4); rim.position.set(40, 10, -60); scene.add(rim);
 { const es = new THREE.Scene(); es.add(new THREE.Mesh(new THREE.SphereGeometry(10, 24, 12), new THREE.ShaderMaterial({ side: THREE.BackSide, vertexShader: 'varying vec3 vP; void main(){ vP=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}', fragmentShader: 'varying vec3 vP; void main(){ float t=vP.y*0.5+0.5; vec3 c=mix(vec3(0.05,0.03,0.08),vec3(0.35,0.5,0.8),t); c+=vec3(1.4,0.9,0.6)*pow(max(0.0,dot(vP,normalize(vec3(-0.5,0.8,0.4)))),12.0); gl_FragColor=vec4(c,1.0);}' })));
   const pm = new THREE.PMREMGenerator(R); scene.environment = pm.fromScene(es, 0.02).texture; scene.environmentIntensity = 0.8; }
+if (TEX.enabled) { setTexRenderer(R); try { await preloadTex('full'); } catch (e) { /* untextured fallback */ } scene.environment = skyEnv(R, null, 1.1); scene.environmentIntensity = 1.0; rim.intensity = 2.2; } // blender-tex: registry shows the full textured set
 { const g = new THREE.BufferGeometry(); const n = 2500, p = new Float32Array(n * 3); for (let i = 0; i < n; i++) { p[i * 3] = (Math.random() - 0.5) * 3000; p[i * 3 + 1] = -200 - Math.random() * 300; p[i * 3 + 2] = (Math.random() - 0.5) * 3000; } g.setAttribute('position', new THREE.BufferAttribute(p, 3)); scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9fb8ff, size: 1.6, sizeAttenuation: false }))); }
 const camera = new THREE.PerspectiveCamera(30, 1, 1, 5000); const ships = []; const labels = []; window.READY = false;
 function place(id, scheme, x, z, yaw = Math.PI / 2, tilt = 0) {
-  const b = buildHull(id, { scheme, turrets: 'enemy' }); const g = b.group; g.position.set(x, 0, z); g.rotation.set(tilt, yaw, 0, 'YXZ');
+  const b = buildHull(id, { scheme, turrets: 'enemy', tex: 'full' }); const g = b.group; g.position.set(x, 0, z); g.rotation.set(tilt, yaw, 0, 'YXZ');
   const fl = makeFlames(b.engines, b.engColor); fl.mat.uniforms.uPower.value = 0.8; for (const f of fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.6); f.sprite.scale.setScalar(f.r * 3.2); } g.add(fl.group);
   scene.add(g); ships.push({ g, b, fl }); return b;
 }

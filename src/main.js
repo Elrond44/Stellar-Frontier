@@ -4,7 +4,8 @@ import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
 import { Game } from './game.js?v=9';
-import { GLB, preloadGlbHulls } from './glbhulls.js?v=9';
+import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer, texLevelFor } from './glbhulls.js?v=9';
+import { applyShipLight } from './shiplight.js?v=9';
 import { UI } from './ui.js?v=9';
 import { Audio } from './audio.js?v=9';
 import { makeSky, makeStarLayer, makeDust } from './world.js?v=9';
@@ -37,13 +38,14 @@ const rim = new THREE.DirectionalLight(0x5aa0ff, 1.1); rim.position.set(40, 15, 
 const fill = new THREE.DirectionalLight(0xff8a50, 0.5); fill.position.set(30, -10, 40); scene.add(fill);
 
 // environment map for metallic reflections (one-time PMREM of a gradient nebula sphere)
+let baseEnv = null;
 {
   const envScene = new THREE.Scene();
   const eg = new THREE.SphereGeometry(10, 32, 16);
   const em = new THREE.ShaderMaterial({ side: THREE.BackSide, vertexShader: 'varying vec3 vP; void main(){ vP=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
     fragmentShader: 'varying vec3 vP; void main(){ float t=vP.y*0.5+0.5; vec3 c=mix(vec3(0.05,0.03,0.08),vec3(0.35,0.5,0.8),t); c+=vec3(1.4,0.9,0.6)*pow(max(0.0,dot(vP,normalize(vec3(-0.5,0.8,0.4)))),12.0); c+=vec3(0.2,0.5,1.0)*pow(max(0.0,dot(vP,normalize(vec3(0.7,0.2,-0.7)))),6.0)*0.6; gl_FragColor=vec4(c,1.0);}' });
   envScene.add(new THREE.Mesh(eg, em));
-  const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(envScene, 0.02).texture; scene.environmentIntensity = 0.8; pm.dispose();
+  const pm = new THREE.PMREMGenerator(renderer); scene.environment = baseEnv = pm.fromScene(envScene, 0.02).texture; scene.environmentIntensity = 0.8; pm.dispose();
 }
 // background
 const sky = makeSky(); scene.add(sky);
@@ -59,6 +61,7 @@ const prof = new Profiler(renderer, scene); const adapt = new AdaptiveQuality();
 if (window.SF_FORCE_QUALITY && PRESETS[window.SF_FORCE_QUALITY]) { detected.q = window.SF_FORCE_QUALITY; detected.why += ' (pinned by test harness)'; adapt.off = true; } // automated tests pin AUTO so software rendering stays comparable
 
 const audio = new Audio();
+setTexRenderer(renderer);
 if (GLB.enabled) { try { await preloadGlbHulls(); } catch (e) { console.warn('glb hulls off', e); } } // blender-test toggle (?hulls=glb)
 const game = new Game(scene, camera, audio); game.prof = prof;
 const opts = { canvas, showFps: false, fpsText: () => '', applySettings: null, isPlaying: () => playing, onLoaded: null };
@@ -73,7 +76,11 @@ function setupQuality() {
   const pr = Math.min(dpr, P.pr);
   renderer.setPixelRatio(pr);
   renderer.setSize(innerWidth, innerHeight, false);
-  game.setQuality(q); audio.setLow(q === 'low'); env.setQuality(q); game.field.maxFrag = P.fragments;
+  game.setQuality(q); audio.setLow(q === 'low');
+  applyShipLight({ scene, renderer, key, rim, sky, baseEnv }, q, TEX.enabled); // blender-tex: cinematic hull lighting (Medium/High, tex toggle only)
+  const tl = texLevelFor(q); // blender-tex: High -> full-res textured hulls, Medium -> half-res, Low -> untextured glb
+  if (tl !== TEX.level) { TEX.level = tl; const rebuild = () => { if (TEX.level === tl && game.player && game.s) game.buildPlayerShip(); };
+    if (tl) preloadTex(tl).then(rebuild); else rebuild(); } env.setQuality(q); game.field.maxFrag = P.fragments;
   sky.material.uniforms.uDetail.value = P.sky; dust.visible = P.dust; motes.visible = P.motes;
   if (composer) { composer.renderTarget1.dispose(); composer.renderTarget2.dispose(); if (bloom) bloom.dispose(); }
   composer = null; bloom = null; cine = null;

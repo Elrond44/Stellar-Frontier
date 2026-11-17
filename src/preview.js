@@ -2,6 +2,8 @@
 // Its canvas is moved into whichever menu slot needs it and only renders while visible.
 import * as THREE from 'three';
 import { HULLS, HULL_IDS, buildHull } from './hulls.js?v=9';
+import { TEX, TEX_IDS, preloadTex } from './glbhulls.js?v=9';
+import { skyEnv } from './shiplight.js?v=9';
 import { buildShip, buildStation, makeFlames, makeTurret, animateNavLights, animateStation, makeRockMaterial } from './models.js?v=9';
 
 const KIT = ['laser', 'cannon', 'missile', 'cannon', 'missile', 'pulse'];
@@ -17,7 +19,7 @@ export class Preview {
     this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(32, 2, 0.1, 500);
     this.scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x2a1830, 0.7));
     const k = new THREE.DirectionalLight(0xffe6c8, 2.6); k.position.set(-30, 50, 30); this.scene.add(k);
-    const rim = new THREE.DirectionalLight(0x5aa0ff, 1.6); rim.position.set(40, 10, -50); this.scene.add(rim);
+    const rim = new THREE.DirectionalLight(0x5aa0ff, 1.6); rim.position.set(40, 10, -50); this.scene.add(rim); this.rim = rim;
     const es = new THREE.Scene();
     es.add(new THREE.Mesh(new THREE.SphereGeometry(10, 24, 12), new THREE.ShaderMaterial({ side: THREE.BackSide,
       vertexShader: 'varying vec3 vP; void main(){ vP=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
@@ -30,7 +32,8 @@ export class Preview {
     const key = kind + arg; if (this.cache.has(key)) return this.cache.get(key);
     const g = new THREE.Group(); let anim = null;
     if (kind === 'ship') { // v8: arg = hull index; the hull is shown at true scale next to a ghosted Scout for reference
-      const id = HULL_IDS[arg] || 'scout'; const H = HULLS[id]; const b = buildHull(id); g.add(b.group);
+      const id = HULL_IDS[arg] || 'scout'; const H = HULLS[id]; const b = buildHull(id, { tex: 'full' }); g.add(b.group); // shipyard close-up: full-res textured hull when the tex test is on
+      g.userData.texPending = TEX.enabled && TEX_IDS.includes(id) && !b.group.userData.tex && !TEX.failed[id];
       if (!b.group.userData.glb) b.hardpoints.slice(0, H.slots).forEach((h, i) => { const t = makeTurret(KIT[i % KIT.length], (h.size || 1) * 1.05, 'player'); t.position.set(h.x, h.y, h.z); t.rotation.y = (i % 2 ? 0.4 : -0.4); b.group.add(t); });
       for (const h of b.pointDefense || []) { const t = makeTurret('cannon', h.size, 'player'); t.position.set(h.x, h.y, h.z); b.group.add(t); }
       const fl = makeFlames(b.engines, b.engColor); fl.mat.uniforms.uPower.value = 0.8; for (const f of fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.7); f.sprite.scale.setScalar(f.r * 3); }
@@ -48,6 +51,8 @@ export class Preview {
     if (!container || !this.init()) return false;
     if (this.obj) this.scene.remove(this.obj);
     this.obj = this.model(kind, arg); this.scene.add(this.obj); this.kind = kind;
+    if (this.obj.userData.texPending) { const o = this.obj; o.userData.texPending = false; preloadTex('full').then(() => { this.cache.delete(kind + arg); if (this.active && this.obj === o) this.show(this.container, kind, arg); }); }
+    if (TEX.enabled && !this.cineEnv) { this.cineEnv = skyEnv(this.r, null, 1.1); this.scene.environment = this.cineEnv; this.scene.environmentIntensity = 1.0; this.rim.intensity = 2.2; } // blender-tex lighting
     container.appendChild(this.r.domElement); this.container = container; this.active = true; this.fit(); this.render(0);
     return true;
   }

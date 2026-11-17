@@ -178,8 +178,9 @@ float dmgNoise1(vec3 x){ vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 
 float dmgNoise(vec3 p){ return dmgNoise1(p) * 0.65 + dmgNoise1(p * 2.3 + 3.1) * 0.35; }
 `;
 function patchDamage(mat, U) {
-  mat.userData.dmgU = U;
+  mat.userData.dmgU = U; const pre = mat.userData.prePatchId && globalThis.SF_PRE && globalThis.SF_PRE[mat.userData.prePatchId]; // chained patch (textured glb hull faction tint)
   mat.onBeforeCompile = (sh) => {
+    if (pre) pre(sh);
     const u = mat.userData.dmgU; sh.uniforms.uDmg = u.uDmg; sh.uniforms.uFlick = u.uFlick; sh.uniforms.uDTime = DMG_TIME;
     sh.vertexShader = 'varying vec3 vDmgP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvDmgP = position;');
     sh.fragmentShader = dmgGLSL + sh.fragmentShader
@@ -188,10 +189,10 @@ function patchDamage(mat, U) {
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor *= 1.0 - 0.6 * dmgS;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= uFlick * (1.0 - 0.92 * dmgS);\nif (uDmg > 0.3) { float cr = dmgNoise1(vDmgP * 2.6 + 7.0); float mask = smoothstep(0.58, 0.72, dmgNoise1(vDmgP * 0.8 + 13.0)) * dmgS; float crack = smoothstep(0.022, 0.0, abs(cr - 0.5)) * mask; totalEmissiveRadiance += vec3(3.2, 1.0, 0.25) * crack * (uDmg - 0.2) * 1.3 * (0.7 + 0.3 * sin(uDTime * 9.0 + cr * 30.0)); }');
   };
-  mat.customProgramCacheKey = () => 'sfdmg6';
+  const key = 'sfdmg6' + (pre ? ':tint' : ''); mat.customProgramCacheKey = () => key;
   mat.needsUpdate = true;
 }
-const isHull = (m) => m && m.isMeshStandardMaterial && !m.userData.noDamage && !m.transparent && (!Object.prototype.hasOwnProperty.call(m, 'onBeforeCompile') || !!m.userData.dmgU); // never clobber another shader patch (rocks)
+const isHull = (m) => m && m.isMeshStandardMaterial && !m.userData.noDamage && !m.transparent && (!Object.prototype.hasOwnProperty.call(m, 'onBeforeCompile') || !!m.userData.dmgU || !!m.userData.prePatchId); // never clobber another shader patch (rocks)
 // base pass: every shared hull material gets the (inactive) patch once, so damaged clones reuse the same GPU program
 export function prepareDamage(obj) {
   obj.traverse((o) => { if (!o.isMesh || o.isInstancedMesh) return; const ms = Array.isArray(o.material) ? o.material : [o.material]; for (const m of ms) if (isHull(m) && !m.userData.dmgU) patchDamage(m, STATIC_U); });

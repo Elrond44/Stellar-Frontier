@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from '../vendor/addons/libs/meshopt_decoder.module.js';
+import { KTX2Loader } from '../vendor/addons/loaders/KTX2Loader.js';
 
 export const GLB_IDS = ['scout', 'interceptor', 'strike', 'bomber', 'corvette', 'gunship', 'engineer', 'explorer', 'frigate', 'destroyer', 'icarrier', 'cruiser', 'battlecruiser', 'fleetcarrier', 'dreadnought'];
 // GO-LIVE SWITCH: set to true to make the Blender hulls the default for everyone (?hulls=proc still opts out).
@@ -42,7 +43,7 @@ function prep(scene) {
   const out = new THREE.Group(); const S = new THREE.Matrix4().makeScale(GLB_UNIT, GLB_UNIT, GLB_UNIT);
   for (const m of meshes) {
     const g = new THREE.BufferGeometry();
-    for (const k of ['position', 'normal', 'uv', 'color']) { const a = m.geometry.attributes[k]; if (!a) continue; const n = k === 'color' ? 3 : a.itemSize; const f = new Float32Array(a.count * n);
+    for (const k of ['position', 'normal', 'uv', 'color', 'tangent']) { const a = m.geometry.attributes[k]; if (!a) continue; const n = k === 'color' ? 3 : a.itemSize; // tangent: vec4 (xyz + handedness) const f = new Float32Array(a.count * n);
       for (let i = 0; i < a.count; i++) for (let j = 0; j < n; j++) f[i * n + j] = a.getComponent(i, j); g.setAttribute(k, new THREE.BufferAttribute(f, n)); }
     if (m.geometry.index) g.setIndex(m.geometry.index.clone());
     g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(S, m.matrixWorld)); g.computeBoundingSphere();
@@ -83,12 +84,81 @@ function vcMat(m) {
   c.name = (m.name || '') + '+vc'; VC.set(m, c); return c;
 }
 // replace the procedural meshes of a built hull group with the glb; returns {engines, hard} in game units or null
-export function applyGlb(id, group, M, engR, schemeKey) {
-  if (!GLB.enabled) return null; const c = GLB.cache[id]; if (!c) return null;
+export function applyGlb(id, group, M, engR, schemeKey, tex) {
+  if (!GLB.enabled) return null; const c0 = GLB.cache[id]; const tc = tex && TEX.enabled ? TEX.cache[tex] && TEX.cache[tex][id] : null; const c = tc || c0; if (!c) return null;
   for (let i = group.children.length - 1; i >= 0; i--) if (group.children[i].name !== 'navLights') group.remove(group.children[i]);
-  const root = c.scene.clone(true); root.name = 'glb:' + id;
-  root.traverse((o) => { if (!o.isMesh) return; const n = o.material && o.material.name; const key = SLOT[n] || 'H'; const base = M[key] || M.H; o.material = n === 'C' ? glass() : o.geometry.attributes.color ? vcMat(base) : base; o.castShadow = o.receiveShadow = false; });
+  const root = c.scene.clone(true); root.name = (tc ? 'glbtex:' : 'glb:') + id;
+  if (tc) { const tm = texMat(id, tc, M, tex); root.traverse((o) => { if (o.isMesh) { o.material = tm; o.castShadow = o.receiveShadow = false; } }); group.userData.tex = tex; }
+  else root.traverse((o) => { if (!o.isMesh) return; const n = o.material && o.material.name; const key = SLOT[n] || 'H'; const base = M[key] || M.H; o.material = n === 'C' ? glass() : o.geometry.attributes.color ? vcMat(base) : base; o.castShadow = o.receiveShadow = false; });
   group.add(root);
   return { engines: c.engines.map((e) => ({ ...e, r: e.r || engR || 0.3 })), hard: [...c.hard].sort((a, b) => b.r - a.r).map((h) => ({ x: h.x, y: h.y, z: h.z, size: h.r * 1.4 })),
-    bays: c.bays.map((b) => ({ x: b.x, y: b.y, z: b.z, size: b.r })), lo: makeLo(id, c, M, schemeKey || 'x') };
+    bays: c.bays.map((b) => ({ x: b.x, y: b.y, z: b.z, size: b.r })), lo: c0 ? makeLo(id, c0, M, schemeKey || 'x') : null };
 }
+
+// ---------------------------------------------------------------- cinematic texture test (branch blender-tex)
+// Baked Blender maps (high-poly normal / AO / albedo / ORM / emissive) on the same low-poly hull. Off by default:
+// ?tex=1 (sticky in localStorage 'sf-tex', ?tex=0 off) and only together with ?hulls=glb.
+// Gameplay uses the full set on High, the half-res set on Medium, today's untextured glb on Low; the shipyard preview and
+// the Fleet Registry always ask for the full set. Textures are KTX2 (Basis ETC1S colour/ORM/emissive + UASTC normals,
+// transcoded on the GPU's own compressed format) with a WebP fallback (?texfmt=webp).
+export const TEX_IDS = ['scout', 'dreadnought'];
+export const TEX_DEFAULT = false; // texture go-live switch (still needs GLB on)
+const tq = P.get('tex');
+try { if (tq === '1' || tq === '0') localStorage.setItem('sf-tex', tq); } catch (e) { /* */ }
+let tst = null; try { tst = localStorage.getItem('sf-tex'); } catch (e) { /* */ }
+export const TEX = { enabled: GLB.enabled && (tq ? tq === '1' : tst ? tst === '1' : TEX_DEFAULT), level: null, cache: { full: {}, half: {} }, failed: {}, loading: {}, fmt: P.get('texfmt') === 'webp' ? 'webp' : 'ktx', renderer: null, bytes: {} };
+// Blender palette each texture set was painted in (H, P, A, D): the shader re-tints masked texels by target/ref
+const PAL_REF = { scout: [0x9aa6b4, 0xe4eaf0, 0x2a66dc, 0x343b45], dreadnought: [0x4c525c, 0xa4aab3, 0xa3262c, 0x24282e] };
+let KTX = null;
+export function setTexRenderer(r) { TEX.renderer = r; }
+export function preloadTex(level, ids = TEX_IDS, base = 'models/tex/') {
+  if (!TEX.enabled || !level) return Promise.resolve(TEX);
+  if (TEX.loading[level]) return TEX.loading[level];
+  const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+  let fmt = TEX.fmt;
+  if (fmt === 'ktx') {
+    if (!TEX.renderer) fmt = 'webp';
+    else { KTX ||= new KTX2Loader().setTranscoderPath(new URL('../vendor/addons/libs/basis/', import.meta.url).href).detectSupport(TEX.renderer); loader.setKTX2Loader(KTX); }
+  }
+  const tl = new THREE.TextureLoader(); const suf = level === 'half' ? '-half' : '';
+  const get = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer(); });
+  const one = (id) => {
+    const url = `${base}${id}${suf}.${fmt}.glb?v=tx1`;
+    return Promise.all([get(url).then((buf) => { TEX.bytes[id + suf] = buf.byteLength; return new Promise((res, rej) => loader.parse(buf, base, res, rej)); }),
+      new Promise((res, rej) => tl.load(`${base}${id}${suf}-mask.webp?v=tx1`, res, undefined, rej))])
+      .then(([g, mask]) => {
+        mask.flipY = false; mask.colorSpace = THREE.NoColorSpace; mask.anisotropy = 4;
+        let src = null; g.scene.traverse((o) => { if (o.isMesh && !src) src = o.material; });
+        const c = prep(g.scene); c.src = src; c.mask = mask;
+        for (const t of [src.map, src.normalMap, src.emissiveMap, src.aoMap]) if (t) t.anisotropy = 4;
+        TEX.cache[level][id] = c;
+      })
+      .catch((e) => { TEX.failed[id + suf] = String(e && e.message || e); console.warn('tex hull fallback', id, level, e); });
+  };
+  TEX.loading[level] = Promise.all(ids.map(one)).then(() => TEX);
+  return TEX.loading[level];
+}
+// faction tint: mask RGBA = weights of the H, P, A, D paint slots; masked texels are multiplied by target/ref per
+// channel, so panel tint, grime, seams and wear survive any paint scheme. Shared registry so the damage-shader patch
+// (vfx.js) can chain it: material.clone() keeps userData.prePatchId but not onBeforeCompile.
+const PRE = (globalThis.SF_PRE ||= {});
+const TINT = `vec4 tMk = texture2D(tMask, vMapUv); float tSw = tMk.r + tMk.g + tMk.b + tMk.a;
+if (tSw > 0.02) { vec3 tR = (tMk.r * tRef[0] + tMk.g * tRef[1] + tMk.b * tRef[2] + tMk.a * tRef[3]) / tSw; vec3 tT = (tMk.r * tTgt[0] + tMk.g * tTgt[1] + tMk.b * tTgt[2] + tMk.a * tTgt[3]) / tSw;
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * clamp(tT / max(tR, vec3(0.012)), 0.0, 6.0), clamp(tSw, 0.0, 1.0)); }`;
+const TM = new Map();
+export const TEX_LOOK = { emissive: 2.2, env: 1.35, tint: 1.12 };
+function texMat(id, c, M, level) {
+  const k = id + ':' + (M.sid || 'x') + ':' + level; if (TM.has(k)) return TM.get(k);
+  const s = c.src; const v3 = (cc) => new THREE.Vector3(cc.r, cc.g, cc.b);
+  const ref = (PAL_REF[id] || PAL_REF.scout).map((h) => new THREE.Color(h));
+  const tgt = [M.H, M.P, M.A, M.D].map((m, i) => (m && m.color ? m.color.clone().multiplyScalar(TEX_LOOK.tint) : ref[i].clone()));
+  const m = new THREE.MeshStandardMaterial({ name: 'glbTex', map: s.map, normalMap: s.normalMap, normalScale: s.normalScale ? s.normalScale.clone() : new THREE.Vector2(1, 1),
+    aoMap: s.aoMap, aoMapIntensity: 1, roughnessMap: s.roughnessMap, metalnessMap: s.metalnessMap, roughness: 1, metalness: 1,
+    emissiveMap: s.emissiveMap, emissive: 0xffffff, emissiveIntensity: TEX_LOOK.emissive, envMapIntensity: TEX_LOOK.env });
+  const U = { tMask: { value: c.mask }, tRef: { value: ref.map(v3) }, tTgt: { value: tgt.map(v3) } };
+  const pid = 'tint:' + k;
+  PRE[pid] = (sh) => { Object.assign(sh.uniforms, U); sh.fragmentShader = 'uniform sampler2D tMask; uniform vec3 tRef[4]; uniform vec3 tTgt[4];\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + TINT); };
+  m.userData.prePatchId = pid; m.onBeforeCompile = PRE[pid]; m.customProgramCacheKey = () => 'sftint1';
+  TM.set(k, m); return m;
+}
+export function texLevelFor(q) { return !TEX.enabled ? null : q === 'high' ? 'full' : q === 'medium' ? 'half' : null; }

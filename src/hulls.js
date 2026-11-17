@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { Kit, materials, hullTextures, makeTurret } from './models.js?v=9';
 import { mulberry } from './util.js?v=9';
-import { applyGlb, hideTurret } from './glbhulls.js?v=9';
+import { applyGlb, hideTurret, TEX } from './glbhulls.js?v=9';
 
 export const UNIT_M = 5;
 export const HULL_CLASSES = { small: 'Small Ships', medium: 'Medium Ships', large: 'Large Ships', special: 'Specialized Ships', capital: 'Capital Ships', titan: 'Titan Class' };
@@ -356,7 +356,7 @@ export function buildHull(id, opts = {}) {
   const sc = (p) => ({ ...p, x: p.x * S, y: p.y * S, z: p.z * S, size: (p.size || 1) * S });
   let hard = (o.hard || []).map(sc), pd = (o.pd || []).map(sc); let bays = (o.bays || []).map(sc); let loG = lo;
   // blender-test: swap in the Blender glb (same hitboxes/stats); modelled turrets replace the bolt-on ones
-  const gl = opts.glb === false ? null : applyGlb(id, group, M, k.engines.length ? Math.max(...k.engines.map((e) => e.r)) : 0.3, sid);
+  const gl = opts.glb === false ? null : applyGlb(id, group, M, k.engines.length ? Math.max(...k.engines.map((e) => e.r)) : 0.3, sid, opts.tex === undefined ? TEX.level : opts.tex); // tex: 'full' | 'half' | null (blender-tex)
   if (gl) {
     if (gl.engines.length) k.engines = gl.engines; if (gl.hard.length >= hard.length) hard = gl.hard; pd = []; if (gl.bays.length) bays = gl.bays; if (gl.lo) loG = gl.lo; group.userData.glb = true;
     if (v && opts.variant !== false) { const kv = new Kit(S); kv.ch = k.ch; kv.pal = k.pal; kv.core = []; variantParts(kv, M, v, H); const vg = kv.build(); for (const c of [...vg.children]) { c.name = c.name || 'variant'; group.add(c); } } // faction variant parts on top of the glb
