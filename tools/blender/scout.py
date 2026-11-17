@@ -26,8 +26,8 @@ def build():
         stripe(s, side, (-8, -4, 0, 4, 8.6), hwf, 0.05, 0.55, A, 0.1)
         stripe(s, side, (-6, -2, 3, 8.6), hwf, -0.45, -0.3, P, 0.06)
         # twin dorsal blades canted outboard, swept hard back
-        blade(s, side, (0.6, -1.5, 1.05), [(1.2, 0), (4.6, 0), (7.4, 2.9), (6.6, 3.05), (2.8, 0.6)], 0.16, P, cant=52)
-        blade(s, side, (0.6, -1.5, 1.05), [(5.0, 0.3), (7.3, 2.8), (6.7, 2.9), (4.5, 0.7)], 0.2, A, cant=52, inset=0.1)
+        blade(s, side, (0.6, -1.5, 1.05), [(1.2, 0), (4.6, 0), (7.4, 2.9), (6.6, 3.05), (2.8, 0.6)], 0.16, P, cant=30)
+        blade(s, side, (0.6, -1.5, 1.05), [(5.0, 0.3), (7.3, 2.8), (6.7, 2.9), (4.5, 0.7)], 0.2, A, cant=30, inset=0.1)
         # forward canards (blue)
         wing(s, side, (0.9, -5.6, 0.05), [(0, 0), (2.2, 1.3), (2.4, 2.0), (0, 2.4)], 0.14, A, dihedral=6)
         # main swept wing: silver with a blue leading band

@@ -23,8 +23,8 @@ def build():
         stripe(s, side, (-9, -5, 0, 5, 10.5), hwf, -0.2, 0.25, D, 0.08)   # black flank band
         stripe(s, side, (-7, -2, 4, 10), hwf, 0.35, 0.5, P, 0.06)         # silver pinstripe
         # very long dorsal blade: dark core, red leading blade
-        blade(s, side, (0.5, -3.0, 1.0), [(1.5, 0), (6.0, 0), (11.0, 2.4), (10.2, 2.6), (3.6, 0.5)], 0.16, D, cant=50)
-        blade(s, side, (0.5, -3.0, 1.0), [(6.2, 0.25), (10.8, 2.3), (10.2, 2.45), (5.5, 0.6)], 0.2, A, cant=50, inset=0.08)
+        blade(s, side, (0.5, -3.0, 1.0), [(1.5, 0), (6.0, 0), (11.0, 2.4), (10.2, 2.6), (3.6, 0.5)], 0.16, D, cant=32)
+        blade(s, side, (0.5, -3.0, 1.0), [(6.2, 0.25), (10.8, 2.3), (10.2, 2.45), (5.5, 0.6)], 0.2, A, cant=32, inset=0.08)
         # short swept rear wing (red top, black underside plate) + drooping tip blade
         wing(s, side, (1.2, 3.0, -0.25), [(0, 0), (3.8, 3.4), (4.0, 5.2), (0, 6.6)], 0.24, A, dihedral=-6)
         wing(s, side, (1.2, 3.0, -0.42), [(0.2, 1.0), (3.6, 3.9), (3.7, 5.0), (0.2, 6.2)], 0.1, D, dihedral=-6, inset=0.05)
