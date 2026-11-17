@@ -238,6 +238,8 @@ def render(ob, path, length, view='3q', res=(1280, 720), samples=48):
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.device = 'CPU'; sc.cycles.samples = samples
     try: sc.cycles.use_denoising = True
     except Exception: pass
+    import os as _os
+    if _os.environ.get('BT_THREADS'): sc.render.threads_mode = 'FIXED'; sc.render.threads = int(_os.environ['BT_THREADS'])
     sc.render.resolution_x, sc.render.resolution_y = res; sc.render.film_transparent = False
     sc.view_settings.view_transform = 'AgX'
     w = bpy.data.worlds.new('w'); sc.world = w; w.use_nodes = True; bg = w.node_tree.nodes['Background']; bg.inputs[0].default_value = (0.004, 0.007, 0.016, 1); bg.inputs[1].default_value = 1

@@ -1,55 +1,52 @@
-# Scout — 20 m recon fighter. Concept: slim rounded silver fuselage with blue panelling, long blue canopy, twin swept
-# dorsal blades canted outboard, short forward canards, rear swept wings ending in down-angled blue tip blades,
-# twin engines with blue glow.
+# Scout, layered variant (try-out): narrow core fuselage + raised canopy spine module + two long parallel side
+# pontoons with pointed bows (the concept's stacked, multi-hull fighter look), blue-topped pontoons, canted blades,
+# short swept wings with down-angled blue tips, twin engines.
 import sys, os
 import bpy  # noqa: F401
 sys.path.insert(0, os.path.dirname(__file__))
 from kit import Ship
-from parts import fuselage, blade, wing, nacelle, stripe, H, P, D, A, C, W, G
+from parts import fuselage, blade, wing, stripe, H, P, D, A, C, W, G
 
-PAL = dict(hull=0x9aa6b4, plate=0xe4eaf0, dark=0x343b45, accent=0x2a66dc, glow=(0.4, 1.9, 3.6), win=(0.5, 1.8, 3.2))
+PAL = dict(hull=0x9aa6b4, plate=0xe4eaf0, dark=0x343b45, accent=0x2a66dc, glow=(0.4, 1.9, 3.6), win=(0.5, 1.9, 3.6))
 
-def build():
-    s = Ship('hull_scout', 20.0, seed=11)
-    fus = [(-10, 0.2, 0.1, -0.2, 0.05, 0), (-8.6, 1.2, 0.8, -0.55, 0.4, 0.3), (-5.5, 2.6, 1.8, -1.0, 0.95, 0.7), (-2, 3.2, 2.3, -1.15, 1.2, 0.85),
-           (2, 3.4, 2.5, -1.2, 1.25, 0.9), (6.5, 3.2, 2.4, -1.1, 1.15, 0.85), (9.4, 2.7, 2.0, -0.9, 0.95, 0.7)]
-    _f = fuselage(s, fus, H)
-    hwf = lambda y: _f(y)[0] / 2
-    # silver dorsal deck + dark belly keel
-    s.loft([(-7.5, 0.5, 0.3, 0.5, 0.62, 0.1), (-3, 1.5, 1.1, 0.95, 1.16, 0.25), (6, 1.7, 1.2, 0.95, 1.18, 0.25), (9.2, 1.3, 1.0, 0.75, 0.95, 0.2)], P)
-    s.loft([(-7, 0.4, 0.7, -0.75, -0.45, 0.1), (5, 1.4, 2.0, -1.15, -0.8, 0.25), (9.2, 1.2, 1.7, -0.95, -0.65, 0.2)], D)
-    # long canopy
-    s.loft([(-6.8, 0.2, 0.1, 0.62, 0.7, 0), (-5, 1.1, 0.7, 0.75, 1.3, 0.3), (-2.2, 1.35, 0.85, 0.95, 1.55, 0.35), (0.2, 1.1, 0.6, 1.05, 1.35, 0.25), (1.2, 0.8, 0.4, 1.1, 1.2, 0.15)], C)
-    s.box((0, -1.6, 1.45), (1.3, 0.25, 0.25), D, ch=0.08)  # canopy frame bar
-    # blue flank panels + white pinstripe
+def build(name='hull_scout', L=20.0, pal_acc=A, sc=1.0):
+    s = Ship(name, L, seed=13); k = L / 20.0
+    q = lambda v: v * k
+    core = [(-10, 0.2, 0.1, -0.3, 0.1, 0), (-8, 1.2, 0.8, -0.7, 0.5, 0.4), (-4, 2.1, 1.5, -0.95, 0.9, 0.6), (3, 2.3, 1.7, -1.0, 1.0, 0.65), (8.5, 2.0, 1.5, -0.85, 0.85, 0.55), (9.6, 1.7, 1.2, -0.7, 0.7, 0.45)]
+    core = [(q(a), q(b), q(c), q(d), q(e), q(f)) for a, b, c, d, e, f in core]
+    f = fuselage(s, core, H)
+    # raised spine module carrying the long canopy
+    s.loft([(q(-7.5), q(0.4), q(0.2), q(0.6), q(0.8), q(0.1)), (q(-5), q(1.5), q(1.1), q(0.8), q(1.55), q(0.4)), (q(4), q(1.7), q(1.2), q(0.9), q(1.7), q(0.45)), (q(8.5), q(1.2), q(0.8), q(0.8), q(1.3), q(0.3))], P)
+    s.loft([(q(-6.8), q(0.3), q(0.1), q(1.2), q(1.3), 0), (q(-4.6), q(1.1), q(0.6), q(1.4), q(2.0), q(0.3)), (q(-1.5), q(1.3), q(0.7), q(1.6), q(2.25), q(0.35)), (q(1.5), q(1.0), q(0.5), q(1.7), q(2.0), q(0.25)), (q(2.6), q(0.6), q(0.3), q(1.7), q(1.8), q(0.1))], C)
+    s.box((0, q(4.5), q(1.9)), (q(1.2), q(5), q(0.25)), D, ch=q(0.08))
     for side in (1, -1):
-        stripe(s, side, (-8, -4, 0, 4, 8.6), hwf, 0.05, 0.55, A, 0.1)
-        stripe(s, side, (-6, -2, 3, 8.6), hwf, -0.45, -0.3, P, 0.06)
-        # twin dorsal blades canted outboard, swept hard back
-        blade(s, side, (0.6, -1.5, 1.05), [(1.2, 0), (4.6, 0), (7.4, 2.9), (6.6, 3.05), (2.8, 0.6)], 0.16, P, cant=30)
-        blade(s, side, (0.6, -1.5, 1.05), [(5.0, 0.3), (7.3, 2.8), (6.7, 2.9), (4.5, 0.7)], 0.2, A, cant=30, inset=0.1)
-        # forward canards (blue)
-        wing(s, side, (0.9, -5.6, 0.05), [(0, 0), (2.2, 1.3), (2.4, 2.0), (0, 2.4)], 0.14, A, dihedral=6)
-        # main swept wing: silver with a blue leading band
-        wing(s, side, (1.3, 0.8, -0.2), [(0, 0), (4.6, 2.6), (4.9, 4.6), (0, 7.4)], 0.26, P, dihedral=-4)
-        wing(s, side, (1.3, 0.8, -0.05), [(0.4, 0.3), (4.5, 2.6), (4.6, 3.3), (0.4, 1.5)], 0.1, A, dihedral=-4, inset=0.05)
-        # down-angled blue tip blades
-        blade(s, side, (6.0, 3.6, -0.45), [(-1.2, 0.3), (2.2, 0.1), (3.2, -1.7), (2.5, -1.75), (0.2, -0.6)], 0.16, A, cant=-30)
-        # blue side cheek pods (intakes along the flanks)
-        s.loft([(-4.5, 0.2, 0.2, -0.5, 0.0, 0.05, side * 1.55), (-3, 0.8, 0.7, -0.8, 0.3, 0.25, side * 1.75), (3.5, 0.9, 0.8, -0.85, 0.35, 0.3, side * 1.85), (6, 0.6, 0.5, -0.6, 0.2, 0.2, side * 1.7)], A)
-        # wing-root intake + gun
-        s.quad((side * 1.75, -3.02, -0.25), 0.55, 0.6, side, D, axis='Y')
-        s.cyl((side * 0.5, -7.4, -0.38), 0.05, 2.2, D, 'Y', 6)
-        s.box((side * 1.2, 7.9, 0.2), (0.5, 1.6, 0.4), D, ch=0.1)
-    # twin main engines in a dark aft housing
-    s.box((0, 8.9, 0.05), (2.6, 1.4, 1.35), D, ch=0.3)
-    for x in (-0.68, 0.68):
-        s.nozzle((x, 10.0, 0.05), 0.5, 0.9, seg=12); s.empty('engine', (x, 10.5, 0.05), 0.5)
-    s.greebles(3.5, 8.2, -0.5, 0.5, 1.15, 8, 0.3, mats=(0, 2))
-    s.strips(-6, 7, 1.62, 0.2, 1, 0.08, seg=(0.04, 0.09), gap=(0.02, 0.05), mat=6); s.strips(-6, 7, 1.62, 0.2, -1, 0.08, seg=(0.04, 0.09), gap=(0.02, 0.05), mat=6)
-    s.empty('hard', (0, -7.5, -0.4), 0.4)
+        # long side pontoon: pointed bow forward, runs to the stern, blue top, silver flank, dark keel
+        x = side * q(2.15)
+        pont = [(q(-8.6), q(0.1), q(0.05), q(-0.4), q(-0.2), 0, x * 0.7), (q(-6.5), q(0.9), q(0.6), q(-0.75), q(0.35), q(0.3), x * 0.92), (q(-2), q(1.25), q(0.95), q(-0.9), q(0.6), q(0.4), x),
+                (q(6), q(1.3), q(1.0), q(-0.9), q(0.6), q(0.4), x), (q(9.2), q(1.1), q(0.8), q(-0.75), q(0.5), q(0.35), x)]
+        s.loft(pont, P)
+        s.loft([(a, b * 0.86, c * 0.86, e - q(0.05), e + q(0.12), q(0.08), cx) for a, b, c, d, e, _, cx in pont[1:]], pal_acc)
+        s.loft([(a, b * 0.7, c * 0.7, d - q(0.12), d + q(0.1), q(0.05), cx) for a, b, c, d, e, _, cx in pont[1:]], D)
+        s.nozzle((x, q(9.6), q(-0.15)), q(0.42), q(0.7), seg=10); s.empty('engine', (x, q(10.0), q(-0.15)), q(0.42))
+        s.strips(q(-5), q(8), abs(x) + q(0.66), q(-0.15), side, q(0.07), seg=(0.03, 0.07), gap=(0.02, 0.04), mat=G, fill=0.75)
+        # canted dorsal blades rising from the pontoon tops
+        blade(s, side, (abs(x) * 0.6, q(-1.0), q(0.6)), [(q(1.5), 0), (q(4.6), 0), (q(7.4), q(2.6)), (q(6.7), q(2.75)), (q(3.0), q(0.5))], q(0.15), P, cant=30)
+        blade(s, side, (abs(x) * 0.6, q(-1.0), q(0.6)), [(q(5.0), q(0.3)), (q(7.2), q(2.5)), (q(6.7), q(2.6)), (q(4.6), q(0.7))], q(0.19), pal_acc, cant=30, inset=0.1)
+        # short swept wing off the pontoon with a down-angled blue tip blade
+        wing(s, side, (abs(x) + q(0.5), q(2.0), q(-0.3)), [(0, 0), (q(3.4), q(2.6)), (q(3.6), q(4.0)), (0, q(5.6))], q(0.22), H, dihedral=-4)
+        wing(s, side, (abs(x) + q(0.5), q(2.0), q(-0.17)), [(q(0.3), q(0.4)), (q(3.2), q(2.6)), (q(3.3), q(3.2)), (q(0.3), q(1.6))], q(0.08), pal_acc, dihedral=-4, inset=0.05)
+        blade(s, side, (abs(x) + q(3.8), q(4.4), q(-0.55)), [(q(-1.2), q(0.3)), (q(1.8), q(0.1)), (q(2.8), q(-1.6)), (q(2.2), q(-1.65)), (q(0.1), q(-0.55))], q(0.15), pal_acc, cant=-30)
+        # forward canard
+        wing(s, side, (abs(x) + q(0.4), q(-5.0), q(0.0)), [(0, 0), (q(1.5), q(1.0)), (q(1.6), q(1.6)), (0, q(1.9))], q(0.12), pal_acc, dihedral=8)
+        s.cyl((side * q(0.5), q(-8.6), q(-0.5)), q(0.05), q(2.0), D, 'Y', 6)
+    s.box((0, q(9.2), 0), (q(2.2), q(1.2), q(1.5)), D, ch=q(0.3))
+    for x in (-0.55, 0.55):
+        s.nozzle((q(x), q(10.1), 0), q(0.45), q(0.8), seg=12); s.empty('engine', (q(x), q(10.6), 0), q(0.45))
+    s.greebles(q(3), q(8), q(-0.5), q(0.5), q(1.7), 6, q(0.28), mats=(0, 2))
+    s.empty('hard', (0, q(-8.6), q(-0.5)), q(0.4))
     return s
 
 if __name__ == '__main__':
     from kit import run
-    run(build, 'scout', PAL, 20.0, 5.0, 2.5)
+    name = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else 'scout'
+    run(build, name, PAL, 20.0, 5.0, 2.5)

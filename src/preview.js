@@ -31,7 +31,7 @@ export class Preview {
     const g = new THREE.Group(); let anim = null;
     if (kind === 'ship') { // v8: arg = hull index; the hull is shown at true scale next to a ghosted Scout for reference
       const id = HULL_IDS[arg] || 'scout'; const H = HULLS[id]; const b = buildHull(id); g.add(b.group);
-      if (!b.group.userData.glb) b.hardpoints.slice(0, H.slots).forEach((h, i) => { // glb hulls show their modelled turrets const t = makeTurret(KIT[i % KIT.length], (h.size || 1) * 1.05, 'player'); t.position.set(h.x, h.y, h.z); t.rotation.y = (i % 2 ? 0.4 : -0.4); b.group.add(t); });
+      if (!b.group.userData.glb) b.hardpoints.slice(0, H.slots).forEach((h, i) => { const t = makeTurret(KIT[i % KIT.length], (h.size || 1) * 1.05, 'player'); t.position.set(h.x, h.y, h.z); t.rotation.y = (i % 2 ? 0.4 : -0.4); b.group.add(t); });
       for (const h of b.pointDefense || []) { const t = makeTurret('cannon', h.size, 'player'); t.position.set(h.x, h.y, h.z); b.group.add(t); }
       const fl = makeFlames(b.engines, b.engColor); fl.mat.uniforms.uPower.value = 0.8; for (const f of fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.7); f.sprite.scale.setScalar(f.r * 3); }
       b.group.add(fl.group); g.userData.flames = fl; g.userData.nav = b.group;
