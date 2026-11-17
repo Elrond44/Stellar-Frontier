@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { Kit, materials, hullTextures, makeTurret } from './models.js?v=9';
 import { mulberry } from './util.js?v=9';
-import { applyGlb } from './glbhulls.js?v=9';
+import { applyGlb, hideTurret } from './glbhulls.js?v=9';
 
 export const UNIT_M = 5;
 export const HULL_CLASSES = { small: 'Small Ships', medium: 'Medium Ships', large: 'Large Ships', special: 'Specialized Ships', capital: 'Capital Ships', titan: 'Titan Class' };
@@ -354,17 +354,20 @@ export function buildHull(id, opts = {}) {
   const o = B[id](k, M, rng); const v = M.scheme.variant; if (v && opts.variant !== false) variantParts(k, M, v, H);
   const lo = k.buildLo(); const group = k.build(); group.name = 'hull:' + id;
   const sc = (p) => ({ ...p, x: p.x * S, y: p.y * S, z: p.z * S, size: (p.size || 1) * S });
-  let hard = (o.hard || []).map(sc), pd = (o.pd || []).map(sc); const bays = (o.bays || []).map(sc);
+  let hard = (o.hard || []).map(sc), pd = (o.pd || []).map(sc); let bays = (o.bays || []).map(sc); let loG = lo;
   // blender-test: swap in the Blender glb (same hitboxes/stats); modelled turrets replace the bolt-on ones
-  const gl = opts.glb === false ? null : applyGlb(id, group, M, k.engines.length ? Math.max(...k.engines.map((e) => e.r)) : 0.3);
-  if (gl) { if (gl.engines.length) k.engines = gl.engines; if (gl.hard.length >= hard.length) hard = gl.hard; pd = []; group.userData.glb = true; }
+  const gl = opts.glb === false ? null : applyGlb(id, group, M, k.engines.length ? Math.max(...k.engines.map((e) => e.r)) : 0.3, sid);
+  if (gl) {
+    if (gl.engines.length) k.engines = gl.engines; if (gl.hard.length >= hard.length) hard = gl.hard; pd = []; if (gl.bays.length) bays = gl.bays; if (gl.lo) loG = gl.lo; group.userData.glb = true;
+    if (v && opts.variant !== false) { const kv = new Kit(S); kv.ch = k.ch; kv.pal = k.pal; kv.core = []; variantParts(kv, M, v, H); const vg = kv.build(); for (const c of [...vg.children]) { c.name = c.name || 'variant'; group.add(c); } } // faction variant parts on top of the glb
+  }
   if (opts.turrets === 'enemy') {
     const pal = { D: M.D, A: M.A, H: M.H }; const n = Math.max(1, Math.min(hard.length, H.slots + 2));
-    for (let i = 0; i < n; i++) { const h = hard[i]; const tu = makeTurret(H.rank >= 4 ? 'cannon' : i % 2 ? 'laser' : 'cannon', h.size, pal); tu.position.set(h.x, h.y, h.z); tu.name = 'eturret'; if (gl) tu.visible = false; group.add(tu); } // glb hulls carry modelled turrets
+    for (let i = 0; i < n; i++) { const h = hard[i]; const tu = makeTurret(H.rank >= 4 ? 'cannon' : i % 2 ? 'laser' : 'cannon', h.size, pal); tu.position.set(h.x, h.y, h.z); tu.name = 'eturret'; if (gl) hideTurret(tu); group.add(tu); } // glb hulls carry modelled turrets
     for (const h of pd) { const tu = makeTurret('cannon', h.size, pal); tu.position.set(h.x, h.y, h.z); group.add(tu); }
   }
   const segs = hullSegs(H);
-  return { group, lo, hardpoints: opts.turrets === 'enemy' ? hard.slice(0, Math.max(1, Math.min(hard.length, H.slots + 2))) : hard, pointDefense: pd, bays, engines: k.engines, length: H.len, radius: H.radius, bound: H.bound, beam: H.beam, segs, mass: H.mass, hull: id, scheme: sid, engColor: M.eng };
+  return { group, lo: loG, hardpoints: opts.turrets === 'enemy' ? hard.slice(0, Math.max(1, Math.min(hard.length, H.slots + 2))) : hard, pointDefense: pd, bays, engines: k.engines, length: H.len, radius: H.radius, bound: H.bound, beam: H.beam, segs, mass: H.mass, hull: id, scheme: sid, engColor: M.eng };
 }
 // hitbox: a chain of circles along the keel for long hulls (the bounding circle would be far too generous on a 720 m titan)
 export function hullSegs(H) {

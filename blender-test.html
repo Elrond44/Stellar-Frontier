@@ -15,7 +15,7 @@ canvas{display:block;width:100vw;height:100vh}
 <canvas id="c"></canvas><div id="div"></div>
 <div id="ui">
  <b>Blender hull test</b>
- <label>Hull <select id="hull"><option>scout</option><option>interceptor</option><option>strike</option><option>corvette</option><option>gunship</option><option>frigate</option><option>destroyer</option><option>dreadnought</option></select></label>
+ <label>Hull <select id="hull"><option>scout</option><option>interceptor</option><option>strike</option><option>bomber</option><option>corvette</option><option>gunship</option><option>engineer</option><option>explorer</option><option>frigate</option><option>destroyer</option><option>icarrier</option><option>cruiser</option><option>battlecruiser</option><option>fleetcarrier</option><option>dreadnought</option></select></label>
  <label>Paint <select id="paint"></select></label>
  <label>View <select id="view"><option>3q</option><option>concept</option><option>side</option><option>top</option><option>front</option><option>rear</option></select></label>
  <label>Damage <input id="dmg" type="range" min="0" max="1" step="0.05" value="0"></label>
@@ -58,7 +58,7 @@ function build() {
   const id = $('hull').value, paint = $('paint').value, opts = paint.startsWith('(') ? {} : { scheme: paint };
   for (let i = 0; i < 2; i++) {
     const S = L[i]; if (S.obj) S.scene.remove(S.obj);
-    const b = buildHull(id, { ...opts, glb: i === 1 ? undefined : false }); const o = b.group;
+    const b = buildHull(id, { ...opts, glb: i === 1 ? undefined : false, turrets: P.get('enemy') === '1' ? 'enemy' : undefined }); const o = b.group;
     if ($('flames').checked) { const fl = makeFlames(b.engines, b.engColor); o.add(fl.group); S.fl = fl; } else S.fl = null;
     S.D = ensureDamage(o); S.obj = o; S.b = b; S.scene.add(o);
   }
@@ -69,7 +69,7 @@ function build() {
 window.BT = { GLB, L, build, ready: false };
 for (const k of ['hull', 'paint', 'flames']) $(k).onchange = build;
 build();
-const CV = { scout: [0.55, 0.5, 0.72], interceptor: [0.55, 0.5, 0.72], strike: [0.55, 0.5, 0.72], corvette: [0.55, 0.5, 0.72], gunship: [0.55, 0.5, 0.72], frigate: [0.82, 0.3, 0.5], destroyer: [0.82, 0.3, 0.5], dreadnought: [0.85, 0.24, 0.48] };
+const CV = { scout: [0.55, 0.5, 0.72], interceptor: [0.55, 0.5, 0.72], strike: [0.55, 0.5, 0.72], bomber: [0.55, 0.5, 0.72], corvette: [0.55, 0.5, 0.72], gunship: [0.55, 0.5, 0.72], engineer: [0.55, 0.5, 0.72], explorer: [0.55, 0.5, 0.72], frigate: [0.82, 0.3, 0.5], destroyer: [0.82, 0.3, 0.5], icarrier: [0.72, 0.38, 0.6], cruiser: [0.8, 0.3, 0.52], battlecruiser: [0.85, 0.26, 0.48], fleetcarrier: [0.8, 0.3, 0.5], dreadnought: [0.85, 0.24, 0.48] };
 const SOLO = P.get('solo') === '1'; if (SOLO) { for (const id of ['l1', 'st']) document.getElementById(id).style.display = 'none'; document.getElementById('div').style.display = 'none'; document.getElementById('l0').style.display = 'none'; document.getElementById('ui').style.display = 'none'; }
 const VIEWS = { '3q': [0.85, 0.42, 1.0], side: [1, 0.08, 0.0001], top: [0.001, 1, 0.12], front: [0.35, 0.18, 1], rear: [0.55, 0.25, -1] };
 let t0 = performance.now(), ang = 0;

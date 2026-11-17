@@ -20,6 +20,7 @@ import { Wrecks } from './structures.js?v=9';
 import { ExplosionManager, classify, PROFILES } from './explosions.js?v=9';
 import { HULLS, HULL_IDS, buildHull, ENEMY_HULL, FLAGSHIP_HULL, FACTION_PAINT, hullSegs, MAIN_PATH } from './hulls.js?v=9';
 import { HullLOD } from './lod.js?v=9';
+import { hideTurret } from './glbhulls.js?v=9';
 import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=9';
 
 export const STATION_SCALE = 2; // v8: the home station is built at capital-ship scale
@@ -414,9 +415,10 @@ export class Game {
     hps.forEach((h, i) => {
       if (i >= st.slots) return;
       const it = this.item(this.s.equip[i]);
-      if (!it) { const mount = makeTurret('cannon', (h.size || 1) * 0.6); mount.remove(mount.userData.barrel); mount.position.set(h.x, h.y, h.z); built.group.add(mount); return; }
+      const glbMount = built.group.userData.glb && !h.aux; // Blender hulls model their own turrets at the hardpoints
+      if (!it) { const mount = makeTurret('cannon', (h.size || 1) * 0.6); mount.remove(mount.userData.barrel); mount.position.set(h.x, h.y, h.z); if (glbMount) hideTurret(mount); built.group.add(mount); return; }
       const S = itemStats(it); const key = BEH_TURRET[S.beh]; const tur = makeTurret(key, (h.size || 1) * 1.05 * (1 + it.r * 0.03));
-      tur.position.set(h.x, h.y, h.z); built.group.add(tur); rarityRing(tur, it.r, RARITIES[it.r].rgb);
+      tur.position.set(h.x, h.y, h.z); if (glbMount) hideTurret(tur); built.group.add(tur); rarityRing(tur, it.r, RARITIES[it.r].rgb);
       const w = { key: S.beh, item: it, S, turret: tur, cd: rand(0, 0.3), target: null, retarget: 0, acc: 0, tick: 0, recoil: 0, heat: 0, over: 0, bz0: tur.userData.barrel.position.z, slot: i };
       if (S.beh === 'beam') { const c = S.beamRgb; w.beam = this.makeBeam(new THREE.Color(c[0], c[1], c[2]), new THREE.Color(c[0] * 0.08, c[1] * 0.12, c[2] * 0.2)); this.scene.add(w.beam); }
       p.weapons.push(w);
