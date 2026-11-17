@@ -117,3 +117,39 @@ def warship(s, B, Hh, o):
         s.turret((tx * B, y0 + L * ty, top if abs(tx) < 0.25 else Hh * 0.2), ts, tb, rot=math.pi if aft else 0.0)
     s.greebles(y0 + L * 0.35, y1 - L * 0.1, -B * 0.25, B * 0.25, top, o.get('greebles', 20), B * 0.05, mats=(0, 1, 2))
     return f, top
+
+def arc(s, c, R, a0, a1, n, w, h, mat, plane='YZ', tilt=0.0):
+    """a curved band (partial torus with a rectangular section w x h) around centre c; plane 'YZ' sweeps in the ship's
+    vertical plane (an arch over the hull seen from the side), 'XZ' arches across the hull (a hoop)."""
+    import math as m
+    from mathutils import Vector, Matrix
+    bm = s.bm; rings = []
+    for i in range(n + 1):
+        a = a0 + (a1 - a0) * i / n
+        if plane == 'XZ': d = Vector((m.cos(a), 0, m.sin(a))); t = Vector((0, 1, 0))
+        elif plane == 'XY': d = Vector((m.cos(a), m.sin(a), 0)); t = Vector((0, 0, 1))
+        else: d = Vector((0, m.cos(a), m.sin(a))); t = Vector((1, 0, 0))
+        if tilt:
+            Rm = Matrix.Rotation(tilt, 3, 'X' if plane == 'XY' else 'Y' if plane == 'YZ' else 'X'); d = Rm @ d; t = Rm @ t
+        p = Vector(c) + d * R
+        pts = [p + d * (-h / 2) + t * (-w / 2), p + d * (h / 2) + t * (-w / 2), p + d * (h / 2) + t * (w / 2), p + d * (-h / 2) + t * (w / 2)]
+        rings.append([tuple(q) for q in pts])
+    s._faces(rings, mat, True, True)
+
+def port(s, x, y, z, r, side, depth=None, mat=D, glow=G, seg=12):
+    """round side port / turbine disk facing +-X with a glowing core (the battlecruiser's blue flank rings)."""
+    d = depth or r * 0.5
+    s.cyl((x + side * d / 2, y, z), r, d, mat, 'X', seg)
+    s.cyl((x + side * (d + r * 0.02), y, z), r * 0.72, r * 0.04, glow, 'X', seg)
+    s.cyl((x + side * (d + r * 0.05), y, z), r * 0.3, r * 0.08, mat, 'X', seg)
+
+def hangar(s, x, y, z, w, h, side, axis='X'):
+    """lit hangar mouth: dark recess + glow lip, plus a 'bay' empty where fighters launch."""
+    if axis == 'X':
+        s.box((x, y, z), (0.4, w, h), D); s.quad((x + side * 0.22, y, z), w * 0.9, h * 0.75, side, D)
+        s.quad((x + side * 0.24, y, z - h * 0.42), w * 0.92, h * 0.07, side, G)
+        s.empty('bay', (x + side * 2.0, y, z), w)
+    else:  # facing the nose (-Y)
+        s.box((x, y, z), (w, 0.4, h), D); s.quad((x, y - 0.22, z), w * 0.9, h * 0.75, 1, D, axis='Y')
+        s.quad((x, y - 0.24, z - h * 0.42), w * 0.92, h * 0.07, 1, G, axis='Y')
+        s.empty('bay', (x, y - 2.0, z), w)

@@ -9,7 +9,7 @@ def crop_content(im, pad=0.04):  # trim the dark background around a render
     return im.crop((max(0, bb[0] - p), max(0, bb[1] - p), min(im.width, bb[2] + p), min(im.height, bb[3] + p)))
 def make(id_, H=420):
     parts = [('Concept sheet', Image.open(f'{B}/concept/{id_}.png').convert('RGB'))]
-    c = parts[0][1]; parts[0] = (parts[0][0], c.crop((0, 0, c.width, int(c.height * (0.78 if id_ != 'dreadnought' else 1)))))  # drop the label
+    c = parts[0][1]; parts[0] = (parts[0][0], c.crop((0, 0, c.width, int(c.height * (1 if id_ == 'dreadnought' else 0.8 if id_ in ('battlecruiser', 'fleetcarrier') else 0.78)))))  # drop the label
     for lab, f in (('Blender model', f'{B}/shots/blender-{id_}-concept.png'), ('In game (?hulls=glb)', f'{B}/shots/ingame-{id_}.png')):
         if os.path.exists(f): parts.append((lab, crop_content(Image.open(f).convert('RGB'))))
     ims = [fit(p, H) for _, p in parts]; W = sum(i.width for i in ims) + 12 * (len(ims) - 1)
