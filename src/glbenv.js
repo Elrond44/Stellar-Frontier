@@ -241,6 +241,7 @@ export const loadRigs = packLoader('rigs', 'rigs', (sc) => prepPack(sc, 'rig_'))
 
 // ---------------- materials: faction-tinted pirate set (no maps), or the player palette ----------------
 const IM = {};
+function tame(m, k, c = 1) { if (m.isMeshBasicMaterial) m.color.multiplyScalar(k); else { m.emissiveIntensity *= k; m.color.multiplyScalar(c); } return m; } // big accent / banner faces: less bloom than the small trim they were tuned for
 function plain(m, o = {}) { const c = m.clone(); for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap']) if (k in c) c[k] = null; if (c.isMeshStandardMaterial) c.vertexColors = true; Object.assign(c, o); return c; }
 export function instMats(fac) {
   const key = fac || '_'; if (IM[key]) return IM[key];
@@ -250,8 +251,8 @@ export function instMats(fac) {
     H: plain(FM ? FM.hull : M.pirate, { emissive: new THREE.Color(0), emissiveIntensity: 0 }),
     D: plain(M.pirateDark, { color: new THREE.Color(0x3a3036) }),
     P: plain(M.pirateBone, { color: new THREE.Color(0x8c8478) }),
-    A: plain(FM ? FM.accent : M.pirateAccent),
-    R: FM ? FM.red : M.red, W: M.amber, G: M.glow, E: M.green, N: plain(M.orange, { color: new THREE.Color(0xe0a83a), metalness: 1, roughness: 0.3 }),
+    A: tame(plain(FM ? FM.accent : M.pirateAccent), 0.3, 0.72),
+    R: tame((FM ? FM.red : M.red).clone(), 0.6), W: M.amber, G: M.glow, E: M.green, N: plain(M.orange, { color: new THREE.Color(0xc89434), metalness: 0.7, roughness: 0.45, emissive: new THREE.Color(0), emissiveIntensity: 0 }),
     C: M.glass, S: plain(M.solar), V: new THREE.MeshStandardMaterial({ color: 0x3c8a34, roughness: 0.85, emissive: 0x0b2a08, vertexColors: true }),
     K: rock, X: M.glow,
   };

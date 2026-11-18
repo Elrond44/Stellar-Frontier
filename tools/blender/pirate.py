@@ -177,7 +177,7 @@ def defense():
         s.cannon((math.cos(a) * 2.7, math.sin(a) * 2.7, 2.1), 0.85, a + math.pi / 2)
     for k in range(4):                                               # red banners on four faces (concept)
         a = k * math.pi / 2 + math.pi / 12; ap = 4.3 * math.cos(math.pi / 12) + 0.08; M = T(math.cos(a) * ap, math.sin(a) * ap, -0.6) @ Rz(a)
-        s.lbox(M, (0, 0, 0), (0.12, 1.1, 2.2), R); s.lbox(M, (0.08, 0, 0.3), (0.06, 0.4, 0.4), W); s.lbox(M, (0, 0, 1.35), (0.2, 1.5, 0.15), A)
+        s.lbox(M, (0, 0, 0), (0.12, 1.1, 2.2), A); s.lbox(M, (0.08, 0, 0.3), (0.06, 0.4, 0.4), W); s.lbox(M, (0, 0, 1.35), (0.2, 1.5, 0.15), D)
     s.lathe((0, 0, -0.9), [(4.1, 0), (3.0, -1.4), (1.6, -2.4), (0.8, -3.6)], D, 12)  # stepped underside
     s.spikes_down((0, 0, -1.6), 2.9, 8, 2.4, 0.3); s.spikes_down((0, 0, -3.4), 0.6, 3, 2.0, 0.3)
     return s, objs
