@@ -26,10 +26,10 @@ canvas{display:block;width:100vw;height:100vh}
 <div class="lab" id="l0">Procedural (live game, v9)</div><div class="lab" id="l1">Blender glb (test)</div><div id="st">loading…</div>
 <script type="module">
 import * as THREE from 'three';
-import { buildHull, schemeIds, HULLS } from './src/hulls.js?v=15';
-import { GLB, preloadGlbHulls } from './src/glbhulls.js?v=15';
-import { makeFlames } from './src/models.js?v=15';
-import { ensureDamage, DMG_TIME } from './src/vfx.js?v=15';
+import { buildHull, schemeIds, HULLS } from './src/hulls.js?v=16';
+import { GLB, preloadGlbHulls } from './src/glbhulls.js?v=16';
+import { makeFlames } from './src/models.js?v=16';
+import { ensureDamage, DMG_TIME } from './src/vfx.js?v=16';
 const P = new URLSearchParams(location.search);
 const cv = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });

@@ -217,6 +217,6 @@ Checklist:
 - [x] bakes + KTX2/WebP + half set; loader + quality levels
 - [x] dark / gas / moon textured planets, companion moon, rings
 - [x] stars with corona / flares; black hole blue disc + spiral + jets
-- [ ] concept-vs comparisons (shots/sky/concept-vs-*.png)
-- [ ] tests/v16env.js + old suites green
+- [x] concept-vs comparisons (shots/sky/concept-vs-{dark,gas,moon,star,bh,neb}.png, in-game close-ups via tests/v16shots.js)
+- [x] tests/v16env.js (all pass) + old suites green (smoke, smoke5, v8, v9, v13cam, registry, blender_ingame, blender_tex_registry, yardcheck, compat, v14env, v15env)
 - [ ] merge to main, cache-bust v16, push, verify live

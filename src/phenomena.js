@@ -2,10 +2,10 @@
 // Zones are deterministic per galaxy sector. Each has a visible boundary, an approach warning, and limited, consistent
 // physics that applies to the player, enemies, projectiles and asteroids alike.
 import * as THREE from 'three';
-import { mulberry, clamp, rand, TAU } from './util.js?v=15';
-import { GSECTORS, installations, LAIRS } from './galaxy.js?v=15';
-import { nebulaTexture } from './environment.js?v=15';
-import { SKY, skyTex } from './sky.js?v=15';
+import { mulberry, clamp, rand, TAU } from './util.js?v=16';
+import { GSECTORS, installations, LAIRS } from './galaxy.js?v=16';
+import { nebulaTexture } from './environment.js?v=16';
+import { SKY, skyTex } from './sky.js?v=16';
 
 export const PHEN = {
   ion:       { name: 'Ion Storm', short: 'ION STORM', icon: '⚡', col: [0.55, 0.7, 3.2], css: '#8fb4ff', warn: 'Lightning strikes (watch the warning circles) · sensors jammed', inside: 'SENSORS JAMMED · LIGHTNING' },

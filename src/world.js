@@ -1,9 +1,9 @@
 // Background (nebula skybox, wrapped star layers, dust), asteroid chunk streaming, mineral pickups
 import * as THREE from 'three';
-import { mulberry, hash2, rand, TAU } from './util.js?v=15';
-import { MINERALS, sectorAt } from './data.js?v=15';
-import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=15';
-import { ENV, ROCK_BY_TYPE, RICH_BY_TYPE, PICKUP_BY_TYPE } from './glbenv.js?v=15';
+import { mulberry, hash2, rand, TAU } from './util.js?v=16';
+import { MINERALS, sectorAt } from './data.js?v=16';
+import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=16';
+import { ENV, ROCK_BY_TYPE, RICH_BY_TYPE, PICKUP_BY_TYPE } from './glbenv.js?v=16';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
 
 export function makeSky() {

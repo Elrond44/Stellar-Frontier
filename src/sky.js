@@ -5,9 +5,9 @@
 // time a body needs it, and ?env=proc (ENV.enabled false) turns the whole pack off.
 import * as THREE from 'three';
 import { KTX2Loader } from '../vendor/addons/loaders/KTX2Loader.js';
-import { ENV } from './glbenv.js?v=15';
-import { GSECTORS } from './galaxy.js?v=15';
-import { mulberry, hash2 } from './util.js?v=15';
+import { ENV } from './glbenv.js?v=16';
+import { GSECTORS } from './galaxy.js?v=16';
+import { mulberry, hash2 } from './util.js?v=16';
 
 const P = new URLSearchParams(location.search);
 export const SKY = { enabled: ENV.enabled, level: 'full', fmt: P.get('skyfmt') === 'webp' ? 'webp' : 'ktx', base: 'models/sky/', tex: {}, loading: {}, failed: {}, bytes: {}, renderer: null, ver: 's2' };

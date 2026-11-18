@@ -2,19 +2,19 @@
 // flagship bosses (phases, telegraphed attacks, destructible components), autonomous faction warfare with visible
 // skirmishes, friendly activity in liberated space and the dynamic mission runtime.
 import * as THREE from 'three';
-import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=15';
-import { ENEMIES } from './data.js?v=15';
-import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=15';
-import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=15';
-import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=15';
-import { HULLS, buildHull } from './hulls.js?v=15';
+import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=16';
+import { ENEMIES } from './data.js?v=16';
+import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=16';
+import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=16';
+import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=16';
+import { HULLS, buildHull } from './hulls.js?v=16';
 const BS = 2; // installation build scale (v8)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=15';
-import { makeItem, RARITIES, rollTemplate } from './items.js?v=15';
-import { INV_CAP } from './save.js?v=15';
-import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=15';
-import { buildInstGlb } from './glbenv.js?v=15';
+import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=16';
+import { makeItem, RARITIES, rollTemplate } from './items.js?v=16';
+import { INV_CAP } from './save.js?v=16';
+import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=16';
+import { buildInstGlb } from './glbenv.js?v=16';
 const relayModel = () => buildInstGlb('relay') || buildInstallationV5('relay'); // v15: Blender green beacon spire when loaded
 
 const TAU = Math.PI * 2; const rand = (a, b) => a + Math.random() * (b - a); const randInt = (a, b) => Math.floor(rand(a, b + 1));
