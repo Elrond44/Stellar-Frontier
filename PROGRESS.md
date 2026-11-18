@@ -178,3 +178,25 @@ Batch 1 checklist
 - [x] fix: station keeps its v8 capital scale (x2) with the glb models (caught by v8 suite); footprint check measured in world units, drones excluded (glb reach 36-43 vs procedural 38-42)
 - [x] old suites green: smoke, smoke5, v8, v9, v13cam, registry, blender_ingame, blender_tex_registry, yardcheck, compat
 - [x] merge to main, cache-bust v14, push, verify live
+
+## v15: Environment batch 2 in Blender (branch env)
+Source: briefs/env-concepts-1.png + -3.png (stations row, mining-rig row, gem row). Crops in briefs/crops2/.
+Mapping onto the game (gameplay values unchanged; glb only replaces visible meshes; procedural fallback stays):
+- Faction Stronghold (inst_hq) -> pirate citadel; Orbital Defense Platform (inst_def) -> turret fortress drum (live turret on the centre deck);
+  Communication Array (inst_comm) -> comms dish relay (dish on the 'spin' hook); Hidden Shipyard (inst_yard) -> hangar block + gantry;
+  Resource Facility (inst_res) -> open-pit mining-rig asteroid; Fusion Reactor -> blue-core reactor ring; Shield Generator -> small ring outpost;
+  Defense Turret -> armoured pad (live turret on top); Fighter Hangar -> small hangar block; friendly repair beacon (relay) -> green beacon spire.
+- Mining rigs drill / tunnel / colony (+ pit) -> deep set dressing below the play plane (deterministic per 560u cell, Low 0 / Medium 2 / High 3).
+- Ore pickups -> gem chips per mineral (ferrite cubic gold, stellarite + crimsonite hex, viridium emerald, voidstone amethyst).
+- Rich rocks -> 4 crystal styles chosen by mineral; rock shader adds per-facet brightness + rim to crystal faces.
+Files: blender/src/pirate.py, rigs.py, gems.py (+ env_kit gem primitives, asteroids crystal_d) -> models/env/installations.glb, rigs.glb, pickups.glb.
+Loader: src/glbenv.js (loadInst/loadRigs/loadPickups, buildInstGlb, DepthRigs, instMats faction tint without texture maps).
+Installations built before the pack arrives stay procedural (proto cache key carries ':glb'). ?env=proc keeps everything procedural.
+Checklist:
+- [x] installations pack (9 kinds) + faction tint + live turrets/dome/spin hooks
+- [x] mining rigs (4) + Resource Facility + deep set dressing
+- [x] gem pickups + rich crystal styles + facet shader
+- [x] home station detail pass: hanging pendants under the rings, scaffolds, pipe runs + roof vents, hanging spires (L1/L5), bigger hex crystal clusters on the rock (L6 52k -> 59k tris); low-angle renders station-l*-low.png
+- [x] concept-vs comparisons: shots/env/concept-vs-inst-*.png (9 kinds + hq-b), concept-vs-rig-*.png (4), concept-vs-pickups.png, concept-vs-sheet-crystals.png, concept-vs-station-l4-low / l6-low.png
+- [x] tests/v15env.js (all pass) + old suites green (smoke, smoke5, v8, v9, v13cam, registry, blender_ingame, blender_tex_registry, yardcheck, compat, v14env)
+- [x] merge to main, cache-bust v15, push, verify live

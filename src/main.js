@@ -3,19 +3,19 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
-import { Game } from './game.js?v=14';
-import { ENV, preloadEnv } from './glbenv.js?v=14';
-import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer, texLevelFor } from './glbhulls.js?v=14';
-import { applyShipLight } from './shiplight.js?v=14';
-import { UI } from './ui.js?v=14';
-import { Audio } from './audio.js?v=14';
-import { makeSky, makeStarLayer, makeDust } from './world.js?v=14';
-import { Environment } from './environment.js?v=14';
-import { CinematicPass } from './post.js?v=14';
-import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=14';
-import { Profiler } from './profiler.js?v=14';
-import { SECTORS, sectorAt } from './data.js?v=14';
-import { owner } from './galaxy.js?v=14';
+import { Game } from './game.js?v=15';
+import { ENV, preloadEnv, DepthRigs } from './glbenv.js?v=15';
+import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer, texLevelFor } from './glbhulls.js?v=15';
+import { applyShipLight } from './shiplight.js?v=15';
+import { UI } from './ui.js?v=15';
+import { Audio } from './audio.js?v=15';
+import { makeSky, makeStarLayer, makeDust } from './world.js?v=15';
+import { Environment } from './environment.js?v=15';
+import { CinematicPass } from './post.js?v=15';
+import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=15';
+import { Profiler } from './profiler.js?v=15';
+import { SECTORS, sectorAt } from './data.js?v=15';
+import { owner } from './galaxy.js?v=15';
 
 const canvas = document.getElementById('c');
 let renderer;
@@ -55,7 +55,7 @@ const stars2 = makeStarLayer(700, 300, -60, -30, 0.22, 1.4, 12); scene.add(stars
 const motes = makeStarLayer(260, 140, -6, 4, 0.06, 0.3, 13); scene.add(motes);
 const dust = makeDust(); scene.add(dust);
 const starLayers = [stars1, stars2, motes];
-const env = new Environment(scene); // v7: layered nebulae, lit planets, distant + foreground rock layers
+const env = new Environment(scene); const rigs = new DepthRigs(scene); env.rigs = rigs; // v15: Blender mining-rig asteroids as deep set dressing // v7: layered nebulae, lit planets, distant + foreground rock layers
 const FOG0 = 0.0042; const fogCol0 = new THREE.Color(0x050a18), fogNeb = new THREE.Color(0x1a0c26);
 const detected = detectQuality(renderer); // v7: device capability detection for the AUTO preset
 const prof = new Profiler(renderer, scene); const adapt = new AdaptiveQuality();
@@ -85,7 +85,7 @@ function setupQuality() {
   applyShipLight({ scene, renderer, key, rim, sky, baseEnv }, q, TEX.enabled); // blender-tex: cinematic hull lighting (Medium/High, tex toggle only)
   const tl = texLevelFor(q); // blender-tex: High -> full-res textured hulls, Medium -> half-res, Low -> untextured glb
   if (tl !== TEX.level) { TEX.level = tl; const rebuild = () => { if (TEX.level === tl && game.player && game.s) game.buildPlayerShip(); };
-    if (tl) preloadTex(tl).then(rebuild); else rebuild(); } env.setQuality(q); game.field.maxFrag = P.fragments;
+    if (tl) preloadTex(tl).then(rebuild); else rebuild(); } env.setQuality(q); rigs.setQuality(q); game.field.maxFrag = P.fragments;
   sky.material.uniforms.uDetail.value = P.sky; dust.visible = P.dust; motes.visible = P.motes;
   if (composer) { composer.renderTarget1.dispose(); composer.renderTarget2.dispose(); if (bloom) bloom.dispose(); }
   composer = null; bloom = null; cine = null;
@@ -185,7 +185,7 @@ function frame() {
   sky.material.uniforms.uTint.value.copy(tint); sky.material.uniforms.uTime.value = game.time;
   for (const l of starLayers) l.material.uniforms.uCam.value.set(camera.position.x, camera.position.z);
   dust.material.uniforms.uCam.value.set(camera.position.x, camera.position.z); dust.material.uniforms.uVel.value.set(game.player.vx, game.player.vz);
-  env.update(camera, tint, game.time);
+  env.update(camera, tint, game.time); rigs.update(camera.position.x, camera.position.z, game.time);
   // dense nebulae thicken the fog (reduced visibility)
   { const nb = game.phen ? game.phen.env.neb : 0; game.fogK = damp0(game.fogK || 0, nb, 2, dt); scene.fog.density = FOG0 * Math.min(1, 46 / Math.max(46, game.camDist || 46)) * (1 + game.fogK * 3.2); /* v8: thin the fog when a capital hull pulls the camera back */ scene.fog.color.copy(fogCol0).lerp(fogNeb, game.fogK); }
   if (cine) { cine.uniforms.uTint.value.copy(tint); cine.setLenses(game.lensList(), camera, innerWidth / innerHeight); }
@@ -200,7 +200,7 @@ const damp0 = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const perf = { upd: 0, calls: 0, tris: 0 };
 // soundtrack: the manifest is tiny; each song streams only when it is about to play
 audio.musicMode = game.s.settings.musicMode;
-fetch('music/tracks.json?v=14').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
+fetch('music/tracks.json?v=15').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
   if (!Array.isArray(list) || !list.length) return; const s = game.s.settings;
   audio.setTracks(list, s.trackIdx < list.length ? s.trackIdx : 0, s.trackIdx < list.length ? s.trackPos : 0);
 }).catch((e) => console.info('No soundtrack, using generated music:', e.message));

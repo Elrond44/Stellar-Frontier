@@ -2,18 +2,20 @@
 // flagship bosses (phases, telegraphed attacks, destructible components), autonomous faction warfare with visible
 // skirmishes, friendly activity in liberated space and the dynamic mission runtime.
 import * as THREE from 'three';
-import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=14';
-import { ENEMIES } from './data.js?v=14';
-import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=14';
-import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=14';
-import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=14';
-import { HULLS, buildHull } from './hulls.js?v=14';
+import { RING_L0, FLAGSHIP_L0, ttkHp, dmgK } from './balance.js?v=15';
+import { ENEMIES } from './data.js?v=15';
+import { FACTIONS, FACTION_KEYS, SECTOR_BY_ID, HOME, LAIRS, isHome, isPirate, installations, instName, INST_KINDS, libStages, neighbours, sectorCenter, gsectorAt, STAGES, caches } from './galaxy.js?v=15';
+import { WAR_LEVELS, warTick, warHit, bossCollapse } from './war.js?v=15';
+import { BOSSES, ATTACKS, commanderFor } from './bosses.js?v=15';
+import { HULLS, buildHull } from './hulls.js?v=15';
 const BS = 2; // installation build scale (v8)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=14';
-import { makeItem, RARITIES, rollTemplate } from './items.js?v=14';
-import { INV_CAP } from './save.js?v=14';
-import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=14';
+import { MTYPES, MAX_ACTIVE, genOffers, missionTitle } from './missions.js?v=15';
+import { makeItem, RARITIES, rollTemplate } from './items.js?v=15';
+import { INV_CAP } from './save.js?v=15';
+import { buildInstallationV5, buildCivilian, buildShip, makeDome, buildCacheCrate } from './models.js?v=15';
+import { buildInstGlb } from './glbenv.js?v=15';
+const relayModel = () => buildInstGlb('relay') || buildInstallationV5('relay'); // v15: Blender green beacon spire when loaded
 
 const TAU = Math.PI * 2; const rand = (a, b) => a + Math.random() * (b - a); const randInt = (a, b) => Math.floor(rand(a, b + 1));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -480,7 +482,7 @@ export class Campaign {
   }
   makePatrol(L, slot) { const hid = slot % 2 ? 'frigate' : 'corvette'; const o = buildHull(hid, { scheme: 'federation', turrets: 'enemy' }).group; /* v8: Federation-blue escorts at true scale */ const c = L.c; const hp = 260 + this.g.s.level * 18; return this.addFriend({ kind: 'patrol', obj: o, x: c.x + rand(-10, 10), z: c.z + rand(-10, 10), vx: 0, vz: 0, hp, maxHp: hp, radius: HULLS[hid].radius, bound: HULLS[hid].bound, a: rand(0, TAU), cd: 1, slot, dmg: 8, name: hid === 'frigate' ? 'Federation Frigate' : 'Federation Corvette' }); }
   buildLib(sec) {
-    this.teardownLib(); const c = sectorCenter(sec); const r = buildInstallationV5('relay'); r.group.position.set(c.x, 0, c.z); this.scene.add(r.group);
+    this.teardownLib(); const c = sectorCenter(sec); const r = relayModel(); r.group.position.set(c.x, 0, c.z); this.scene.add(r.group);
     const m = buildCivilian('merchant').group; this.scene.add(m);
     const L = this.lib = { sec, c, relay: r.group, ring: r.group.getObjectByName('spin'), merchant: m, ma: rand(0, TAU), patrols: [], stockAt: 0, stock: [] };
     L.patrols.push(this.makePatrol(L, 0), this.makePatrol(L, 1)); this.restock(L);
@@ -571,7 +573,7 @@ export class Campaign {
   }
   defendTick(m, R, dt) {
     const g = this.g; const p = g.player; const d = Math.hypot(m.x - p.x, m.z - p.z);
-    if (!R.station) { if (d > 70) return; const o = buildInstallationV5('relay').group; const hp = 1200 + m.threat * 450; R.station = this.addFriend({ kind: 'station', obj: o, x: m.x, z: m.z, hp, maxHp: hp, radius: 5, big: true, name: m.name, onDie: () => this.finish(m, 'failed', `${m.name} was destroyed`) }); o.position.set(m.x, 0, m.z); R.wave = 0; R.waveT = 5; R.cleared = false; m.prog = 0; g.toast(`⛨ ${m.name}: "Raiders inbound! Hold them off!"`, 'warn'); }
+    if (!R.station) { if (d > 70) return; const o = relayModel().group; const hp = 1200 + m.threat * 450; R.station = this.addFriend({ kind: 'station', obj: o, x: m.x, z: m.z, hp, maxHp: hp, radius: 5, big: true, name: m.name, onDie: () => this.finish(m, 'failed', `${m.name} was destroyed`) }); o.position.set(m.x, 0, m.z); R.wave = 0; R.waveT = 5; R.cleared = false; m.prog = 0; g.toast(`⛨ ${m.name}: "Raiders inbound! Hold them off!"`, 'warn'); }
     const S = R.station; if (S.dead) return; S.obj.rotation.y += dt * 0.2;
     if (d > 260) { this.dropFriend(S); R.station = null; for (const e of R.ents) if (!e.dead) g.removeEnemy(e); R.ents = []; m.prog = 0; g.toast(`${m.name} defence abandoned: return to restart it`, 'warn'); return; }
     const alive = R.ents.filter((e) => !e.dead).length;

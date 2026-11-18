@@ -1,29 +1,29 @@
 // Core game: state, player ship, weapons, enemies, economy, quests, saving
 import * as THREE from 'three';
-import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=14';
-import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=14';
-import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=14';
-import { Campaign, FLEET } from './campaign.js?v=14';
-import { roleAI } from './ai.js?v=14';
-import { BOSS_BY_BP } from './bosses.js?v=14';
-import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=14';
-import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=14';
-import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, ROLE_ABILITIES, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=14';
-import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=14';
-import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=14';
-import { AsteroidField, Minerals } from './world.js?v=14';
-import { Particles, Debris, Rings, Bolts, Flashes, BOLT_TIME } from './fx.js?v=14';
-import { FXManager, Sequencer, EnergyShells, MetalDebris, makeShieldMaterial, ShieldFX, ShieldBubbles, prepareDamage, ensureDamage, releaseDamage, DMG_TIME, DMG_STATS, plasmaMaterial } from './vfx.js?v=14';
-import { STORY, makeContract } from './quests.js?v=14';
-import { Phenomena } from './phenomena.js?v=14';
-import { Wrecks } from './structures.js?v=14';
-import { ExplosionManager, classify, PROFILES } from './explosions.js?v=14';
-import { HULLS, HULL_IDS, buildHull, ENEMY_HULL, FLAGSHIP_HULL, FACTION_PAINT, hullSegs, MAIN_PATH } from './hulls.js?v=14';
-import { HullLOD } from './lod.js?v=14';
-import { hideTurret } from './glbhulls.js?v=14';
-import { buildStationAny } from './glbenv.js?v=14';
-import { CAM_PRESETS, DEG, angDiff } from './camctl.js?v=14';
-import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=14';
+import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=15';
+import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=15';
+import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=15';
+import { Campaign, FLEET } from './campaign.js?v=15';
+import { roleAI } from './ai.js?v=15';
+import { BOSS_BY_BP } from './bosses.js?v=15';
+import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=15';
+import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=15';
+import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, ROLE_ABILITIES, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=15';
+import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=15';
+import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=15';
+import { AsteroidField, Minerals } from './world.js?v=15';
+import { Particles, Debris, Rings, Bolts, Flashes, BOLT_TIME } from './fx.js?v=15';
+import { FXManager, Sequencer, EnergyShells, MetalDebris, makeShieldMaterial, ShieldFX, ShieldBubbles, prepareDamage, ensureDamage, releaseDamage, DMG_TIME, DMG_STATS, plasmaMaterial } from './vfx.js?v=15';
+import { STORY, makeContract } from './quests.js?v=15';
+import { Phenomena } from './phenomena.js?v=15';
+import { Wrecks } from './structures.js?v=15';
+import { ExplosionManager, classify, PROFILES } from './explosions.js?v=15';
+import { HULLS, HULL_IDS, buildHull, ENEMY_HULL, FLAGSHIP_HULL, FACTION_PAINT, hullSegs, MAIN_PATH } from './hulls.js?v=15';
+import { HullLOD } from './lod.js?v=15';
+import { hideTurret } from './glbhulls.js?v=15';
+import { buildStationAny, buildInstGlb, instReady } from './glbenv.js?v=15';
+import { CAM_PRESETS, DEG, angDiff } from './camctl.js?v=15';
+import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=15';
 
 export const STATION_SCALE = 2; // v8: the home station is built at capital-ship scale
 const DOCK_R = 54;
@@ -122,7 +122,7 @@ export class Game {
     this.abil = { cd: {}, last: {} }; this.overT = this.surgeT = this.dashT = 0; this.fxCache = null;
     this.guards.clear(); if (this.pendingGuards) this.pendingGuards.clear();
     for (const b of this.bolts.list) b.dead = true; this.bolts.sync();
-    for (const o of this.minerals.list) { this.minerals.setHidden(o.idx); this.minerals.free.push(o.idx); } this.minerals.list.length = 0; this.minerals.mesh.instanceMatrix.needsUpdate = true;
+    this.minerals.clear();
     for (const a of this.field.list) a.alive = false; this.field.list.length = 0; this.field.chunks.clear(); this.field.depleted.clear(); this.field.guardRequests.length = 0;
     this.s = st; bindWorld(st.galaxy); this.camp.reset(); this.heat = 0; this.spawnT = 30; this.dead = false; this.autopilot = false; this.docked = false; this.dockT = 0;
     const p = this.player; p.x = st.pos.x; p.z = st.pos.z; p.vx = p.vz = 0; p.hp = undefined;
@@ -466,11 +466,13 @@ export class Game {
 
   // ---------- enemies ----------
   proto(type, fac, variant = '') {
-    const key = type + ':' + (fac || '') + ':' + variant;
+    const D0 = ENEMIES[type]; const ik = D0 && D0.inst ? type.slice(5) : null; const gi = ik && instReady(ik); // v15: Blender installation once its pack has loaded
+    const key = type + ':' + (fac || '') + ':' + variant + (gi ? ':glb' : '');
     if (!this.protos[key]) {
-      const D = ENEMIES[type]; const F = FACTIONS[fac]; let b;
+      const D = ENEMIES[type]; const F = FACTIONS[fac]; let b = gi ? buildInstGlb(ik, fac) : null;
       const hid = type === 'flagship' ? FLAGSHIP_HULL[variant || fac || 'crimson'] : ENEMY_HULL[type];
-      if (hid) b = buildHull(hid, { scheme: type === 'sentinel' ? FACTION_PAINT.sentinel : FACTION_PAINT[fac] || 'pirate', turrets: 'enemy' }); // v8: enemies fly the concept-sheet hulls at true scale in faction paint
+      if (b) { /* v15 glb installation (faction-tinted materials already applied) */ }
+      else if (hid) b = buildHull(hid, { scheme: type === 'sentinel' ? FACTION_PAINT.sentinel : FACTION_PAINT[fac] || 'pirate', turrets: 'enemy' }); // v8: enemies fly the concept-sheet hulls at true scale in faction paint
       else if (type === 'flagship') b = buildFlagship(variant || fac || 'crimson', F ? factionMats(fac, F.rgb, F.hull) : factionMats('crimson', [3.4, 0.4, 0.4], 0x3a1e22));
       else if (type === 'bpart') { b = buildBossPart(variant || 'core'); if (F) retint(b.group, fac, F.rgb, F.hull); }
       else if (D.inst && !['inst_core', 'inst_gen', 'inst_turret', 'inst_reactor', 'inst_hangar'].includes(type)) { b = buildInstallationV5(type.slice(5)); if (F) retint(b.group, fac, F.rgb, F.hull); }

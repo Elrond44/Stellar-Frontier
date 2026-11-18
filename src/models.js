@@ -1,7 +1,7 @@
 // Procedural models v2: detailed ships, turrets, pirates, station, asteroid geometry + materials.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
-import { mulberry, fbm3 } from './util.js?v=14';
+import { mulberry, fbm3 } from './util.js?v=15';
 
 // ================= Procedural textures =================
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -551,18 +551,21 @@ export function makeRockMaterial(baseGlow = 0x000000, glowScale = 1) {
       float strata = 0.5+0.5*sin(rp.y*16.0 + rnz*7.0);
       float speck = step(0.93, rh(floor(rp*40.0)));
       if (vCrystal < 0.5) diffuseColor.rgb *= (0.6 + 0.75*rnz) * (0.85 + 0.25*strata) * (1.0 - 0.45*cr) * (1.0 + 0.6*speck);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vGlowCol * 0.22, step(0.5, vCrystal)); // v15: gem body takes the mineral colour
       diffuseColor.rgb *= 1.0 - vInst.x*0.55;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
       roughnessFactor = clamp(0.62 + 0.38*rnz - 0.3*vCrystal, 0.08, 1.0);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       float v1 = abs(rn(rp*3.1+7.3)-0.5); float v2 = abs(rn(rp*6.7-3.1)-0.5);
       float vein = smoothstep(0.03,0.004,v1) + 0.55*smoothstep(0.02,0.003,v2);
-      float g = max(vein*(0.6+0.4*rnz), vCrystal*1.15);
+      vec3 fN = normalize(cross(dFdx(vObj), dFdy(vObj))); float facet = rh(floor(fN * 3.0 + 7.0)); // v15: per-facet brightness (sharp gem facets)
+      float rimG = pow(1.0 - abs(normal.z), 2.0);
+      float g = max(vein*(0.6+0.4*rnz), vCrystal * (0.35 + 1.05 * facet + 0.7 * rimG));
       float pulse = 0.78 + 0.22*sin(uTime*2.2 + rp.x*4.0 + rp.z*3.0);
       totalEmissiveRadiance += vGlowCol * g * pulse * (1.0 + vInst.x*0.8);
       totalEmissiveRadiance += vec3(1.6,0.6,0.15) * vInst.y * (0.4 + vein);`);
   };
-  m.customProgramCacheKey = () => 'rock-v2';
+  m.customProgramCacheKey = () => 'rock-v3';
   return m;
 }
 // Noise-displaced icosphere with craters; crystal clusters for rich rocks. Same seed => same silhouette at every LOD.

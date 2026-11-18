@@ -1,9 +1,9 @@
 // Background (nebula skybox, wrapped star layers, dust), asteroid chunk streaming, mineral pickups
 import * as THREE from 'three';
-import { mulberry, hash2, rand, TAU } from './util.js?v=14';
-import { MINERALS, sectorAt } from './data.js?v=14';
-import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=14';
-import { ENV, ROCK_BY_TYPE } from './glbenv.js?v=14';
+import { mulberry, hash2, rand, TAU } from './util.js?v=15';
+import { MINERALS, sectorAt } from './data.js?v=15';
+import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=15';
+import { ENV, ROCK_BY_TYPE, RICH_BY_TYPE, PICKUP_BY_TYPE } from './glbenv.js?v=15';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
 
 export function makeSky() {
@@ -152,7 +152,7 @@ export class AsteroidField {
     if (G) {
       for (let i = 0; i < G.hi.length; i++) { this.meshes.hi.push(makeInst(G.hi[i], this.mat, 140)); this.meshes.lo.push(makeInst(G.lo[i], this.mat, 200)); }
       for (let i = 0; i < G.rhi.length; i++) { this.meshes.rhi.push(makeInst(G.rhi[i], this.mat, 48)); this.meshes.rlo.push(makeInst(G.rlo[i], this.mat, 64)); }
-      this.typeMap = ROCK_BY_TYPE; this.glb = true;
+      this.typeMap = ROCK_BY_TYPE; this.richMap = RICH_BY_TYPE; this.glb = true;
     }
     for (let i = 0; i < (G ? 0 : NV); i++) {
       const o = { detail: 3, stretch: i % 3 === 1, amp: i % 3 === 2 ? 0.42 : 0.32, craters: 3 + (i % 3) };
@@ -220,7 +220,8 @@ export class AsteroidField {
       if (cam && !this.frustum.intersectsSphere(this._sph)) continue;
       const near = Math.hypot(a.x - px, a.z - pz) < this.hiDist;
       const tm = this.typeMap && this.typeMap[a.type]; const vi = tm ? tm[a.variant % tm.length] : a.variant % this.meshes.hi.length;
-      const set = a.rich ? (near ? this.meshes.rhi : this.meshes.rlo)[a.variant % this.meshes.rhi.length] : (near ? this.meshes.hi : this.meshes.lo)[vi];
+      const ri = a.rich && this.richMap ? (() => { const rm = this.richMap[a.type] || [0]; return rm[a.variant % rm.length] % this.meshes.rhi.length; })() : a.variant % this.meshes.rhi.length; // v15: crystal style per mineral
+      const set = a.rich ? (near ? this.meshes.rhi : this.meshes.rlo)[ri] : (near ? this.meshes.hi : this.meshes.lo)[vi];
       const u = set.userData; if (u.n >= u.cap) continue; const i = u.n++;
       const pulse = a.hitT > 0 ? 1 + Math.sin(a.hitT * 60) * 0.035 * a.hitT * 6 : 1;
       this._e.set(a.rx, a.ry, 0); this._q.setFromEuler(this._e); this._p.set(a.x, a.y, a.z); this._s.setScalar(a.r * pulse);
@@ -247,32 +248,44 @@ export class AsteroidField {
 
 // ---------------- Mineral pickups ----------------
 export class Minerals {
+  // v15: with the Blender pickups pack, each mineral uses its own gem chip (hex / cubic / emerald / amethyst), one instanced
+  // mesh per style with its own index pool (counts stay tight, so the vertex cost stays like the old single gem)
   constructor(scene, max = 500) {
-    this.max = max; this.list = []; this.free = [];
-    const geo = new THREE.CylinderGeometry(0.0, 0.36, 0.5, 6, 1); geo.translate(0, -0.25, 0); const top = new THREE.CylinderGeometry(0.22, 0.36, 0.16, 6, 1); top.translate(0, 0.08, 0); const gem = mergeGeometries([geo.toNonIndexed(), top.toNonIndexed()]); gem.computeVertexNormals();
+    this.max = max; this.list = [];
     const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.0, metalness: 0.5, roughness: 0.12, flatShading: true });
     // make emissive follow instance colour
-    mat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += vColor.rgb * 1.9;'); };
-    this.mesh = new THREE.InstancedMesh(gem, mat, max); this.mesh.frustumCulled = false; this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.dummy = new THREE.Object3D(); this.c = new THREE.Color();
-    for (let i = max - 1; i >= 0; i--) { this.free.push(i); this.setHidden(i); this.mesh.setColorAt(i, this.c.setRGB(1, 1, 1)); }
-    scene.add(this.mesh);
-  }
-  setHidden(i) { const d = this.dummy; d.position.set(0, -999, 0); d.scale.setScalar(0); d.updateMatrix(); this.mesh.setMatrixAt(i, d.matrix); }
-  spawn(x, z, type, n, speed = 7) {
-    const col = new THREE.Color(MINERALS[type].color);
-    for (let k = 0; k < n; k++) {
-      if (!this.free.length) { const o = this.list.shift(); this.free.push(o.idx); }
-      const idx = this.free.pop(); const a = rand(0, TAU), sp = rand(0.3, 1) * speed;
-      this.list.push({ idx, x, y: rand(-0.3, 0.6), z, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, type, life: 40, spin: rand(0, 6), pull: 0, delay: 0.25 + rand(0, 0.25) });
-      this.mesh.setColorAt(idx, col);
+    const G = ENV.enabled && ENV.pickups; const glow = G ? '0.75' : '1.9'; // v15: faceted gem chips glow less so the facets read instead of a bloom blob
+    mat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += vColor.rgb * ' + glow + ';'); };
+    mat.customProgramCacheKey = () => 'ore-' + glow; this.glb = !!G; this.styleOf = (t) => (G ? PICKUP_BY_TYPE[t] || 'hex' : 'gem');
+    const geos = {};
+    if (G) { for (const k in G) geos[k] = G[k]; mat.vertexColors = true; mat.roughness = 0.08; mat.metalness = 0.2; }
+    else { const geo = new THREE.CylinderGeometry(0.0, 0.36, 0.5, 6, 1); geo.translate(0, -0.25, 0); const top = new THREE.CylinderGeometry(0.22, 0.36, 0.16, 6, 1); top.translate(0, 0.08, 0); const gem = mergeGeometries([geo.toNonIndexed(), top.toNonIndexed()]); gem.computeVertexNormals(); geos.gem = gem; }
+    this.dummy = new THREE.Object3D(); this.c = new THREE.Color(); this.sets = {};
+    const cap = G ? Math.ceil(max * 0.6) : max;
+    for (const k in geos) {
+      const m = new THREE.InstancedMesh(geos[k], mat, cap); m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.name = 'ore-' + k;
+      const S = this.sets[k] = { mesh: m, free: [], cap, used: 0 };
+      for (let i = cap - 1; i >= 0; i--) { S.free.push(i); this.setHidden(S, i); m.setColorAt(i, this.c.setRGB(1, 1, 1)); }
+      m.count = G ? 0 : cap; scene.add(m);
     }
-    this.mesh.instanceColor.needsUpdate = true;
+    this.mesh = this.sets[G ? 'hex' : 'gem'].mesh; // back-compat handle
+  }
+  clear() { for (const o of this.list) { this.setHidden(o.S, o.idx); o.S.free.push(o.idx); } this.list.length = 0; for (const k in this.sets) { const S = this.sets[k]; if (this.glb) S.mesh.count = 0; S.mesh.instanceMatrix.needsUpdate = true; } }
+  setHidden(S, i) { const d = this.dummy; d.position.set(0, -999, 0); d.scale.setScalar(0); d.updateMatrix(); S.mesh.setMatrixAt(i, d.matrix); }
+  spawn(x, z, type, n, speed = 7) {
+    const col = new THREE.Color(MINERALS[type].color); const S = this.sets[this.styleOf(type)];
+    for (let k = 0; k < n; k++) {
+      if (!S.free.length) { const j = this.list.findIndex((o) => o.S === S); if (j < 0) return; const o = this.list[j]; this.setHidden(S, o.idx); S.free.push(o.idx); this.list.splice(j, 1); }
+      const idx = S.free.pop(); const a = rand(0, TAU), sp = rand(0.3, 1) * speed;
+      this.list.push({ idx, S, x, y: rand(-0.3, 0.6), z, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, type, life: 40, spin: rand(0, 6), pull: 0, delay: 0.25 + rand(0, 0.25) });
+      S.mesh.setColorAt(idx, col); S.mesh.instanceColor.needsUpdate = true;
+    }
   }
   update(dt, sx, sz, magnetR, collectR, canCollect, onCollect, t, sparkle) {
-    const d = this.dummy; const L = this.list;
+    const d = this.dummy; const L = this.list; const sc = this.glb ? 1.25 : 1;
+    for (const k in this.sets) this.sets[k].hi = -1;
     for (let i = L.length - 1; i >= 0; i--) {
-      const o = L[i];
+      const o = L[i]; const S = o.S;
       o.life -= dt; o.delay -= dt; o.spin += dt * 2.5;
       const dx = sx - o.x, dz = sz - o.z, dist = Math.hypot(dx, dz);
       if (o.delay <= 0 && canCollect(o.type) && dist < magnetR) {
@@ -284,10 +297,10 @@ export class Minerals {
       o.x += o.vx * dt; o.z += o.vz * dt;
       if (sparkle && Math.random() < (o.pull > 0 ? 0.5 : 0.04)) sparkle(o.x, o.y, o.z, o.type, o.pull > 0);
       if (o.delay <= 0 && dist < collectR && canCollect(o.type)) { onCollect(o); o.life = -1; }
-      if (o.life <= 0) { this.setHidden(o.idx); this.free.push(o.idx); L[i] = L[L.length - 1]; L.pop(); continue; }
+      if (o.life <= 0) { this.setHidden(S, o.idx); S.free.push(o.idx); L[i] = L[L.length - 1]; L.pop(); continue; }
       d.position.set(o.x, o.y + Math.sin(t * 3 + o.spin) * 0.15, o.z); d.rotation.set(0.3, o.spin, 0.2);
-      d.scale.setScalar(o.life < 3 ? o.life / 3 : 1); d.updateMatrix(); this.mesh.setMatrixAt(o.idx, d.matrix);
+      d.scale.setScalar((o.life < 3 ? o.life / 3 : 1) * sc); d.updateMatrix(); S.mesh.setMatrixAt(o.idx, d.matrix); if (o.idx > S.hi) S.hi = o.idx;
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
+    for (const k in this.sets) { const S = this.sets[k]; if (this.glb) S.mesh.count = S.hi + 1; S.mesh.instanceMatrix.needsUpdate = true; }
   }
 }
