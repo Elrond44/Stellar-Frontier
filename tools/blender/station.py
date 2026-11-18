@@ -12,6 +12,7 @@ from env_kit import Env, env_materials, export, shoot, space_world, rock_detail,
 from kit import T, R as Rot
 
 def Rz(a): return Matrix.Rotation(a, 4, 'Z')
+DETAIL = True  # v15 detail pass (surface pipes/vents, hanging pendants, scaffolds, bigger rock crystals)
 
 class St(Env):
     def lbox(self, M, c, size, mat, ch=0.0):
@@ -33,7 +34,12 @@ class St(Env):
                     if r.random() < 0.7: self.lbox(M, (-w / 2 + (i + 0.5) * w / n, sy * (l / 2 + 0.02), -h * 0.05), (w / n * 0.5, 0.05, h * 0.14), W)
         for k in range(red):
             sx = 1 if k % 2 == 0 else -1; self.lbox(M, (sx * (w / 2 + 0.03), 0, -h * 0.3), (0.05, l * 0.7, 0.1), R)
-        for _ in range(greeb):
+        if DETAIL and l > 1.2:  # v15: pipe run along one long side + roof vents
+            sx = 1 if r.random() < 0.5 else -1
+            p0 = M @ Vector((sx * (w / 2 + 0.1), -l / 2 + 0.15, h * 0.32)); p1 = M @ Vector((sx * (w / 2 + 0.1), l / 2 - 0.15, h * 0.32))
+            self.tube(tuple(p0), tuple(p1), 0.07, P, 6)
+            for k in range(2): self.lbox(M, (r.uniform(-w, w) * 0.25, r.uniform(-l, l) * 0.25, h / 2 + 0.12), (0.22, 0.22, 0.24), D, ch=0.03)
+        for _ in range(greeb + (2 if DETAIL else 0)):
             gw, gl, gh = r.uniform(0.2, 0.6) * w * 0.4, r.uniform(0.2, 0.6) * l * 0.4, r.uniform(0.1, 0.4)
             self.lbox(M, (r.uniform(-w, w) * 0.32, r.uniform(-l, l) * 0.32, h / 2 + gh / 2), (gw, gl, gh), r.choice((H, D, P)), ch=0.03)
     def hub(self, c, rad, h, seg=8, win_rows=(0.35,), bands=(-0.3, 0.15)):
@@ -90,6 +96,11 @@ class St(Env):
             for k in range(2):
                 gw = r.uniform(0.2, 0.45) * w; self.lbox(M, (w * 0.25, r.uniform(-0.35, 0.35) * seglen, h / 2 + 0.11 + 0.15), (gw, gw * 1.4, 0.3), r.choice((H, D)), ch=0.04)
             self.lbox(M, (0, 0, -h / 2 - 0.15), (w * 0.6, seglen * 0.6, 0.3), D)
+        if DETAIL:  # v15: hanging pendants under the ring (concept: structures hang below every deck)
+            for i in range(0, n, 2):
+                a = 2 * math.pi * (i + 0.5) / n; px, py = math.cos(a) * Rr, math.sin(a) * Rr; ll = 0.9 + (i % 3) * 0.5
+                self.tube((px, py, z - h / 2), (px, py, z - h / 2 - ll), 0.16, D, 6); self.box((px, py, z - h / 2 - ll - 0.2), (0.45, 0.45, 0.4), H, ch=0.05)
+                if i % 4 == 0: self.empty('navR', (px, py, z - h / 2 - ll - 0.5), 0.7)
         for i in range(pods):
             a = 2 * math.pi * (i + 0.5) / pods
             M = T(math.cos(a) * (Rr + w * 0.15), math.sin(a) * (Rr + w * 0.15), z + h * 0.5) @ Rz(a)
@@ -102,6 +113,19 @@ class St(Env):
             self.tube((math.cos(a) * hubr, math.sin(a) * hubr, z), (math.cos(a) * (Rr - w / 2), math.sin(a) * (Rr - w / 2), z), 0.12, P, 6)
         for i in range(chase):
             a = 2 * math.pi * i / chase; self.empty('chase', (math.cos(a) * (Rr - w / 2 + 0.1), math.sin(a) * (Rr - w / 2 + 0.1), z + h / 2 + 0.35), 1.1)
+    def scaffold(self, c, w, l, z0, z1, legs=3, light=True):
+        """v15: under-deck support lattice: legs dropping from a deck into / below the rock, braced, with pendant lights."""
+        cx, cy = c; rr = self.rng
+        xs = [cx - w / 2 + w * i / (legs - 1) for i in range(legs)]; ys = [cy - l / 2 + l * i / (legs - 1) for i in range(legs)]
+        for x in xs:
+            for y in ys:
+                zb = z1 - rr.uniform(0, 0.8); self.beam((x, y, z0), (x, y, zb), 0.14, D)
+                if light and rr.random() < 0.3: self.box((x, y, zb - 0.1), (0.24, 0.24, 0.2), W)
+        for zz in (z0 - (z0 - z1) * 0.35, z0 - (z0 - z1) * 0.7):
+            for x in xs: self.beam((x, ys[0], zz), (x, ys[-1], zz), 0.08, D)
+            for y in ys: self.beam((xs[0], y, zz), (xs[-1], y, zz), 0.08, D)
+        self.box((cx, cy, z0 - 0.08), (w + 0.3, l + 0.3, 0.16), D, ch=0.03)
+        if light: self.empty('navR', (cx, cy, z1 - 0.5), 0.8)
     def turret_pad(self, c, r=2.0):
         cx, cy, cz = c
         self.lathe((cx, cy, cz - 0.4), [(r * 0.7, 0), (r, 0.25), (r, 0.6), (r * 0.9, 0.8)], D, 16)
@@ -156,7 +180,7 @@ def build(level):
     s.rock(ROCK[0], ROCK[1], 77, K, 4, 0.28, 7, pits=6)
     for d in ((-0.4, -0.6, 0.65), (-0.9, 0.1, 0.4), (-0.5, 0.7, 0.5)):
         dv = Vector(d).normalized(); p = Vector(ROCK[0]) + Vector((dv.x * ROCK[1][0], dv.y * ROCK[1][1], dv.z * ROCK[1][2])) * 0.86
-        s.cluster(tuple(p), dv, 6, 1.4, X, 0.45)
+        s.gem_cluster(tuple(p), dv, 8, 2.4, 'hex', X, 0.45, 1.0) if DETAIL else s.cluster(tuple(p), dv, 6, 1.4, X, 0.45)
     # ---- L1 outpost refinery ----
     s.hub((0, 0, 0), 3.5, 4.2, 8, win_rows=(0.33, 0.12), bands=(-0.3, 0.14))
     s.lathe((0, 0, 2.1), [(2.9, 0), (2.5, 0.8), (1.6, 1.0)], D, 8)
@@ -179,6 +203,10 @@ def build(level):
     s.tube((-2.0, 0.0, 1.2), (-2.0, -3.6, 1.2), 0.15, P, 8); s.tube((-2.6, 1.4, 0.4), (1.8, 2.6, 0.4), 0.12, P, 8)
     s.empty('navr', (3.5, 0, 2.2), 1.0); s.empty('navg', (-3.5, 0, 2.2), 1.0)
     objs = []
+    if DETAIL:  # v15: hanging structures under the hub + module, pipe bundle
+        s.scaffold((-3.9, -2.6), 3.2, 3.2, -1.7, -4.2, 3)
+        s.spire((1.6, 1.2, -2.0), 2.4, 0.55, 2, 0.8, light='navR', down=True)
+        for k in range(3): s.tube((-1.6 + k * 0.3, 2.2, 0.6), (-1.6 + k * 0.3, 4.0, -0.6), 0.09, P if k % 2 else D, 6)
     if level >= 2:  # ---- solar refinery ----
         s.solar((3.4, 1.0), (12.9, 1.0), 1.0, 3, light='navg'); s.solar((-3.4, 1.0), (-12.9, 1.0), 1.0, 3, light='navr')
         s.module(T(3.6, 2.8, -0.3), 2.6, 2.4, 2.0, red=1)
@@ -192,6 +220,12 @@ def build(level):
         rg = St('spin_ring', 5.0, seed=7)
         rg.seg_ring(0, 10, 16, 1.9, 1.1, pods=6, spokes=6, hubr=3.6, chase=24)
         objs.append(pivot('spin_ring', rg, (0, 0, -1.2)))
+    if level >= 3 and DETAIL:
+        for (x, y) in ((4.5, -3.8), (-1.0, 5.2)): s.scaffold((x, y), 2.6, 2.2, -1.5, -3.6, 2)
+    if level >= 4 and DETAIL:  # scaffolds under the floating yard / tank deck / ore heap, a second deck level
+        s.scaffold((10.5, 1.0), 3.0, 4.4, -1.85, -4.4, 3); s.scaffold((7.2, 10.0), 3.4, 2.0, -2.05, -4.0, 2); s.scaffold((11.0, 5.8), 2.4, 1.8, -1.95, -3.6, 2)
+        s.box((9.0, -1.4, -0.6), (2.4, 2.6, 0.25), D, ch=0.04); s.module(T(9.0, -1.4, 0.2), 1.6, 1.8, 1.2, red=1, greeb=2)
+        s.gem_cluster((11.2, -3.6, -1.2), (0, 0, 1), 7, 1.8, 'hex', G, 0.45, 1.0)
     if level >= 4:  # ---- orbital works: cranes, container yard, tanks, crystal pile, hab pods ----
         for i, (x, y, h) in enumerate(((-6.5, 4.5, 9), (7.5, 6.5, 8), (8.5, -6.5, 7))):
             s.crane_tower(x, y, h); objs.append(pivot(f'crane_{i}', jib(f'jib_{i}', rng), (x, y, h - 1.3)))
@@ -224,6 +258,9 @@ def build(level):
         s.lathe((-4.5, 6.5, 0.0), [(0.9, 0), (0.6, 2.6)], D, 8); s.dish((-4.5, 6.5, 3.4), 2.4, 0.9, (0.5, 0.3, 0.8), P, 20)
         for sx in (-1, 1): s.turret_pad((sx * 10, -9, 0.2))
         s.solar((-2.0, 3.5), (-2.0, 15.0), 3.0, 3, light='navw'); s.solar((2.0, 3.5), (12.5, 13.0), 3.0, 2)
+    if level >= 5 and DETAIL:  # hanging spires under the industrial hub + antenna clusters
+        for (x, y) in ((2.5, 2.5), (-2.0, -2.4), (-10.5, -4.0)): s.spire((x, y, -1.6), 2.6, 0.6, 2, 0.8, light='navR', down=True)
+        for k in range(4): s.tube((-4.0 + k * 0.35, 7.4, 0.0), (-4.0 + k * 0.35, 7.4, 2.0 + k * 0.6), 0.04, D, 4)
     if level >= 6:  # ---- frontier citadel: outer ring, beacon, hanging spire ----
         s.seg_ring(-2.2, 19, 28, 2.6, 1.5, pods=8, spokes=8, hubr=4.0)
         for i in range(8):
@@ -253,3 +290,4 @@ if __name__ == '__main__':
             for o in objs:
                 if o.name.startswith('crane_'): o.rotation_euler = (0, 0, random.Random(o.name).uniform(-1.2, 1.2))
             shoot([ob], os.path.join(SHOTS, f'station-l{lv}.png'), view=(0.55, -0.75, 0.55), res=(1280, 800), samples=32, dist=0.4 if lv >= 3 else 0.5, key=(0.4, -1.0, 0.9))
+            if '--low' in sys.argv: shoot([ob], os.path.join(SHOTS, f'station-l{lv}-low.png'), view=(0.6, -0.78, 0.1), res=(1280, 800), samples=32, dist=0.42 if lv >= 3 else 0.52, key=(0.4, -1.0, 0.5))
