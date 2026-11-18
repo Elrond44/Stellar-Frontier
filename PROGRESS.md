@@ -141,5 +141,6 @@ Brief: ../briefs/camera-controls.txt (written for a fantasy RPG; mapped to the s
 - [x] Settings: CAMERA & CONTROLS card (style, reset/recenter, 3 sensitivity sliders, invert Y/X, zoom & rotation smoothing, follow, look-ahead, max zoom-out, pitch limits, auto-framing, auto-rotate, collision, fade, camera-relative, joystick mode/size/dead zone/area, twist, key bindings, defaults). Stored in settings.cam (camctl.js sanitizeCam migrates/repairs); current yaw/pitch/zoom persist.
 - [x] Radar turns with the camera (radar-up = screen-up, N marker when rotated); cinematic lens pass sized along the camera right axis (fixes a grey-screen bug at rotated views); streaming radius widens at low pitch.
 - [x] tests/v13cam.js (15 criteria, CDP multitouch, wheel, right-drag, keys, settings UI, reload persistence, migration) + tests/v13shots.js. WIP commit 91a2e6b.
-- [ ] Final full v13cam run, old suites (smoke, smoke5, compat, v8, v9, blender_ingame, blender_viewer, registry, yardcheck, live10)
-- [ ] Cache-bust ?v=13, README v13 section, merge to main, push, live check, shots/v13
+- [x] Final v13cam run 50/50 ALL PASS (tests/v13cam.last.log); old suites smoke, smoke5, compat, v8, v9, blender_ingame, blender_viewer, registry, yardcheck, live10 all PASS
+- [x] Cache-bust ?v=13, README v13 section, shots/v13 (presets, rotated, zoomed in/out, occlusion, settings)
+- [ ] merge to main, push, live check
