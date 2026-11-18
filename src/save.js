@@ -1,11 +1,11 @@
 // Save system: versioned state, migration, validation, manual slots, export/import codes
-import { MINERAL_KEYS, UPGRADES, TIERS } from './data.js?v=10';
-import { HULLS, LEGACY_TIER_HULL } from './hulls.js?v=10';
-import { TEMPLATES, LEGACY, makeItem, RARITIES } from './items.js?v=10';
-import { SKILL_BY_ID } from './rpg.js?v=10';
-import { SECTOR_BY_ID, freshGalaxy, legacyOutpost, FACTION_KEYS } from './galaxy.js?v=10';
-import { freshWar } from './war.js?v=10';
-import { MTYPES, freshMissions } from './missions.js?v=10';
+import { MINERAL_KEYS, UPGRADES, TIERS } from './data.js?v=11';
+import { HULLS, LEGACY_TIER_HULL } from './hulls.js?v=11';
+import { TEMPLATES, LEGACY, makeItem, RARITIES } from './items.js?v=11';
+import { SKILL_BY_ID } from './rpg.js?v=11';
+import { SECTOR_BY_ID, freshGalaxy, legacyOutpost, FACTION_KEYS } from './galaxy.js?v=11';
+import { freshWar } from './war.js?v=11';
+import { MTYPES, freshMissions } from './missions.js?v=11';
 
 export const SAVE_VERSION = 8; // v8 = hull classes (s.hull + owned s.hulls replace the 5 tiers; T1..T5 map to Scout/Strike Fighter/Gunship/Cruiser/Battlecruiser); v7 = shake level (full/reduced/off), frame cap, notification settings; v6 = flight-assist setting (physics overhaul); v3 builds still wrote v2 (audio settings were additive); v5 = campaign (stages, war, missions, bosses)
 export const INV_CAP = 48;

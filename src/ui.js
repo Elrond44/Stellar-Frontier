@@ -1,18 +1,18 @@
 // HUD, joystick, radar and menus (DOM overlay)
-import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=10';
-import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=10';
-import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=10';
-import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=10';
-import { factionStats, WAR_LEVELS, allied } from './war.js?v=10';
-import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=10';
-import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=10';
-import { INV_CAP } from './save.js?v=10';
-import { fmt, clamp } from './util.js?v=10';
-import { FloatText } from './fx.js?v=10';
-import { Preview } from './preview.js?v=10';
-import { HULLS, HULL_IDS, UNIT_M } from './hulls.js?v=10';
-import { PRESETS } from './quality.js?v=10';
-import { PHEN } from './phenomena.js?v=10';
+import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=11';
+import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=11';
+import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=11';
+import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=11';
+import { factionStats, WAR_LEVELS, allied } from './war.js?v=11';
+import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=11';
+import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=11';
+import { INV_CAP } from './save.js?v=11';
+import { fmt, clamp } from './util.js?v=11';
+import { FloatText } from './fx.js?v=11';
+import { Preview } from './preview.js?v=11';
+import { HULLS, HULL_IDS, UNIT_M } from './hulls.js?v=11';
+import { PRESETS } from './quality.js?v=11';
+import { PHEN } from './phenomena.js?v=11';
 
 const $ = (id) => document.getElementById(id);
 // v8: shipyard cards are cropped straight from the Stellar Odyssey concept sheet (art/ship-concepts.jpg, 1536x1024)

@@ -1,7 +1,7 @@
 // v7: staged destruction for stations, pirate bases and capital ships.
 // A dying structure is handed over here instead of vanishing: its systems fail, modules chain-explode and
 // shed chunks, the frame buckles and sinks, the reactor overloads (telegraphed blast) and the core breaches.
-import { ensureDamage, releaseDamage } from './vfx.js?v=10';
+import { ensureDamage, releaseDamage } from './vfx.js?v=11';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const TAU = Math.PI * 2;

@@ -7,26 +7,37 @@
 <title>Stellar Frontier · Fleet Registry (true scale)</title>
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
 <style>
-  html,body{margin:0;height:100%;background:#03060d;color:#cfe3ff;font:600 13px/1.3 system-ui,sans-serif;overflow:hidden}
-  canvas{display:block;width:100%;height:100%}
-  #hdr{position:absolute;left:16px;top:10px;letter-spacing:.12em}
-  #hdr h1{margin:0;font-size:22px;color:#e8f2ff}#hdr small{color:#7fa3cc}
-  .lbl{position:absolute;transform:translate(-50%,0);text-align:center;white-space:nowrap;text-shadow:0 1px 3px #000;pointer-events:none}
-  .lbl b{display:block;color:#fff;font-size:12px}.lbl i{font-style:normal;color:#8fb4dd;font-size:10px}
+  html,body{margin:0;height:100%;background:#03060d;color:#cfe3ff;font:600 13px/1.3 system-ui,sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+  canvas{display:block;width:100%;height:100%;touch-action:manipulation}
+  #hdr{position:absolute;left:12px;top:8px;right:12px;letter-spacing:.1em;pointer-events:none}
+  #hdr h1{margin:0;font-size:clamp(14px,2.2vw + 6px,22px);color:#e8f2ff;line-height:1.15}
+  #hdr small{display:block;color:#7fa3cc;font-size:clamp(10px,.7vw + 7px,13px);letter-spacing:.06em;margin-top:2px}
   #cls{position:absolute;inset:0;pointer-events:none}
-  .ct{position:absolute;color:#9fc6ff;font-size:12px;letter-spacing:.14em;border-bottom:1px solid #2b4a74;padding-bottom:2px}
+  #lead{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .lbl{position:absolute;left:0;top:0;text-align:center;white-space:nowrap;text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:auto;cursor:pointer;padding:1px 4px;border-radius:5px;box-sizing:border-box}
+  .lbl:hover,.lbl.sel{background:rgba(40,80,140,.45);outline:1px solid #4f86c8}
+  .lbl b{display:block;color:#fff;font-size:var(--fs1,12px)}.lbl i{display:block;font-style:normal;color:#8fb4dd;font-size:var(--fs2,10px)}
+  .lbl.cat{white-space:normal;overflow:hidden}
+  #card{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);width:min(92vw,360px);box-sizing:border-box;padding:12px 14px;border-radius:12px;background:rgba(8,18,34,.94);border:1px solid #2f5d93;box-shadow:0 6px 24px #000a;display:none;z-index:5;cursor:pointer}
+  #card h2{margin:0 0 2px;font-size:17px;color:#fff;letter-spacing:.06em}#card .r{color:#8fb4dd;font-size:12px}
+  #card dl{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:3px 10px;margin:8px 0 6px;font-size:12px}#card dt{color:#7fa3cc}#card dd{margin:0;color:#e8f2ff}
+  #card p{margin:4px 0 0;font-size:12px;font-weight:500;color:#b9d0ee}#card .x{position:absolute;right:10px;top:8px;color:#7fa3cc;font-size:16px}
+  #hint{position:absolute;right:10px;bottom:8px;color:#5f84b0;font-size:11px;pointer-events:none}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="hdr"><h1>STELLAR FRONTIER · FLEET REGISTRY</h1><small>All fifteen hulls at true relative scale · 1 grid square = 50 m</small></div>
+<svg id="lead"></svg>
+<div id="hdr"><h1>STELLAR FRONTIER · FLEET REGISTRY</h1><small id="sub"></small></div>
 <div id="cls"></div>
+<div id="card"></div>
+<div id="hint"></div>
 <script type="module">
 import * as THREE from 'three';
-import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=10';
-import { makeFlames, animateNavLights } from './src/models.js?v=10';
-import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer } from './src/glbhulls.js?v=10';
-import { skyEnv } from './src/shiplight.js?v=10';
+import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=11';
+import { makeFlames, animateNavLights } from './src/models.js?v=11';
+import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer } from './src/glbhulls.js?v=11';
+import { skyEnv } from './src/shiplight.js?v=11';
 if (GLB.enabled) { try { await preloadGlbHulls(); } catch (e) { /* procedural fallback */ } }
 const q = new URLSearchParams(location.search); const mode = q.get('mode') || 'lineup';
 const canvas = document.getElementById('c'); const R = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -38,44 +49,112 @@ scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x2a1830, 0.75)); const key = new 
 if (TEX.enabled) { setTexRenderer(R); try { await preloadTex('full'); } catch (e) { /* untextured fallback */ } scene.environment = skyEnv(R, null, 1.1); scene.environmentIntensity = 1.0; rim.intensity = 2.2; } // blender-tex: registry shows the full textured set
 { const g = new THREE.BufferGeometry(); const n = 2500, p = new Float32Array(n * 3); for (let i = 0; i < n; i++) { p[i * 3] = (Math.random() - 0.5) * 3000; p[i * 3 + 1] = -200 - Math.random() * 300; p[i * 3 + 2] = (Math.random() - 0.5) * 3000; } g.setAttribute('position', new THREE.BufferAttribute(p, 3)); scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9fb8ff, size: 1.6, sizeAttenuation: false }))); }
 const camera = new THREE.PerspectiveCamera(30, 1, 1, 5000); const ships = []; const labels = []; window.READY = false;
+const root = new THREE.Group(); scene.add(root); let grid = null;
 function place(id, scheme, x, z, yaw = Math.PI / 2, tilt = 0) {
   const b = buildHull(id, { scheme, turrets: 'enemy', tex: 'full' }); const g = b.group; g.position.set(x, 0, z); g.rotation.set(tilt, yaw, 0, 'YXZ');
   const fl = makeFlames(b.engines, b.engColor); fl.mat.uniforms.uPower.value = 0.8; for (const f of fl.flames) { f.mesh.scale.set(1, 1, f.r * 3); f.core.scale.set(1, 1, f.r * 1.6); f.sprite.scale.setScalar(f.r * 3.2); } g.add(fl.group);
-  scene.add(g); ships.push({ g, b, fl }); return b;
+  root.add(g); const s = { g, b, fl, id }; ships.push(s); return s;
 }
-const lbl = (txt, sub, x, y, z) => labels.push({ txt, sub, v: new THREE.Vector3(x, y, z) });
+const fmt = (n) => n.toLocaleString('en-US');
+const lbl = (o) => labels.push(o);
+const hdr = document.getElementById('hdr'), sub = document.getElementById('sub'), box = document.getElementById('cls'), lead = document.getElementById('lead'), card = document.getElementById('card'), hint = document.getElementById('hint');
+const small = () => Math.min(innerWidth, innerHeight) < 560; // phones (portrait or landscape)
+// ---- detail card (tap a label or a hull)
+function showCard(id) { const H = HULLS[id]; if (!H) return; document.querySelectorAll('.lbl').forEach((e) => e.classList.toggle('sel', e.dataset.id === id));
+  card.innerHTML = `<span class="x">✕</span><h2>${H.name}</h2><div class="r">${H.cls[0].toUpperCase() + H.cls.slice(1)} class · ${H.role}</div>
+  <dl><dt>Length</dt><dd>${fmt(H.len * UNIT_M)} m</dd><dt>Beam</dt><dd>${fmt(Math.round(H.beam * UNIT_M))} m</dd><dt>Scale</dt><dd>${(H.len / HULLS.scout.len).toFixed(H.len / HULLS.scout.len < 10 ? 1 : 0)}× Scout</dd><dt>Rank</dt><dd>${H.rank}</dd>
+  <dt>Hull</dt><dd>${fmt(H.hp)}</dd><dt>Cargo</dt><dd>${fmt(H.cargo)}</dd><dt>Hardpoints</dt><dd>${H.slots}</dd><dt>Speed</dt><dd>×${H.speed}</dd></dl><p>${H.desc || ''}</p>`; card.style.display = 'block'; }
+function hideCard() { card.style.display = 'none'; document.querySelectorAll('.lbl.sel').forEach((e) => e.classList.remove('sel')); }
+card.addEventListener('click', hideCard);
+box.addEventListener('click', (e) => { const el = e.target.closest('.lbl'); if (el) { e.stopPropagation(); card.style.display === 'block' && el.classList.contains('sel') ? hideCard() : showCard(el.dataset.id); } });
+const ray = new THREE.Raycaster(); canvas.addEventListener('click', (e) => { if (mode === 'catalog') { const G = catGrid(); const i = Math.floor(e.clientX / G.cw) + Math.floor((e.clientY - G.top) / G.ch) * G.cols; return e.clientY > G.top && HULL_IDS[i] ? showCard(HULL_IDS[i]) : hideCard(); } if (mode !== 'lineup') return; const p = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -e.clientY / innerHeight * 2 + 1); ray.setFromCamera(p, camera);
+  let best = null, bd = 1e9; for (const s of ships) { if (!s.id) continue; const h = ray.intersectObject(s.g, true)[0]; if (h && h.distance < bd) { bd = h.distance; best = s; } }
+  if (!best) { // tiny hulls: nearest screen box within 24px
+    for (const s of ships) { const r = s.sb; if (!r) continue; const dx = Math.max(r.l - e.clientX, 0, e.clientX - r.r), dy = Math.max(r.t - e.clientY, 0, e.clientY - r.b); const d = Math.hypot(dx, dy); if (d < 24 && d < bd) { bd = d; best = s; } } }
+  best ? showCard(best.id) : hideCard(); });
+// ---- screen-space helpers
+const V = new THREE.Vector3(); const BX = new THREE.Box3();
+function screenBox(obj) { if (obj.isBox3) BX.copy(obj); else BX.setFromObject(obj); const r = { l: 1e9, t: 1e9, r: -1e9, b: -1e9 }; for (let i = 0; i < 8; i++) { V.set(i & 1 ? BX.max.x : BX.min.x, i & 2 ? BX.max.y : BX.min.y, i & 4 ? BX.max.z : BX.min.z).project(camera);
+  const x = (V.x * 0.5 + 0.5) * innerWidth, y = (-V.y * 0.5 + 0.5) * innerHeight; r.l = Math.min(r.l, x); r.r = Math.max(r.r, x); r.t = Math.min(r.t, y); r.b = Math.max(r.b, y); } return r; }
+const hit = (a, b, m = 0) => a.l < b.r + m && a.r > b.l - m && a.t < b.b + m && a.b > b.t - m;
+const ovl = (a, b) => Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l)) * Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t));
+function rectGap(a, b) { const dx = Math.max(a.l - b.r, 0, b.l - a.r), dy = Math.max(a.t - b.b, 0, b.t - a.b); return Math.hypot(dx, dy); }
+// fit the camera so the world box fills the free area (below the header) with a margin; keeps the 3/4 overhead view
+function fitCamera(wb, dir, fill) { const top = hdr.getBoundingClientRect().bottom + 6; const W = innerWidth, H = innerHeight; const c = wb.getCenter(new THREE.Vector3()); const n = dir.clone().normalize();
+  camera.aspect = W / H; camera.updateProjectionMatrix(); let d = wb.getSize(new THREE.Vector3()).length() * 2, ox = 0, oy = 0;
+  const measure = () => { camera.position.copy(c).addScaledVector(n, d); camera.lookAt(c); camera.updateMatrixWorld(); camera.setViewOffset(W, H, ox, oy, W, H); return screenBox(wb); };
+  for (let it = 0; it < 8; it++) { let r = measure(); d *= Math.max((r.r - r.l) / (W * fill[0]), (r.b - r.t) / ((H - top) * fill[1])); r = measure(); ox += (r.l + r.r) / 2 - W / 2; oy += (r.t + r.b) / 2 - (top + H) / 2; }
+  measure(); }
+// ---- label placement: each label is tried at spots around its hull, nearest first; hulls, the header, other labels and the screen edge are obstacles
+function layoutLabels() { box.innerHTML = ''; lead.innerHTML = ''; const W = innerWidth, H = innerHeight; const sm = small();
+  document.documentElement.style.setProperty('--fs1', (sm ? Math.max(10, Math.min(12, W / 34)) : Math.max(11, Math.min(14, W / 100))) + 'px'); document.documentElement.style.setProperty('--fs2', (sm ? 9.5 : Math.max(10, Math.min(12, W / 120))) + 'px');
+  const els = labels.map((L) => { const e = document.createElement('div'); e.className = 'lbl'; e.dataset.id = L.id; e.innerHTML = `<b>${L.txt}</b>` + (L.keepSub ? `<i>${L.sub}</i>` : sm ? (L.subS ? `<i>${L.subS}</i>` : '') : L.role ? `<i>${L.subS} · ${L.role}</i>` : (L.sub ? `<i>${L.sub}</i>` : '')); box.appendChild(e); return e; });
+  const hb = hdr.getBoundingClientRect(); const hr = { l: hb.left, t: 0, r: hb.left + Math.max(...[...hdr.children].map((c) => c.getBoundingClientRect().width)), b: hb.bottom };
+  const shipR = ships.map((s) => { s.sb = screenBox(s.g); return s.sb; });
+  const placed = [hr]; const M = 3; let svg = '';
+  // big hulls first is wrong: small ones have least room. Place in order of screen size, smallest first.
+  const order = labels.map((L, i) => i).sort((a, b) => { const A = labels[a].ship ? labels[a].ship.sb : null, B = labels[b].ship ? labels[b].ship.sb : null; return (A ? (A.r - A.l) * (A.b - A.t) : 0) - (B ? (B.r - B.l) * (B.b - B.t) : 0); });
+  for (const i of order) { const L = labels[i], e = els[i]; const w = e.offsetWidth, h = e.offsetHeight; const a = L.ship ? L.ship.sb : (() => { V.copy(L.v).project(camera); const x = (V.x * 0.5 + 0.5) * W, y = (-V.y * 0.5 + 0.5) * H; return { l: x, r: x, t: y, b: y }; })();
+    const ax = (a.l + a.r) / 2, ay = (a.t + a.b) / 2; let best = null, bc = 1e18;
+    const tryAt = (x, y) => { const r = { l: x, t: y, r: x + w, b: y + h }; if (r.l < 2 || r.t < 2 || r.r > W - 2 || r.b > H - 2) return; let pen = 0;
+      for (const p of placed) if (hit(r, p, M)) return; for (const s of shipR) pen += ovl(r, { l: s.l - 2, t: s.t - 2, r: s.r + 2, b: s.b + 2 });
+      const g = rectGap(r, a); const cx = (r.l + r.r) / 2 - ax; const cost = g * g * 1.0 + pen * 40 + (L.ship && r.t > a.b - 1 ? 0 : 30) + Math.abs(cx) * 0.15; if (cost < bc) { bc = cost; best = r; } };
+    // preferred: centred directly below / above, then a ring search
+    tryAt(ax - w / 2, a.b + 2); tryAt(ax - w / 2, a.t - h - 2); tryAt(a.r + 4, ay - h / 2); tryAt(a.l - w - 4, ay - h / 2);
+    if (!best || bc > 400) { const step = 5; for (let ry = -170; ry <= 170; ry += step) for (let rx = -200; rx <= 200; rx += step) tryAt(ax - w / 2 + rx, (ry >= 0 ? a.b + 2 : a.t - h - 2) + ry); }
+    if (!best) { // nowhere free: least overlap on screen
+      let bo = 1e18; for (let y = 2; y < H - h - 2; y += 6) for (let x = 2; x < W - w - 2; x += 6) { const r = { l: x, t: y, r: x + w, b: y + h }; let o = 0; for (const p of placed) o += ovl(r, p); o = o * 1000 + rectGap(r, a); if (o < bo) { bo = o; best = r; } } }
+    e.style.transform = `translate(${Math.round(best.l)}px,${Math.round(best.t)}px)`; placed.push(best); L.rect = best;
+    const g = rectGap(best, a); if (L.ship && g > 7) { // leader line from the hull to the nearest edge of the label
+      const px = Math.min(Math.max(ax, best.l + 4), best.r - 4), py = ay < best.t ? best.t : ay > best.b ? best.b : (best.t + best.b) / 2; const ex = ax < best.l ? best.l : ax > best.r ? best.r : px;
+      const qx = Math.min(Math.max(ex, a.l), a.r), qy = Math.min(Math.max(py, a.t), a.b);
+      svg += `<line x1="${qx.toFixed(1)}" y1="${qy.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${py.toFixed(1)}" stroke="#6f9fd8" stroke-opacity=".75" stroke-width="1"/><circle cx="${qx.toFixed(1)}" cy="${qy.toFixed(1)}" r="2" fill="#9fd0ff"/>`; } }
+  lead.setAttribute('viewBox', `0 0 ${W} ${H}`); lead.innerHTML = svg; }
+let layout = () => {};
 if (mode === 'lineup') {
-  // rows like the sheet, every hull at true scale, noses pointing right
+  // rows like the sheet, every hull at true scale, noses pointing right. On a portrait phone the whole lineup turns 90° (noses up) so the 720 m Dreadnought runs down the long side of the screen.
   const rows = [['scout', 'interceptor', 'strike', 'bomber'], ['corvette', 'gunship', 'engineer', 'explorer'], ['frigate', 'destroyer', 'icarrier', 'cruiser'], ['battlecruiser', 'fleetcarrier'], ['dreadnought']];
-  let z = 0; const rowsW = rows.map((row) => row.reduce((w, id) => w + HULLS[id].len, 0) + (row.length - 1) * (HULLS[row[0]].rank <= 3 ? 22 : 14));
-  rows.forEach((row, ri) => { const gap = HULLS[row[0]].rank <= 3 ? 22 : 14; let x = -rowsW[ri] / 2; let rowH = 0; for (const id of row) rowH = Math.max(rowH, HULLS[id].beam); z += rowH / 2 + (ri ? 12 : 0);
-    row.forEach((id, k) => { const H = HULLS[id]; place(id, undefined, x + H.len / 2, z); const up = H.rank <= 3 && k % 2 === 1; lbl(H.name, `${H.len * UNIT_M} m · ${H.role}`, x + H.len / 2, 0, up ? z - H.beam / 2 - 9 : z + H.beam / 2 + 2); x += H.len + gap; });
-    z += rowH / 2 + 14; });
-  // frame the whole fleet (16:9 or whatever the viewport is)
-  const W = Math.max(...rowsW) + 30, D = z + 12; const zc = D / 2 - 6; const asp = innerWidth / innerHeight; const vfov = THREE.MathUtils.degToRad(30);
-  const need = Math.max(D / (2 * Math.tan(vfov / 2)), W / asp / (2 * Math.tan(vfov / 2))) * 1.1;
-  const grid = new THREE.GridHelper(1000, 100, 0x1e3456, 0x0f1c30); grid.position.set(0, -12, zc); scene.add(grid);
-  camera.position.set(0, need * 0.94, zc + need * 0.34); camera.lookAt(0, 0, zc + 4);
+  // hulls keep true scale; only the spacing between them flexes to the screen so every label has room next to its ship
+  const rowS = rows.map((row) => row.map((id) => { const H = HULLS[id]; const sh = place(id, undefined, 0, 0); lbl({ id, ship: sh, txt: H.name, sub: `${fmt(H.len * UNIT_M)} m · ${H.role}`, subS: `${fmt(H.len * UNIT_M)} m`, role: H.role }); return sh; }));
+  const rowLen = rows.map((row) => row.reduce((w, id) => w + HULLS[id].len, 0)); const rowBeam = rows.map((row) => Math.max(...row.map((id) => HULLS[id].beam)));
+  grid = new THREE.GridHelper(1000, 100, 0x1e3456, 0x0f1c30); grid.position.y = -12; scene.add(grid);
+  layout = () => { const W = innerWidth, H = innerHeight, top = hdr.getBoundingClientRect().bottom + 6, sm = small(); const asp = W / (H - top);
+    sub.textContent = sm ? 'All 15 hulls at true scale · grid = 50 m · tap a ship' : 'All fifteen hulls at true relative scale · 1 grid square = 50 m · click a ship for details';
+    const Wt = Math.max(...rowLen.map((l, i) => l + (rows[i].length - 1) * 14)); // the Dreadnought row sets the width
+    const sumB = rowBeam.reduce((a, b) => a + b, 0); const Dt = Wt / asp * (asp < 0.8 ? 0.8 : 0.9); const zg = Math.min(asp < 0.8 ? 90 : 40, Math.max(sm ? 16 : 24, (Dt - sumB) / (rows.length - 1)));
+    const D = sumB + zg * (rows.length - 1); const Wx = Math.max(Wt, D * asp * 0.94); // height-limited screens: use the spare width
+    let z = 0; rows.forEach((row, ri) => { const gap = row.length > 1 ? Math.min(Wx * 0.3, Math.max(14, (Wx - rowLen[ri]) / (row.length - 1))) : 0; const rw = rowLen[ri] + gap * (row.length - 1); let x = -rw / 2; z += rowBeam[ri] / 2;
+      row.forEach((id, k) => { const L = HULLS[id].len; rowS[ri][k].g.position.set(x + L / 2, 0, z); x += L + gap; }); z += rowBeam[ri] / 2 + zg; });
+    root.position.set(0, 0, -(z - zg) / 2); root.updateMatrixWorld(true);
+    fitCamera(new THREE.Box3().setFromObject(root), new THREE.Vector3(0, 0.94, 0.34), asp < 0.8 ? [0.9, 0.88] : sm ? [0.84, 0.8] : [0.86, 0.82]);
+    renderNow(); layoutLabels(); };
 } else if (mode === 'factions') {
   const ids = (q.get('hulls') || 'strike,gunship,frigate').split(','); const facs = ['federation', 'crimson', 'eclipse', 'iron', 'void', 'ashen'];
   const gap = 10, rowW = ids.reduce((w, id) => w + HULLS[id].len, 0) + gap * (ids.length - 1), rowS = Math.max(...ids.map((id) => HULLS[id].beam)) + 9; const x0 = -rowW / 2 + 12;
   facs.forEach((f, i) => { let x = x0; const z = i * rowS; ids.forEach((id) => { const H = HULLS[id]; const sid = FACTION_PAINT[f]; place(id, sid, x + H.len / 2, z, Math.PI / 2); x += H.len + gap; }); const LX = x0 - 22; const LZ = z - 2;
-    lbl(PAINT_NAMES[FACTION_PAINT[f]], f === 'federation' ? 'friendly patrols' : f + ' faction', LX, 0, LZ); });
-  { const W = rowW + 70, D = facs.length * rowS + 6, zc = (facs.length - 1) * rowS / 2; const asp = innerWidth / innerHeight; const tf = 2 * Math.tan(THREE.MathUtils.degToRad(15)); const need = Math.max(D / tf, W / asp / tf) * 1.08; camera.position.set(-6, need * 0.94, zc + need * 0.34); camera.lookAt(-6, 0, zc + 2); }
+    lbl({ id: '', txt: PAINT_NAMES[FACTION_PAINT[f]], sub: f === 'federation' ? 'friendly patrols' : f + ' faction', keepSub: true, v: new THREE.Vector3(LX, 0, LZ) }); });
+  layout = () => { const W = rowW + 70, D = facs.length * rowS + 6, zc = (facs.length - 1) * rowS / 2; const asp = innerWidth / innerHeight; const tf = 2 * Math.tan(THREE.MathUtils.degToRad(15)); const need = Math.max(D / tf, W / asp / tf) * 1.08;
+    camera.clearViewOffset(); camera.aspect = asp; camera.updateProjectionMatrix(); camera.position.set(-6, need * 0.94, zc + need * 0.34); camera.lookAt(-6, 0, zc + 2); camera.updateMatrixWorld(); sub.textContent = 'Faction paint schemes';
+    renderNow(); layoutLabels(); };
 } else if (mode === 'catalog') {
-  HULL_IDS.forEach((id, i) => { const b = place(id, q.get('scheme') || undefined, 0, 0, 2.35, 0); b.group.visible = false; });
-} else { const id = q.get('hull') || 'dreadnought'; const H = HULLS[id]; place(id, q.get('scheme') || undefined, 0, 0, 2.3, 0); const d = H.len * 1.25; camera.position.set(d * 0.55, d * 0.5, d * 0.75); camera.lookAt(0, 0, 0); }
-const box = document.getElementById('cls');
-function resize() { const w = innerWidth, h = innerHeight; R.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
-addEventListener('resize', resize); resize();
-let t = 0; function frame() { t += 1 / 60; for (const s of ships) { s.fl.mat.uniforms.uTime.value = t; animateNavLights(s.g, t); }
-  if (mode === 'catalog') { const W = innerWidth, Hh = innerHeight, cols = 4, rows = 4, cw = W / cols, ch = Hh / rows; R.setScissorTest(true); R.setClearColor(0x03060d); labels.length = 0;
-    ships.forEach((s, i) => { ships.forEach((o) => (o.g.visible = o === s)); const c = i % cols, r = Math.floor(i / cols); const x = c * cw, y = Hh - (r + 1) * ch; R.setViewport(x, y, cw, ch); R.setScissor(x, y, cw, ch);
-      const H = HULLS[HULL_IDS[i]]; const d = H.len * 1.9; camera.aspect = cw / ch; camera.updateProjectionMatrix(); camera.position.set(d * 0.62, d * 0.62, d * 0.7); camera.lookAt(0, 0, 0); R.render(scene, camera); });
-    R.setScissorTest(false); box.innerHTML = HULL_IDS.map((id, i) => { const H = HULLS[id]; const c = i % 4, r = Math.floor(i / 4); return `<div class="lbl" style="left:${(c + 0.5) * innerWidth / 4}px;top:${(r + 1) * innerHeight / 4 - 34}px"><b>${H.name}</b><i>${H.len * UNIT_M} m · ${H.role}</i></div>`; }).join(''); window.READY = true; if (!q.get('still')) requestAnimationFrame(frame); return; }
-  R.render(scene, camera);
-  box.innerHTML = labels.map((L) => { const v = L.v.clone().project(camera); return `<div class="lbl" style="left:${(v.x * 0.5 + 0.5) * innerWidth}px;top:${(-v.y * 0.5 + 0.5) * innerHeight}px"><b>${L.txt}</b><i>${L.sub}</i></div>`; }).join('');
-  window.READY = true; if (!q.get('still')) requestAnimationFrame(frame); }
+  const cs = HULL_IDS.map((id) => { const s = place(id, q.get('scheme') || undefined, 0, 0, 2.35, 0); s.g.visible = false; return s; });
+  layout = () => { sub.textContent = 'Each hull framed on its own (not to scale) · tap a hull for details'; renderNow(); };
+} else { const id = q.get('hull') || 'dreadnought'; const H = HULLS[id]; place(id, q.get('scheme') || undefined, 0, 0, 2.3, 0); layout = () => { const d = H.len * 1.25; camera.clearViewOffset(); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); camera.position.set(d * 0.55, d * 0.5, d * 0.75); camera.lookAt(0, 0, 0); hdr.style.display = 'none'; }; }
+// catalog grid: 3 columns on a portrait phone, 4 on squarer screens, 5 on wide ones; every cell frames its hull for the cell's own aspect
+function catGrid() { const W = innerWidth, H = innerHeight, asp = W / H; const cols = asp < 0.8 ? 3 : asp < 1.45 ? 4 : 5, rows = Math.ceil(HULL_IDS.length / cols); const top = Math.ceil(hdr.getBoundingClientRect().bottom + 4); return { W, H, cols, rows, top, cw: W / cols, ch: (H - top) / rows }; }
+function renderCatalog() { const G = catGrid(); R.setScissorTest(true); R.setClearColor(0x03060d); R.setViewport(0, 0, G.W, G.H); R.setScissor(0, 0, G.W, G.H); R.clear();
+  const lh = small() ? 30 : 36; camera.clearViewOffset();
+  ships.forEach((s, i) => { ships.forEach((o) => (o.g.visible = o === s)); const c = i % G.cols, r = Math.floor(i / G.cols); const x = c * G.cw, y = G.H - G.top - (r + 1) * G.ch + lh; const vh = G.ch - lh; R.setViewport(x, y, G.cw, vh); R.setScissor(x, y, G.cw, vh);
+    const H = HULLS[HULL_IDS[i]]; const ca = G.cw / vh; camera.aspect = ca; camera.updateProjectionMatrix(); const d = H.len * 1.65 * Math.max(1, 1.5 / ca); camera.position.set(d * 0.62, d * 0.62, d * 0.7); camera.lookAt(0, 0, 0); R.render(scene, camera); });
+  R.setScissorTest(false); ships.forEach((o) => (o.g.visible = false)); }
+function catLabels() { const G = catGrid(); const sm = small(); lead.innerHTML = '';
+  document.documentElement.style.setProperty('--fs1', (sm ? 11 : 12) + 'px'); document.documentElement.style.setProperty('--fs2', (sm ? 9.5 : 10) + 'px');
+  box.innerHTML = HULL_IDS.map((id, i) => { const H = HULLS[id]; const c = i % G.cols, r = Math.floor(i / G.cols); const lh = sm ? 30 : 36; return `<div class="lbl cat" data-id="${id}" style="width:${Math.floor(G.cw - 6)}px;height:${lh - 2}px;transform:translate(${Math.round(c * G.cw + 3)}px,${Math.round(G.top + (r + 1) * G.ch - lh)}px)"><b>${H.name}</b><i>${fmt(H.len * UNIT_M)} m${sm ? '' : ' · ' + H.role}</i></div>`; }).join(''); }
+function renderNow() { if (mode === 'catalog') renderCatalog(); else R.render(scene, camera); }
+function resize() { const w = innerWidth, h = innerHeight; R.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); layout(); if (mode === 'catalog') catLabels(); }
+let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 60); }); resize();
+// labels are laid out once per resize (the hulls do not move); the frame loop only animates engines and nav lights
+let t = 0; function frame() { t += 1 / 60; for (const s of ships) { s.fl.mat.uniforms.uTime.value = t; animateNavLights(s.g, t); } renderNow(); window.READY = true; if (!q.get('still')) requestAnimationFrame(frame); }
 frame();
 </script>
 </body>

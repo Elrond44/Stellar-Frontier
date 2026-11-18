@@ -109,3 +109,11 @@ Approved by Elrond (t28u): Dreadnought + Scout only, baked texture maps + lighti
 ## v10: Blender fleet live (main)
 - Merged blender-tex (blender-test + the opt-in texture test) into main. `GLB_DEFAULT = true` (Blender hulls are the default, `?hulls=proc` opts out), `TEX_DEFAULT = false` (textures only with `?tex=1`; models/tex/* is never fetched otherwise).
 - Cache-busters ?v=10 everywhere, glb ?v=bt4. lineup.html got a favicon link (the 404). About says v10. README/CREDITS updated.
+
+## v10.1: Fleet Registry readable on phones (main)
+- lineup.html: labels are laid out in screen space once per resize. Each label tries spots around its own hull (nearest first) and avoids the header, other labels, hulls and the screen edge; a leader line is drawn only when a label has to sit away from its ship.
+- Hulls stay at true scale; only the spacing between them flexes to the screen shape (taller rows on portrait phones, wider rows on height-limited screens).
+- Phones show compact labels (name + length); tap a label or a ship for a detail card (class, role, length, beam, ×Scout, rank, hull, cargo, hardpoints, speed, description). Fonts scale with the viewport.
+- Catalog mode (?mode=catalog): 3/4/5 columns by aspect, each cell framed for its own shape (was broken on portrait phones), labels inside their cells.
+- In-game shipyard checked at 390×844, 844×390 and 360×640: no overlapping or clipped text, no change needed.
+- Cache-busters ?v=11. Tests: tests/registry.js (overlap/on-screen/card/no-errors), tests/yardcheck.js.
