@@ -100,7 +100,7 @@ const ZONE_FS = {
       float sw = ang/6.2831853 + uTime*(0.22/(0.4+t*2.0)); float g;
       if (uHasD > 0.5) { vec3 d = texture2D(uDisc, vec2(sw, t)).rgb; vec3 d2 = texture2D(uDisc, vec2(sw*2.0 + 0.3, t*0.9 + 0.05)).rgb; g = d.r*0.8 + d2.g*0.5; }
       else { vec2 uv = vec2(sw*3.0, t*1.6 - uTime*0.05); g = texture2D(uTex, uv).r*0.6 + texture2D(uTex, uv*2.3 + 0.4).g*0.6; }
-      float heat = pow(1.0 - t, 1.8); vec3 col = mix(vec3(0.02,0.08,1.0), vec3(0.1,0.7,3.4), heat); col = mix(col, vec3(1.2,2.2,4.0), heat*heat*heat*0.5);
+      float heat = pow(1.0 - t, 1.8); vec3 col = mix(vec3(0.0,0.06,0.9), vec3(0.05,0.55,2.6), heat); col = mix(col, vec3(0.9,1.8,3.2), heat*heat*heat*0.5);
       float dop = 0.55 + 0.45*sin(ang + 0.6);
       float a = smoothstep(0.0, 0.05, t) * (1.0 - smoothstep(0.35, 1.0, t)) * (0.3 + 1.0*g) * (0.5 + 0.9*dop);
       gl_FragColor = vec4(col*a*0.3, 0.0); }`,
@@ -109,7 +109,7 @@ const ZONE_FS = {
       float arm = pow(0.5 + 0.5*sin(ang*2.0 - lr*5.0 + uTime*0.25), 4.0);
       float d = uHasD > 0.5 ? texture2D(uDisc, vec2(ang/6.2831853 + lr*0.3 - uTime*0.01, clamp(r, 0.0, 1.0))).r : 0.6;
       float fall = smoothstep(1.0, 0.25, r) * smoothstep(0.06, 0.18, r);
-      gl_FragColor = vec4(vec3(0.22,0.5,1.8)*arm*fall*(0.35 + 0.8*d)*0.2*uA, 0.0); }`,
+      gl_FragColor = vec4(vec3(0.04,0.22,1.6)*arm*fall*(0.35 + 0.8*d)*0.2*uA, 0.0); }`,
   ring: `uniform float uTime; uniform vec3 uCol; uniform float uA; uniform float uStripes; varying vec2 vL; varying vec2 vW;
     void main(){ float ang = atan(vL.y, vL.x); float dash = step(0.5, fract(ang*(uStripes > 0.5 ? 18.0 : 24.0)/6.2831 - uTime*0.08));
       vec3 c = uStripes > 0.5 ? mix(uCol, vec3(0.02,0.02,0.0), dash) : uCol*dash; float a = uStripes > 0.5 ? 1.0 : dash;
@@ -157,14 +157,14 @@ function buildZone(Z, quality) {
     if (SKY.enabled) { // v16: blue concept look (gameplay, horizon size and lens unchanged)
       U.uDisc = { value: null }; U.uHasD = { value: 0 };
       acc.material.dispose(); acc.material = halo.material = new THREE.ShaderMaterial({ ...LIGHTP, vertexShader: DISC_VS, fragmentShader: ZONE_FS.accretionB, uniforms: { uTex: U.uTex, uTime: U.uTime, uDisc: U.uDisc, uHasD: U.uHasD } });
-      ph.material.color.setRGB(1.6, 2.4, 4.0); const gm = V.parts[V.parts.length - 1].material; gm.premultipliedAlpha = true; gm.uniforms.uCol.value.setRGB(0.35, 0.75, 2.4); gm.uniforms.uA.value = 0.07;
-      const sp = new THREE.Mesh(DISC, new THREE.ShaderMaterial({ ...LIGHTP, vertexShader: DISC_VS, fragmentShader: ZONE_FS.bhspiral, uniforms: { uDisc: U.uDisc, uHasD: U.uHasD, uTime: U.uTime, uA: { value: 1 } } })); sp.position.y = -1.0; sp.scale.setScalar(H * 11); sp.rotation.y = 0.4; sp.renderOrder = 4; g.add(sp); V.spiral = sp;
+      ph.material.color.setRGB(1.6, 2.4, 4.0); const gm = V.parts[V.parts.length - 1].material; gm.premultipliedAlpha = true; gm.uniforms.uCol.value.setRGB(0.1, 0.45, 2.4); gm.uniforms.uA.value = 0.07;
+      const sp = new THREE.Mesh(DISC, new THREE.ShaderMaterial({ ...LIGHTP, vertexShader: DISC_VS, fragmentShader: ZONE_FS.bhspiral, uniforms: { uDisc: U.uDisc, uHasD: U.uHasD, uTime: U.uTime, uA: { value: 1 } } })); sp.position.y = -1.0; sp.scale.setScalar(H * 11); sp.rotation.y = 0.4; sp.renderOrder = 4; sp.name = 'bh-spiral'; g.add(sp); V.spiral = sp;
       if (quality !== 'low') { // polar jets: visible from the tilted cinematic angles, faded when seen end-on from above
         const jg = new THREE.CylinderGeometry(0.55, 0.1, 1, 20, 1, true); jg.translate(0, 0.5, 0);
         const jm = new THREE.ShaderMaterial({ ...LIGHTP, side: THREE.DoubleSide, uniforms: { uTime: U.uTime }, vertexShader: `varying vec2 vU; varying vec3 vN; varying vec3 vP; void main(){ vU = uv; vec4 w = modelMatrix*vec4(position,1.0); vP = w.xyz; vN = normalize(mat3(modelMatrix)*normal); gl_Position = projectionMatrix*viewMatrix*w; }`,
           fragmentShader: `uniform float uTime; varying vec2 vU; varying vec3 vN; varying vec3 vP; void main(){ vec3 V = normalize(cameraPosition - vP); float core = pow(abs(dot(normalize(vN), V)), 2.0); float side = smoothstep(0.25, 0.6, length(cross(vec3(0.0,1.0,0.0), V)));
             float along = pow(1.0 - vU.y, 1.4) * smoothstep(0.0, 0.04, vU.y); float fl = 0.75 + 0.25*sin(uTime*7.0 + vU.y*40.0); gl_FragColor = vec4(vec3(0.5,1.1,3.0)*core*along*fl*side*0.3, 0.0); }` });
-        for (const sgn of [1, -1]) { const j = new THREE.Mesh(jg, jm); j.scale.set(H * 0.28, H * 9 * sgn, H * 0.28); j.position.y = 0.5; j.rotation.set(0.22, 0, 0.1); j.renderOrder = 6; g.add(j); }
+        for (const sgn of [1, -1]) { const j = new THREE.Mesh(jg, jm); j.scale.set(H * 0.28, H * 9 * sgn, H * 0.28); j.position.y = 0.5; j.rotation.set(0.22, 0, 0.1); j.renderOrder = 6; j.name = 'bh-jet'; g.add(j); }
       }
     }
   }
