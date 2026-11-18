@@ -120,6 +120,31 @@ class Env(Ship):
         for i in range(n):
             dd = (d0 + Vector((rr.uniform(-1, 1), rr.uniform(-1, 1), rr.uniform(-1, 1))) * spread).normalized()
             L = size * rr.uniform(0.45, 1.0) * (1.3 if i == 0 else 1); self.crystal(Vector(base) + dd * size * 0.05, dd, L, L * rr.uniform(0.14, 0.22) * fat, mat)
+    # ---- v15 gems: sharp faceted crystal styles (concept rich rocks / ore pickups: blue hex, gold cubic, green emerald, purple amethyst)
+    def gem(self, base, d, length, rad, style='hex', mat=X):
+        base = Vector(base); d, u, v = frame(d); a0 = self.rng.uniform(0, 6.28)
+        if style == 'hex':  # long hexagonal prism, steep 6-face point
+            self._faces([self.ring_pts(base - d * rad * 0.5, rad * 0.92, 6, d, u, v, a0), self.ring_pts(base + d * length * 0.68, rad, 6, d, u, v, a0),
+                         self.ring_pts(base + d * length, rad * 0.02, 6, d, u, v, a0)], mat, True, True)
+        elif style == 'emerald':  # chunky octagonal prism, chamfered flat top (step-cut look)
+            self._faces([self.ring_pts(base - d * rad * 0.5, rad * 0.95, 8, d, u, v, a0), self.ring_pts(base + d * length * 0.78, rad, 8, d, u, v, a0),
+                         self.ring_pts(base + d * length * 0.92, rad * 0.78, 8, d, u, v, a0), self.ring_pts(base + d * length, rad * 0.5, 8, d, u, v, a0)], mat, True, True)
+        elif style == 'amethyst':  # short stubby point, 6 faces (geode druse)
+            self._faces([self.ring_pts(base - d * rad * 0.4, rad * 0.9, 6, d, u, v, a0), self.ring_pts(base + d * length * 0.35, rad, 6, d, u, v, a0),
+                         self.ring_pts(base + d * length, rad * 0.02, 6, d, u, v, a0)], mat, True, True)
+        else:  # 'cube': pyrite-like intergrown cubes
+            q = (d.to_track_quat('Z', 'Y') @ Matrix.Rotation(a0, 4, 'Z').to_quaternion()).to_matrix().to_4x4()
+            for k in range(2):
+                s_ = rad * (2.4 if k == 0 else 1.6); off = d * (s_ * 0.2 + k * rad * 1.1) + (u * rad * 0.6 if k else Vector())
+                M = Matrix.Translation(base + off) @ q @ Matrix.Rotation(0.5 * k + 0.3, 4, 'X')
+                self.box((0, 0, 0), (s_, s_, s_), mat, M=M)
+    def gem_cluster(self, base, d, n, size, style='hex', mat=X, spread=0.6, fat=1.0):
+        d0 = Vector(d).normalized(); rr = self.rng
+        for i in range(n):
+            dd = (d0 + Vector((rr.uniform(-1, 1), rr.uniform(-1, 1), rr.uniform(-1, 1))) * spread).normalized()
+            L = size * rr.uniform(0.5, 1.0) * (1.35 if i == 0 else 1)
+            w = {'hex': 0.2, 'emerald': 0.3, 'amethyst': 0.3, 'cube': 0.22}[style] * fat
+            self.gem(Vector(base) + dd * size * 0.04, dd, L, L * w * rr.uniform(0.8, 1.15), style, mat)
     def rock(self, c, radii, seed, mat=K, sub=3, amp=0.3, craters=4, pits=0, glow=None, glow_dent=None, facets=9, pitsmall=0):
         """displaced icosphere; glow(dir)->material override per face (veins/cracks)."""
         bm = self.bm; rnd = random.Random(seed); o = Vector((rnd.uniform(0, 50), rnd.uniform(0, 50), rnd.uniform(0, 50)))

@@ -62,15 +62,19 @@ def build(v, lod):
             d = Vector((rr.uniform(-1, 1), rr.uniform(-1, 1), rr.uniform(-0.3, 1))).normalized(); L = rr.uniform(0.16, 0.3)
             s.crystal(tuple(Vector((d.x * 0.92, d.y * 0.78, d.z * 0.72))), d, L, L * 0.55, N, seg=5)
     elif v == 'cavern': cavern(s, sub, seed)
-    else:  # crystal_a/b/c: rich rocks, crystal clusters erupting along the top ridge
-        k = 'abc'.index(v[-1]); s.rock((0, 0, 0), (1.15, 0.85, 0.75), seed, K, sub, 0.24, 3, pitsmall=ps // 2)
-        rr = random.Random(seed)
-        for c in range(6 + k):  # dense gem masses over the upper half (concept: crystals dominate the rich rocks)
-            d = Vector((rr.uniform(-1, 1) * 0.9, rr.uniform(-0.7, 0.7), rr.uniform(0.15, 1))).normalized()
-            s.cluster(Vector((d.x * 0.95, d.y * 0.7, d.z * 0.6)), d, 6, 0.6 + 0.08 * k + rr.uniform(0, 0.2), X, 0.5, fat=1.4)
+    else:  # crystal_a/b/c/d (v15): rich rocks encrusted with sharp gems, one style per mineral family
+        k = 'abcd'.index(v[-1]); style = ('hex', 'cube', 'amethyst', 'emerald')[k]
+        s.rock((0, 0, 0), (1.05, 0.82, 0.72), seed, K, sub, 0.24, 3, pitsmall=ps // 2); rr = random.Random(seed)
+        sites = 13 if lod == 'hi' else 8
+        for c in range(sites):  # gems dominate the upper two thirds (concept: rock barely visible under the crystals)
+            d = Vector((rr.uniform(-1, 1), rr.uniform(-1, 1) * 0.8, rr.uniform(-0.25, 1))).normalized()
+            p0 = Vector((d.x * 0.9, d.y * 0.68, d.z * 0.6))
+            size = {'hex': 0.75, 'cube': 0.75, 'amethyst': 0.6, 'emerald': 0.62}[style] * rr.uniform(0.75, 1.15)
+            n = {'hex': 5, 'cube': 3, 'amethyst': 11, 'emerald': 4}[style] if lod == 'hi' else {'hex': 3, 'cube': 2, 'amethyst': 4, 'emerald': 2}[style]
+            s.gem_cluster(p0, d, n, size, style, X, 0.5 if style != 'amethyst' else 0.35, 1.0)
     return s
 
-VARIANTS = ['lumpy_a', 'lumpy_b', 'porous', 'cavern', 'molten', 'veined', 'nugget', 'crystal_a', 'crystal_b', 'crystal_c']
+VARIANTS = ['lumpy_a', 'lumpy_b', 'porous', 'cavern', 'molten', 'veined', 'nugget', 'crystal_a', 'crystal_b', 'crystal_c', 'crystal_d']
 
 if __name__ == '__main__':
     from env_kit import reset
@@ -94,7 +98,7 @@ if __name__ == '__main__':
     if '--render' in sys.argv:
         space_world(1.0); from env_kit import rock_detail; rock_detail(1.0)
         # glow colour per showcase rock (in game it comes from the mineral)
-        tint = {'crystal_a': (0.3, 1.4, 3.6), 'nugget': (3.4, 2.0, 0.3), 'molten': (3.6, 1.0, 0.12), 'veined': (0.6, 3.4, 1.0), 'cavern': (2.2, 0.9, 3.6), 'crystal_b': (3.4, 2.4, 0.5), 'crystal_c': (2.4, 0.9, 3.6)}
+        tint = {'crystal_a': (0.3, 1.4, 3.6), 'nugget': (3.4, 2.0, 0.3), 'molten': (3.6, 1.0, 0.12), 'veined': (0.6, 3.4, 1.0), 'cavern': (2.2, 0.9, 3.6), 'crystal_d': (0.3, 3.6, 0.9), 'crystal_b': (3.4, 2.4, 0.5), 'crystal_c': (2.4, 0.9, 3.6)}
         lo = [o for n, o in objs.items() if n.endswith('_lo')]
         for o in lo: o.hide_render = True
         hi = [objs[v + '_hi'] for v in VARIANTS]
@@ -102,23 +106,24 @@ if __name__ == '__main__':
             ob = objs[v + '_hi']
             if v in tint:  # per-object glow copy of X
                 m = bpy.data.materials['X'].copy(); b = m.node_tree.nodes['Principled BSDF']; c = tint[v]; mx = max(c)
-                b.inputs['Emission Color'].default_value = (c[0] / mx, c[1] / mx, c[2] / mx, 1); b.inputs['Emission Strength'].default_value = 0.32 * mx; b.inputs['Base Color'].default_value = (c[0] / mx * 0.6, c[1] / mx * 0.6, c[2] / mx * 0.6, 1); b.inputs['Roughness'].default_value = 0.15
+                gem = v.startswith('crystal'); sat = lambda x: (x / mx) ** (2.2 if gem else 1)
+                b.inputs['Emission Color'].default_value = (sat(c[0]), sat(c[1]), sat(c[2]), 1); b.inputs['Emission Strength'].default_value = (0.07 if gem else 0.32) * mx; b.inputs['Base Color'].default_value = (sat(c[0]) * 0.85, sat(c[1]) * 0.85, sat(c[2]) * 0.85, 1); b.inputs['Roughness'].default_value = 0.06 if gem else 0.15
                 for j, sl in enumerate(ob.material_slots):
                     if sl.material and sl.material.name == 'X': ob.material_slots[j].link = 'OBJECT'; ob.material_slots[j].material = m
         # single shots
         for o in hi: o.hide_render = True
-        for v in (sys.argv[sys.argv.index('--only') + 1].split(',') if '--only' in sys.argv else VARIANTS):
+        for v in (sys.argv[sys.argv.index('--only') + 1].split(',') if '--only' in sys.argv else [] if '--sheets' in sys.argv else VARIANTS):
             ob = objs[v + '_hi']; ob.hide_render = False; ob.location = (0, 0, 0)
             shoot([ob], os.path.join(SHOTS, f'asteroid-{v}.png'), view=(0.3, -0.9, 0.4) if v == 'cavern' else (0.62, -0.55, 0.42), res=(800, 800), samples=32, dist=0.75)
             ob.hide_render = True
         # contact sheet: 5 x 2 grid
         for i, v in enumerate(VARIANTS):
-            ob = objs[v + '_hi']; ob.hide_render = False; ob.location = ((i % 5 - 2) * 2.9, 0, (1 - i // 5) * 2.7 - 1.35); ob.rotation_euler = (0.3, 0.2, i * 0.7)
-        shoot(hi, os.path.join(SHOTS, 'sheet-asteroids.png'), view=(0.0, -1, 0.12), res=(1600, 800), samples=40, dist=0.55, rad=6.6)
+            ob = objs[v + '_hi']; ob.hide_render = False; ob.location = ((i % 6 - 2.5) * 2.9, 0, (1 - i // 6) * 2.7 - 1.35); ob.rotation_euler = (0.3, 0.2, i * 0.7)
+        shoot(hi, os.path.join(SHOTS, 'sheet-asteroids.png'), view=(0.0, -1, 0.12), res=(1600, 800), samples=40, dist=0.55, rad=8.0)
 
         # crystal colour sheet: the rich rocks tinted like the concept's blue / gold / green / purple crystals
         for o in hi: o.hide_render = True
-        row = ['crystal_a', 'crystal_b', 'veined', 'crystal_c']
+        row = ['crystal_a', 'crystal_b', 'crystal_d', 'crystal_c']
         for i, v in enumerate(row):
             ob = objs[v + '_hi']; ob.hide_render = False; ob.location = ((i - 1.5) * 3.0, 0, 0); ob.rotation_euler = (0.25, 0.1, 0.4 + i * 0.5)
         shoot([objs[v + '_hi'] for v in row], os.path.join(SHOTS, 'sheet-crystals.png'), view=(0.0, -1, 0.3), res=(1600, 600), samples=40, dist=0.42, rad=6.2)

@@ -21,7 +21,7 @@ import { ExplosionManager, classify, PROFILES } from './explosions.js?v=14';
 import { HULLS, HULL_IDS, buildHull, ENEMY_HULL, FLAGSHIP_HULL, FACTION_PAINT, hullSegs, MAIN_PATH } from './hulls.js?v=14';
 import { HullLOD } from './lod.js?v=14';
 import { hideTurret } from './glbhulls.js?v=14';
-import { buildStationAny } from './glbenv.js?v=14';
+import { buildStationAny, buildInstGlb, instReady } from './glbenv.js?v=14';
 import { CAM_PRESETS, DEG, angDiff } from './camctl.js?v=14';
 import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=14';
 
@@ -122,7 +122,7 @@ export class Game {
     this.abil = { cd: {}, last: {} }; this.overT = this.surgeT = this.dashT = 0; this.fxCache = null;
     this.guards.clear(); if (this.pendingGuards) this.pendingGuards.clear();
     for (const b of this.bolts.list) b.dead = true; this.bolts.sync();
-    for (const o of this.minerals.list) { this.minerals.setHidden(o.idx); this.minerals.free.push(o.idx); } this.minerals.list.length = 0; this.minerals.mesh.instanceMatrix.needsUpdate = true;
+    this.minerals.clear();
     for (const a of this.field.list) a.alive = false; this.field.list.length = 0; this.field.chunks.clear(); this.field.depleted.clear(); this.field.guardRequests.length = 0;
     this.s = st; bindWorld(st.galaxy); this.camp.reset(); this.heat = 0; this.spawnT = 30; this.dead = false; this.autopilot = false; this.docked = false; this.dockT = 0;
     const p = this.player; p.x = st.pos.x; p.z = st.pos.z; p.vx = p.vz = 0; p.hp = undefined;
@@ -466,11 +466,13 @@ export class Game {
 
   // ---------- enemies ----------
   proto(type, fac, variant = '') {
-    const key = type + ':' + (fac || '') + ':' + variant;
+    const D0 = ENEMIES[type]; const ik = D0 && D0.inst ? type.slice(5) : null; const gi = ik && instReady(ik); // v15: Blender installation once its pack has loaded
+    const key = type + ':' + (fac || '') + ':' + variant + (gi ? ':glb' : '');
     if (!this.protos[key]) {
-      const D = ENEMIES[type]; const F = FACTIONS[fac]; let b;
+      const D = ENEMIES[type]; const F = FACTIONS[fac]; let b = gi ? buildInstGlb(ik, fac) : null;
       const hid = type === 'flagship' ? FLAGSHIP_HULL[variant || fac || 'crimson'] : ENEMY_HULL[type];
-      if (hid) b = buildHull(hid, { scheme: type === 'sentinel' ? FACTION_PAINT.sentinel : FACTION_PAINT[fac] || 'pirate', turrets: 'enemy' }); // v8: enemies fly the concept-sheet hulls at true scale in faction paint
+      if (b) { /* v15 glb installation (faction-tinted materials already applied) */ }
+      else if (hid) b = buildHull(hid, { scheme: type === 'sentinel' ? FACTION_PAINT.sentinel : FACTION_PAINT[fac] || 'pirate', turrets: 'enemy' }); // v8: enemies fly the concept-sheet hulls at true scale in faction paint
       else if (type === 'flagship') b = buildFlagship(variant || fac || 'crimson', F ? factionMats(fac, F.rgb, F.hull) : factionMats('crimson', [3.4, 0.4, 0.4], 0x3a1e22));
       else if (type === 'bpart') { b = buildBossPart(variant || 'core'); if (F) retint(b.group, fac, F.rgb, F.hull); }
       else if (D.inst && !['inst_core', 'inst_gen', 'inst_turret', 'inst_reactor', 'inst_hangar'].includes(type)) { b = buildInstallationV5(type.slice(5)); if (F) retint(b.group, fac, F.rgb, F.hull); }

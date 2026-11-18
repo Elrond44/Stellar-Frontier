@@ -10,15 +10,16 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from '../vendor/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
-import { materials, glowTexture, addStationDrones, buildStation } from './models.js?v=14';
+import { materials, glowTexture, addStationDrones, buildStation, factionMats, makeTurret } from './models.js?v=14';
+import { FACTIONS } from './galaxy.js?v=14';
 
 export const ENV_DEFAULT = true;
-export const ENV_VER = 'e1';
+export const ENV_VER = 'e2';
 const Q = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
 const q = Q.get('env');
 try { if (q === 'glb' || q === 'proc') localStorage.setItem('sf-env', q); } catch (e) { /* private mode */ }
 let stored = null; try { stored = localStorage.getItem('sf-env'); } catch (e) { /* */ }
-export const ENV = { enabled: q ? q === 'glb' : stored ? stored === 'glb' : ENV_DEFAULT, stations: {}, rocks: null, failed: {}, pending: {}, stats: {}, base: 'models/env/' };
+export const ENV = { enabled: q ? q === 'glb' : stored ? stored === 'glb' : ENV_DEFAULT, stations: {}, rocks: null, inst: null, rigs: null, pickups: null, failed: {}, pending: {}, stats: {}, base: 'models/env/' };
 
 let loader = null;
 function load(name, timeoutMs) {
@@ -52,9 +53,10 @@ export function loadRocks(timeoutMs = 20000) {
 export async function preloadEnv(level = 1) {
   if (!ENV.enabled) return ENV;
   const t0 = performance.now();
-  await Promise.all([loadRocks(), loadStation(level)]);
+  await Promise.all([loadRocks(), loadStation(level), loadPickups()]);
   ENV.stats.loadMs = Math.round(performance.now() - t0);
   if (level < 6) loadStation(level + 1);
+  loadInst(); loadRigs(); // v15: bases + mining rigs stream in (installations built before they arrive stay procedural)
   return ENV;
 }
 
@@ -181,7 +183,7 @@ export function buildStationAny(level, rockMat, onReady) {
 
 // ---------------- asteroids ----------------
 export const ROCK_BASE = ['lumpy_a', 'lumpy_b', 'porous', 'cavern', 'molten', 'veined', 'nugget'];
-export const ROCK_RICH = ['crystal_a', 'crystal_b', 'crystal_c'];
+export const ROCK_RICH = ['crystal_a', 'crystal_b', 'crystal_c', 'crystal_d'];
 // rock shapes per mineral (indices into ROCK_BASE): molten = ferrite / crimsonite, green veins = viridium, cavern = voidstone
 export const ROCK_BY_TYPE = { ferrite: [0, 1, 4, 6, 4, 2], stellarite: [0, 1, 2, 0, 1], viridium: [5, 5, 2, 1], crimsonite: [4, 6, 0, 4], voidstone: [3, 3, 2, 0] };
 function prepRocks(scene) {
@@ -193,3 +195,142 @@ function prepRocks(scene) {
   for (const v of ROCK_RICH) { out.rhi.push(one(v + '_hi')); out.rlo.push(one(v + '_lo')); }
   out.tris = Math.round(out.tris); return out;
 }
+
+// =====================================================================================================================
+// v15 (batch 2): pirate / faction installations, mining-rig asteroids, ore pickups (blender/src/pirate.py, rigs.py, gems.py)
+// Installations keep every gameplay value (radius, hardpoints, HP, live turrets, shield dome, 'spin' hooks); the glb only
+// replaces the visible meshes. Materials are the game's pirate set, faction-tinted, without texture maps (no UVs) and with
+// baked AO vertex colours; the relay beacon and set-dressing rigs use the player palette.
+const packLoader = (name, key, prep) => (timeoutMs = 20000) => {
+  if (!ENV.enabled) return Promise.resolve(null);
+  if (ENV[key]) return Promise.resolve(ENV[key]);
+  if (ENV.failed[name]) return Promise.resolve(null);
+  return ENV.pending[key] ||= load(name, timeoutMs).then((sc) => {
+    if (!sc) return null;
+    try { ENV[key] = prep(sc); ENV.stats[key + 'Ms'] = Math.round(performance.now()); return ENV[key]; } catch (e) { ENV.failed[name] = String(e); console.warn('glb ' + name + ' prep failed', e); return null; }
+  });
+};
+// flat geometry (non-indexed, face normals) with slot vertex colours, positions relative to `toFrame`
+function flatBake(mesh, toFrame) {
+  let g = bake(mesh, toFrame, false); if (g.index) g = g.toNonIndexed();
+  g.deleteAttribute('normal'); g.deleteAttribute('uv'); g.computeVertexNormals(); g.computeBoundingSphere(); g.userData.shared = true; return g;
+}
+const slotOf = (o) => ((o.material && o.material.name) || 'H').replace(/\.\d+$/, '');
+// a pack scene -> { name: { parts: [{ name, pos, meshes: [{ geo, slot }] }], lights: [{ kind, p, size }], tris } }
+function prepPack(scene, prefix) {
+  scene.updateMatrixWorld(true); const out = {};
+  for (const root of scene.children) {
+    if (!root.name.startsWith(prefix)) continue;
+    const parts = new Map(); parts.set(root, { name: 'main', pos: new THREE.Vector3(), meshes: [] });
+    root.traverse((o) => { if (o !== root && /^spin_[a-z]+$/.test(o.name) && !o.isMesh) { const p = new THREE.Vector3(); o.getWorldPosition(p); p.sub(root.getWorldPosition(new THREE.Vector3())); parts.set(o, { name: 'spin', pos: p, meshes: [] }); } });
+    const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(); const lights = []; let tris = 0; const v = new THREE.Vector3();
+    root.traverse((o) => {
+      let owner = root; for (let q = o.parent; q; q = q.parent) if (parts.has(q)) { owner = q; break; } // nearest pivot (spin_*) or the root
+      const part = parts.get(owner);
+      if (o.isMesh) {
+        const to = new THREE.Matrix4().makeTranslation(-part.pos.x, -part.pos.y, -part.pos.z).multiply(inv);
+        const geo = flatBake(o, to); tris += geo.attributes.position.count / 3; part.meshes.push({ geo, slot: slotOf(o) });
+      } else if (/^(navr|navg|navw|navR)_/.test(o.name)) { o.getWorldPosition(v); v.applyMatrix4(inv); lights.push({ kind: o.name.split('_')[0], p: v.clone(), size: (o.userData && o.userData.size) || 1 }); }
+    });
+    out[root.name.slice(prefix.length)] = { parts: [...parts.values()], lights, tris: Math.round(tris) };
+  }
+  return out;
+}
+export const loadInst = packLoader('installations', 'inst', (sc) => prepPack(sc, 'inst_'));
+export const loadRigs = packLoader('rigs', 'rigs', (sc) => prepPack(sc, 'rig_'));
+
+// ---------------- materials: faction-tinted pirate set (no maps), or the player palette ----------------
+const IM = {};
+function plain(m, o = {}) { const c = m.clone(); for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap']) if (k in c) c[k] = null; if (c.isMeshStandardMaterial) c.vertexColors = true; Object.assign(c, o); return c; }
+export function instMats(fac) {
+  const key = fac || '_'; if (IM[key]) return IM[key];
+  const M = materials(); const F = FACTIONS[fac]; const FM = F ? factionMats(fac, F.rgb, F.hull) : null;
+  const rock = new THREE.MeshStandardMaterial({ color: 0x55525a, roughness: 0.92, metalness: 0.05, vertexColors: true });
+  const base = {
+    H: plain(FM ? FM.hull : M.pirate, { emissive: new THREE.Color(0), emissiveIntensity: 0 }),
+    D: plain(M.pirateDark, { color: new THREE.Color(0x3a3036) }),
+    P: plain(M.pirateBone, { color: new THREE.Color(0x8c8478) }),
+    A: plain(FM ? FM.accent : M.pirateAccent),
+    R: FM ? FM.red : M.red, W: M.amber, G: M.glow, E: M.green, N: plain(M.orange, { color: new THREE.Color(0xe0a83a), metalness: 1, roughness: 0.3 }),
+    C: M.glass, S: plain(M.solar), V: new THREE.MeshStandardMaterial({ color: 0x3c8a34, roughness: 0.85, emissive: 0x0b2a08, vertexColors: true }),
+    K: rock, X: M.glow,
+  };
+  if (fac === 'friendly') { // player palette: gunmetal, light plate, gold trim
+    base.H = plain(M.hull, { emissive: new THREE.Color(0), emissiveIntensity: 0, color: new THREE.Color(0x8a919b) }); base.D = plain(M.dark); base.P = plain(M.hull, { emissive: new THREE.Color(0), color: new THREE.Color(0xb4bac2) });
+    base.A = plain(M.orange, { color: new THREE.Color(0xe0a530), emissive: new THREE.Color(0x2a1600) }); base.R = M.red;
+  }
+  for (const k in base) if (base[k].isMeshStandardMaterial && !base[k].name) base[k].name = 'inst:' + k + ':' + key;
+  return (IM[key] = base);
+}
+const INST_LIGHT = { navr: [0xff3030, 1.3], navg: [0x30ff60, 1.3], navw: [0xffffff, 1.1], navR: [0xff3030, 0.8] };
+function instance(T, mats, lightScale = 1) {
+  const g = new THREE.Group(); const glow = glowTexture();
+  for (const part of T.parts) {
+    const pg = part.name === 'main' ? g : new THREE.Group(); if (pg !== g) { pg.name = part.name; pg.position.copy(part.pos); g.add(pg); }
+    for (const m of part.meshes) { const mesh = new THREE.Mesh(m.geo, mats[m.slot] || mats.H); mesh.name = 'env-' + m.slot; pg.add(mesh); }
+  }
+  for (const L of T.lights) {
+    const [col, size] = INST_LIGHT[L.kind] || INST_LIGHT.navw; const key = 'sp' + col;
+    const mat = (SPRITE_MATS[key] ||= new THREE.SpriteMaterial({ map: glow, color: col, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    const sp = new THREE.Sprite(mat); sp.position.copy(L.p); sp.scale.setScalar(size * Math.max(1, L.size) * lightScale); g.add(sp);
+  }
+  return g;
+}
+const SPRITE_MATS = {};
+// gameplay values of the procedural builders (models.js buildInstallation / buildInstallationV5), unchanged
+const INST_SPEC = { comm: [4, 2], yard: [6, 2], res: [4.6, 2], def: [5, 2], hq: [9, 2], relay: [4, 2], core: [5.6, 1], gen: [2.2, 1], reactor: [2.4, 1], hangar: [2.8, 1], turret: [1.9, 1] };
+export function instReady(kind) { return !!(ENV.enabled && (kind === 'res' ? ENV.rigs && ENV.rigs.pit : ENV.inst && ENV.inst[kind])); }
+// glb installation part (same return shape as the procedural builders), or null -> caller falls back
+export function buildInstGlb(kind, fac) {
+  if (!instReady(kind)) return null;
+  const T = kind === 'res' ? ENV.rigs.pit : ENV.inst[kind]; const friendly = kind === 'relay';
+  const g = instance(T, instMats(friendly ? 'friendly' : fac || null)); g.name = 'inst-glb'; g.userData.glb = true;
+  if (kind === 'def') { const tu = makeTurret('cannon', 3.4, 'pirate'); tu.position.y = 1.9; tu.name = 'eturret'; g.add(tu); }
+  if (kind === 'turret') { const tu = makeTurret('cannon', 1.7, 'pirate'); tu.position.y = 0.7; tu.name = 'eturret'; g.add(tu); }
+  const [radius, hy] = INST_SPEC[kind] || [3, 1];
+  return { group: g, hardpoints: [{ x: 0, y: hy, z: 0 }], engines: [], radius, glb: true };
+}
+
+// ---------------- depth set dressing: mining-rig asteroids far below the play plane ----------------
+export const RIG_CELL = 560;
+const RIG_KINDS = ['pit', 'drill', 'tunnel', 'colony'];
+function hash2(i, j, s) { let h = (i * 374761393 + j * 668265263 + s * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return (h ^ (h >>> 16)) >>> 0; }
+export function rigAt(ci, cj) {
+  const r = mulberry32(hash2(ci, cj, 77)); if (r() > 0.42) return null;
+  return { id: ci + ':' + cj, kind: RIG_KINDS[Math.floor(r() * RIG_KINDS.length)], x: (ci + 0.15 + r() * 0.7) * RIG_CELL, z: (cj + 0.15 + r() * 0.7) * RIG_CELL, y: -(62 + r() * 30), s: 5.5 + r() * 2.5, yaw: r() * 6.28, spin: (r() - 0.5) * 0.02, tilt: (r() - 0.5) * 0.3 };
+}
+export class DepthRigs {
+  constructor(scene) { this.scene = scene; this.pool = []; this.max = 3; this.active = []; }
+  setQuality(q) { this.max = q === 'low' ? 0 : q === 'medium' ? 2 : 3; }
+  slot(kind) { let s = this.pool.find((x) => x.kind === kind && !x.used); if (!s && ENV.rigs && ENV.rigs[kind]) { const g = instance(ENV.rigs[kind], instMats('friendly'), 1.6); g.name = 'rig-' + kind; g.visible = false; this.scene.add(g); s = { kind, g, used: false, id: null }; this.pool.push(s); } return s; }
+  update(cx, cz, t) {
+    if (!ENV.rigs || !ENV.enabled) return;
+    const ci = Math.floor(cx / RIG_CELL), cj = Math.floor(cz / RIG_CELL); const L = [];
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const R = rigAt(ci + i, cj + j); if (R) { R.d = Math.hypot(R.x - cx, R.z - cz); if (R.d < RIG_CELL * 1.1) L.push(R); } }
+    L.sort((a, b) => a.d - b.d); const want = L.slice(0, this.max);
+    for (const s of this.pool) s.used = false;
+    for (const R of want) { const s = this.pool.find((x) => x.id === R.id) || null; if (s) s.used = true; }
+    for (const R of want) {
+      let s = this.pool.find((x) => x.id === R.id && x.used); if (!s) { s = this.slot(R.kind); if (!s) continue; s.used = true; s.id = R.id; }
+      s.g.visible = true; s.g.position.set(R.x, R.y, R.z); s.g.scale.setScalar(R.s); s.g.rotation.set(R.tilt, R.yaw + t * R.spin, 0);
+    }
+    for (const s of this.pool) if (!s.used) { s.g.visible = false; s.id = null; }
+    this.active = want;
+  }
+}
+
+// ---------------- ore pickups: per-mineral gem chips ----------------
+export const PICKUP_BY_TYPE = { ferrite: 'cube', stellarite: 'hex', viridium: 'emerald', crimsonite: 'hex', voidstone: 'amethyst' };
+export const loadPickups = packLoader('pickups', 'pickups', (sc) => {
+  sc.updateMatrixWorld(true); const out = {};
+  for (const o of sc.children) {
+    if (!o.name.startsWith('ore_')) continue; const parts = [];
+    const inv = new THREE.Matrix4().copy(o.matrixWorld).invert();
+    o.traverse((m) => { if (!m.isMesh) return; const g = flatBake(m, inv); const n = g.attributes.position.count; const slot = slotOf(m); const c = new Float32Array(n * 3); const v = slot === 'K' ? 0.16 : 1.0; const V = g.attributes.color;
+      for (let i = 0; i < n; i++) { const ao = slot === 'K' && V ? V.getX(i) : 1; c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = v * ao; } g.setAttribute('color', new THREE.BufferAttribute(c, 3)); parts.push(g); });
+    const geo = parts.length > 1 ? mergeGeometries(parts, false) : parts[0]; geo.computeBoundingSphere(); geo.userData.shared = true; out[o.name.slice(4)] = geo;
+  }
+  return out;
+});
+// rich (crystal) rock shape per mineral: 0 hex (blue), 1 cubic (gold), 2 amethyst (purple), 3 emerald (green)
+export const RICH_BY_TYPE = { stellarite: [0], ferrite: [1], viridium: [3], crimsonite: [0, 2], voidstone: [2] };
