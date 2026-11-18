@@ -4,13 +4,21 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 
 **Play:** https://elrond44.github.io/Stellar-Frontier/
 
-- Steer with the virtual joystick (drag anywhere) or WASD / arrow keys. Weapons fire automatically.
+- Steer with the virtual joystick (drag the lower screen) or WASD / arrow keys; drag the upper screen (or a second finger / right mouse) to orbit the camera, pinch or scroll to zoom. Weapons fire automatically.
 - Mine glowing asteroids, haul ore back to your station, and sell it.
 - Upgrade your ship, run the station factory (Income / Capacity / CLAIM), and expand the station from a lone refinery to an industrial hub.
 - Climb a class path of 15 hulls, from a 20 m Scout to a 720 m Dreadnought, all built at true relative scale.
 - Push into pirate sectors for rare ores and loot, liberate them stage by stage from five warring pirate factions, and bring down each faction's flagship.
 
 Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). The ship hulls are modelled in Blender from Python scripts (`tools/blender/`) and shipped as compressed glTF (`models/`); everything else (effects, stations, music and sound) is generated procedurally in code. Progress autosaves to your browser's local storage.
+
+## v13: Advanced controls & dynamic camera
+- Orbit camera: free 360° rotation around your ship, adjustable angle (20°–85° limits), smooth zoom that scales with your hull class. Classic (the original 58° north-up view) stays the default; R restores it any time, C swings the camera behind your ship.
+- Four camera styles: Classic, Dynamic, Tactical, Cinematic (V cycles), with smooth transitions.
+- Touch: drag low to fly, drag high (or use a second finger) to look, pinch to zoom, two-finger twist to rotate. Flying and looking work at the same time. Menus and HUD buttons never move the camera.
+- Steering follows the camera: up on the stick always flies away from the camera.
+- The camera moves in when a capital hull, the station or a big asteroid blocks the view; the station fades instead of hiding your ship (enemies never fade). The radar turns with the camera.
+- Settings › Camera & Controls: sensitivities, invert Y/X, smoothing, follow, look-ahead, zoom and angle limits, combat auto-framing, auto-rotate behind ship, collision/fade, camera-relative steering, floating/fixed joystick, size, dead zone, steering area and rebindable keys. Everything is saved; older saves start in Classic.
 
 ## v12: Big hulls reshaped toward the concept silhouettes
 - Dreadnought: stacked tiers of chunky sloped armour modules rising to a tall stepped citadel, a red emblem block with a winged emblem, a longer pointed prow and a deep ventral keel (height ~0.3 of its length, like the art).
