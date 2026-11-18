@@ -58,7 +58,7 @@ def warship(s, B, Hh, o):
     s.skin(main, y0 + L * 0.03, y1 - L * 0.02, n, L * 0.006, B * 0.012, lambda i: A if i in acc else (P if i % 3 == 1 else H), zclip=-Hh * 0.02)
     s.box((0, y0 + L * 0.006, -Hh * 0.22), (B * 0.24, L * 0.004, Hh * 0.035), W)  # lit slot between the upper prow and the lower jaw
     tiers = o.get('tiers', 2)
-    top = Hh * 0.2
+    top = Hh * 0.2; seats = []  # (y where the tier starts, ramp end y, z at start, full z) for seat_turrets
     for t in range(1, tiers):
         ys = y0 + L * (0.1 + 0.12 * t); w = B * (0.78 - 0.16 * t); hh = Hh * 0.22
         sec = [(ys, w * 0.3, w * 0.18, top - 0.02 * Hh, top + hh * 0.3, w * 0.05), (ys + L * 0.12, w, w * 0.8, top - 0.02 * Hh, top + hh, w * 0.07),
@@ -70,7 +70,7 @@ def warship(s, B, Hh, o):
             for side in (1, -1):
                 s.loft([(ys + L * 0.1, B * 0.012, B * 0.012, top + hh * 0.55, top + hh * 0.75, 0, side * (w * 0.5 + B * 0.012)),
                         (y1 - L * 0.08, B * 0.012, B * 0.012, top + hh * 0.55, top + hh * 0.75, 0, side * (w * 0.5 + B * 0.012))], A)
-        top += hh
+        seats.append((ys, ys + L * 0.12, top + hh * 0.3, top + hh)); top += hh
     # deck-edge accent pinstripe on the main hull
     if o.get('stripe'):
         for side in (1, -1):
@@ -114,7 +114,13 @@ def warship(s, B, Hh, o):
             s.cyl((sx, yc + l * r.uniform(-0.1, 0.3), z + sh / 2), B * 0.01, sh, D, 'Z', 6, B * 0.004)
         s.box((0, yc, z + th * 0.05), (w * 0.4, l * 0.35, th * 0.1), D, ch=w * 0.02)
     for (ty, tx, ts, tb, aft) in o.get('turrets', []):
-        s.turret((tx * B, y0 + L * ty, top if abs(tx) < 0.25 else Hh * 0.2), ts, tb, rot=math.pi if aft else 0.0)
+        ty_ = y0 + L * ty; zt = top if abs(tx) < 0.25 else Hh * 0.2
+        if o.get('seat_turrets') and abs(tx) < 0.25:  # v12: sit on the tier actually under the turret (no floating guns over the prow)
+            zt = Hh * 0.2
+            for a, b, za, zb in seats:
+                if ty_ >= b: zt = max(zt, zb)
+                elif ty_ > a: zt = max(zt, za + (zb - za) * (ty_ - a) / (b - a))
+        s.turret((tx * B, ty_, zt), ts, tb, rot=math.pi if aft else 0.0)
     s.greebles(y0 + L * 0.35, y1 - L * 0.1, -B * 0.25, B * 0.25, top, o.get('greebles', 20), B * 0.05, mats=(0, 1, 2))
     return f, top
 
