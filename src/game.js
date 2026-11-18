@@ -21,6 +21,7 @@ import { ExplosionManager, classify, PROFILES } from './explosions.js?v=12';
 import { HULLS, HULL_IDS, buildHull, ENEMY_HULL, FLAGSHIP_HULL, FACTION_PAINT, hullSegs, MAIN_PATH } from './hulls.js?v=12';
 import { HullLOD } from './lod.js?v=12';
 import { hideTurret } from './glbhulls.js?v=12';
+import { CAM_PRESETS, DEG, angDiff } from './camctl.js?v=12';
 import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=12';
 
 export const STATION_SCALE = 2; // v8: the home station is built at capital-ship scale
@@ -96,7 +97,7 @@ export class Game {
 
   // ---------- save/load ----------
   load() { return readKey(AUTO_KEY) || newGame(); }
-  syncState() { this.s.pos = { x: this.player.x, z: this.player.z }; this.s.hp = this.player.hp; }
+  syncState() { this.camPersist(); this.s.pos = { x: this.player.x, z: this.player.z }; this.s.hp = this.player.hp; }
   save() {
     if (this.resetting) return false;
     this.syncState();
@@ -1598,7 +1599,7 @@ export class Game {
     // waypoint arrival
     { const wp = this.s.galaxy.wp; if (wp && Math.hypot(wp.x - p.x, wp.z - p.z) < 12 + p.radius) { this.toast(`Waypoint reached: ${wp.label}`, 'good'); this.audio.click(); this.s.galaxy.wp = null; this.save(); } }
     // world streaming
-    this.field.loadR = clamp(Math.ceil((this.camDist || 42) * 0.62 / 44) + 1, 2, 5); // v8: wider streaming when a big hull pulls the camera back
+    this.field.loadR = clamp(Math.ceil((this.camDist || 42) * (this.cam ? this.cam.reach : 1) * 0.62 / 44) + 1, 2, 5); // v13: low camera angles see further // v8: wider streaming when a big hull pulls the camera back
     const P = this.prof; let pt = performance.now(); const lap = (k) => { const n = performance.now(); P.add(k, n - pt); pt = n; };
     this.field.update(p.x, p.z, this.time, dt); lap('world');
     this.director(dt);
@@ -1663,9 +1664,37 @@ export class Game {
     const env = this.phen && this.phen.env; const bh = env && (env.bh > 0.2 || env.grav > 0.4);
     return { threats, far, boss, bossFar, bh };
   }
+  // ---------- v13 camera controls: one orbit state on top of the v7 follow camera ----------
+  // yaw (free 360°), pitch (clamped), user zoom multiplier (on top of the hull-class distance and the
+  // contextual framing zoom), each with a target the input writes and a damped value the camera reads.
+  camCfg() { return this.s.settings.cam; }
+  camState() {
+    const cfg = this.camCfg(); let K = this.cam;
+    if (!K || K.src !== cfg) { // first frame, or a different save was loaded: start from the persisted view
+      const v = cfg.view; K = this.cam = K || { yaw: 0, yawT: 0, pitch: 1.02, pitchT: 1.02, zoom: 1, zoomT: 1, yv: 0, pv: 0, zv: 0, tk: 1, occ: 1, occT: 1, occCD: 0, manualT: -99, lead: 1, follow: 1, rot: 1, frame: 1, blocked: 0, faded: 0, src: null, reach: 1 };
+      K.src = cfg; K.yaw = K.yawT = v.yaw; K.pitch = K.pitchT = this.camClampPitch(v.pitch); K.zoom = K.zoomT = this.camClampZoom(v.zoom);
+      const P = CAM_PRESETS[cfg.preset]; K.lead = P.lead; K.follow = P.follow; K.rot = P.rot; K.frame = FRAME_K[cfg.autoFrame];
+    }
+    return K;
+  }
+  camClampPitch(v) { const c = this.camCfg(); return clamp(v, c.pitchMin * DEG, c.pitchMax * DEG); }
+  camClampZoom(v) { return clamp(v, 0.5, this.camCfg().zoomMax); }
+  // manual input (touch drag / right-drag / keys). Radians; never blocked by auto-framing
+  camRotate(dYaw, dPitch) { const K = this.camState(); K.yawT += dYaw; K.pitchT = this.camClampPitch(K.pitchT + dPitch); K.manualT = this.time; K.tk = 1; }
+  camZoomBy(f) { const K = this.camState(); K.zoomT = this.camClampZoom(K.zoomT * f); K.manualT = this.time; K.tk = 1; }
+  camReset() { const K = this.camState(), P = CAM_PRESETS[this.camCfg().preset]; K.yawT = K.yaw + angDiff(K.yaw, 0); K.pitchT = this.camClampPitch(P.pitch); K.zoomT = this.camClampZoom(P.zoom); K.manualT = this.time; K.tk = 0.25; }
+  camRecenter() { const K = this.camState(); K.yawT = K.yaw + angDiff(K.yaw, this.player.yaw + Math.PI); K.manualT = this.time; K.tk = 0.3; }
+  camPreset(id) {
+    const cfg = this.camCfg(), P = CAM_PRESETS[id]; if (!P) return; const K = this.camState(); cfg.preset = id; cfg.autoFrame = P.frame;
+    K.pitchT = this.camClampPitch(P.pitch); K.zoomT = this.camClampZoom(P.zoom); K.manualT = this.time; K.tk = 0.25; // eased glide; yaw is kept: switching style never spins the view
+  }
+  camPersist() { const K = this.cam, v = this.camCfg().view; if (!K) return; v.yaw = Math.round(K.yawT * 1000) / 1000; v.pitch = Math.round(K.pitchT * 1000) / 1000; v.zoom = Math.round(K.zoomT * 1000) / 1000; }
+  // camera-relative input: screen joystick (sx right, sz down) -> world xz using the smoothed camera yaw
+  camToWorld(sx, sz, out) { const th = this.camCfg().camRel ? (this.cam ? this.cam.yaw : 0) : 0; const c = Math.cos(th), s = Math.sin(th); out.x = sx * c + sz * s; out.z = -sx * s + sz * c; return out; }
   updateCamera(dt, aspect) {
     if (this.camOverride) { const o = this.camOverride; this.camera.position.set(o.x, o.y, o.z); this.camera.lookAt(o.tx, o.ty, o.tz); return; }
-    const p = this.player; const T = this.hull(); const C = this.camFx; dt = Math.min(dt, 0.05);
+    const p = this.player; const T = this.hull(); const C = this.camFx; dt = Math.min(dt, 0.05); this.camT = (this.camT || 0) + dt;
+    const cfg = this.camCfg(); const K = this.camState(); const P = CAM_PRESETS[cfg.preset];
     const portrait = aspect < 1;
     const base = portrait ? 42 : 34;
     // contextual zoom target
@@ -1679,20 +1708,42 @@ export class Game {
     if (this.dashT > 0) zt += 0.05;
     C.punch = Math.max(0, C.punch - dt * 0.6); zt += C.punch; C.ctx = ctx;
     C.zoom = damp(C.zoom, zt, zt > C.zoom ? 1.6 : 0.9, dt);
-    const dist = base * T.cam * (portrait ? clamp(0.6 / aspect, 1, 1.2) : 1) * C.zoom; this.camDist = dist;
-    const elev = 1.02; // radians (~58 deg)
+    // v13: preset tunables blend smoothly; auto-framing strength scales only the contextual part (manual zoom is a separate multiplier)
+    K.lead = damp(K.lead, P.lead * cfg.lookAhead, 3, dt); K.follow = damp(K.follow, P.follow * FOLLOW_K[cfg.follow], 3, dt); K.rot = damp(K.rot, P.rot * ROT_K[cfg.rotSmooth], 3, dt); K.frame = damp(K.frame, FRAME_K[cfg.autoFrame], 2, dt);
+    // optional auto-rotate behind the ship (off by default; waits for 2.5 s without manual camera input)
+    if (cfg.autoBehind !== 'off' && this.time - K.manualT > 2.5 && sf > 0.35 && !this.docked) { const r = (cfg.autoBehind === 'slow' ? 0.35 : 0.8) * clamp(sf, 0, 1); const d = angDiff(K.yawT, p.yaw + Math.PI); K.yawT += d * (1 - Math.exp(-r * dt)); }
+    K.pitchT = this.camClampPitch(K.pitchT); K.zoomT = this.camClampZoom(K.zoomT);
+    // critically damped (SmoothDamp) so motion starts and stops softly at any frame rate; preset / reset glides use a slower time (K.tk)
+    const S = this._sd || (this._sd = { v: 0 }); const tk = K.tk;
+    S.v = K.yv; K.yaw = smoothDamp(K.yaw, K.yawT, S, 0.075 / (K.rot * tk), dt); K.yv = S.v;
+    S.v = K.pv; K.pitch = smoothDamp(K.pitch, K.pitchT, S, 0.085 / (K.rot * tk), dt); K.pv = S.v;
+    S.v = K.zv; K.zoom = smoothDamp(K.zoom, K.zoomT, S, cfg.zoomSmooth * 0.45 / tk, dt); K.zv = S.v; // ~zoomSmooth seconds to settle
+    if (tk < 1 && Math.abs(K.pitch - K.pitchT) < 0.004 && Math.abs(K.yaw - K.yawT) < 0.004 && Math.abs(K.zoom - K.zoomT) < 0.004) K.tk = 1;
+    const ctxZoom = 1 + (C.zoom - 0.94) * K.frame + (0.94 - 1) * 1; // 'full' = the v7 behaviour exactly; 'off' holds the explore distance
+    const minD = Math.max(9, (p.bound || p.radius || 1.4) * 1.7 + 6); // never inside the hull
+    const dist = Math.max(minD, base * T.cam * (portrait ? clamp(0.6 / aspect, 1, 1.2) : 1) * ctxZoom * K.zoom); this.camDist = dist;
+    const th = K.yaw, el = K.pitch, sth = Math.sin(th), cth = Math.cos(th);
+    // low camera angles see further toward the horizon: widen asteroid streaming accordingly
+    K.reach = clamp(1.63 / Math.tan(el), 1, 2.6);
     // look target leads the velocity (more at speed, capped), spring-follow lags behind boosts and dashes
-    const leadK = 0.32 + 0.18 * clamp(sf, 0, 1); C.lead = leadK;
-    let lookX = p.x + p.vx * leadK, lookZ = p.z + p.vz * leadK - (portrait ? 2 : 0);
+    const leadK = (0.32 + 0.18 * clamp(sf, 0, 1)) * K.lead; C.lead = leadK;
+    let lookX = p.x + p.vx * leadK - (portrait ? 2 * sth : 0), lookZ = p.z + p.vz * leadK - (portrait ? 2 * cth : 0); // portrait: nudge the view toward screen-up
     const ld = Math.hypot(lookX - p.x, lookZ - p.z), lmax = dist * 0.28; if (ld > lmax) { lookX = p.x + (lookX - p.x) * lmax / ld; lookZ = p.z + (lookZ - p.z) * lmax / ld; }
-    const boosting = this.dashT > 0 || (p.boostT > 0) || sf > 1.05; const w = boosting ? 3.2 : 5.5, z2 = 1.0;
+    const boosting = this.dashT > 0 || (p.boostT > 0) || sf > 1.05; const w = (boosting ? 3.2 : 5.5) * K.follow, z2 = 1.0;
     if (!isFinite(this.camLook.x)) this.camLook.set(p.x, 0, p.z);
     C.lv.x += (w * w * (lookX - this.camLook.x) - 2 * z2 * w * C.lv.x) * dt; C.lv.z += (w * w * (lookZ - this.camLook.z) - 2 * z2 * w * C.lv.z) * dt;
     this.camLook.x += C.lv.x * dt; this.camLook.z += C.lv.z * dt;
     // keep the ship on screen even under heavy lag
     const ox = p.x - this.camLook.x, oz = p.z - this.camLook.z, od = Math.hypot(ox, oz), omax = dist * 0.36; if (od > omax) { this.camLook.x += ox * (1 - omax / od); this.camLook.z += oz * (1 - omax / od); }
-    const tx = this.camLook.x, ty = Math.sin(elev) * dist, tz = this.camLook.z + Math.cos(elev) * dist;
-    this.camPos.x = damp(this.camPos.x, tx, 9, dt); this.camPos.y = damp(this.camPos.y, ty, 2.5, dt); this.camPos.z = damp(this.camPos.z, tz, 9, dt);
+    // occlusion: pull in when a station / capital hull / big rock sits between camera and ship; fade the station
+    const ce = Math.cos(el), se = Math.sin(el);
+    if ((K.occCD -= dt) <= 0) { K.occCD = 0.1; this.camOcclusion(K, cfg, dist, sth * ce, se, cth * ce, minD); }
+    K.occ = damp(K.occ, K.occT, K.occT < K.occ ? 9 : 1.6, dt);
+    const d2 = dist * K.occ;
+    const tx = this.camLook.x + sth * ce * d2, ty = se * d2, tz = this.camLook.z + cth * ce * d2;
+    // the orbit is placed exactly (smoothing lives in yaw/pitch/zoom), so fast swipes never cut corners
+    this.camPos.x = damp(this.camPos.x, tx, 30, dt); this.camPos.y = damp(this.camPos.y, ty, 30, dt); this.camPos.z = damp(this.camPos.z, tz, 30, dt);
+    if (Math.abs(this.camPos.x - tx) > dist || Math.abs(this.camPos.z - tz) > dist) this.camPos.set(tx, ty, tz); // teleports / respawn
     // directional impulse spring (underdamped: a short, readable recoil in the direction of the hit)
     { const ws = 15, zs = 0.42; const io = C.io, iv = C.iv;
       iv.x += (-ws * ws * io.x - 2 * zs * ws * iv.x) * dt; iv.y += (-ws * ws * io.y - 2 * zs * ws * iv.y) * dt; iv.z += (-ws * ws * io.z - 2 * zs * ws * iv.z) * dt;
@@ -1704,5 +1755,81 @@ export class Game {
     if (C.roll) this.camera.rotateZ(C.roll);
     { const kk = this.kick; this.camera.position.x += kk.x; this.camera.position.z += kk.z; const d = Math.exp(-10 * dt); kk.x *= d; kk.z *= d; }
     this.shake = Math.max(0, this.shake - dt * 1.8);
+    this.camFadeTick(dt);
   }
+  // segment (ship -> desired camera) against blockers, 10x per second, no allocations
+  camOcclusion(K, cfg, dist, dx, dy, dz, minD) {
+    const p = this.player; const O = this._occ || (this._occ = { lo: new THREE.Vector3(), hi: new THREE.Vector3(), box: new THREE.Box3(), boxOk: false, boxRoot: null });
+    let t = 1; K.blocked = 0; let fadeStation = false;
+    const ax = p.x, ay = 1.2, az = p.z, bx = dx * dist, by = dy * dist - 1.2, bz = dz * dist; // segment = a + s*b, s in [0,1]
+    const minS = minD / dist, near = 0.6 / dist; // blockers must start at least 0.6 m in front of the ship
+    if (!cfg.collide && !cfg.fade) { K.occT = 1; this.camFade(false); return; }
+    // home station: cached world box, then an exact test against its meshes (it is the only big object we may fade)
+    const st = this.stationRoot;
+    if (st) { // (the 54 m docking zone counts too: you fly around the station while 'docked')
+      if (O.boxRoot !== st) { st.updateMatrixWorld(true); O.box.setFromObject(st); O.boxRoot = st; }
+      const s0 = slabHit(ax, ay, az, bx, by, bz, O.box.min.x, O.box.min.y, O.box.min.z, O.box.max.x, O.box.max.y, O.box.max.z);
+      if (s0 >= 0 && s0 < 1) { const r = this.camRay(st, ax, ay, az, bx, by, bz); if (r > near && r < 1) { K.blocked++; if (cfg.collide) t = Math.min(t, Math.max(0.55, r * 0.9)); if (cfg.fade && r * 0.9 < 0.55 || !cfg.collide) fadeStation = cfg.fade; } }
+    }
+    if (cfg.collide) {
+      // capital hulls / outposts: an oriented box per hull (length x beam x height); enemies are never faded
+      for (const e of this.enemies) {
+        if (e.dead || !e.group.visible) continue; const b = (e.bound || 0) * (e.scale || 1); if (b < 12) continue;
+        const ex = e.x - ax, ez = e.z - az; if (ex * ex + ez * ez > (dist + b) * (dist + b)) continue;
+        const c = Math.cos(e.yaw || 0), s = Math.sin(e.yaw || 0);
+        // into hull-local axes (forward = (sin yaw, cos yaw))
+        const lax = -ex * c + ez * s, laz = -ex * s - ez * c, lbx = bx * c - bz * s, lbz = bx * s + bz * c;
+        const s0 = slabHit(lax, ay, laz, lbx, by, lbz, -b * 0.4, -b * 0.18, -b, b * 0.4, b * 0.22, b);
+        if (s0 > near && s0 < 1) { K.blocked++; t = Math.min(t, s0 * 0.88); }
+      }
+      // large asteroids
+      for (const a of this.field.list) {
+        if (!a.alive || a.r < 3) continue; const rx = a.x - ax, rz = a.z - az; if (rx * rx + rz * rz > dist * dist) continue;
+        const s0 = sphereHit(ax, ay, az, bx, by, bz, a.x, a.y || 0, a.z, a.r * 1.05);
+        if (s0 > near && s0 < 1) { K.blocked++; t = Math.min(t, s0 * 0.88); }
+      }
+    }
+    K.occT = clamp(t, Math.min(1, minS), 1); this.camFade(fadeStation);
+  }
+  camRay(root, ax, ay, az, bx, by, bz) {
+    const R = this._ray || (this._ray = { rc: new THREE.Raycaster(), o: new THREE.Vector3(), d: new THREE.Vector3(), hits: [] });
+    const L = Math.hypot(bx, by, bz); R.o.set(ax, ay, az); R.d.set(bx / L, by / L, bz / L); R.rc.set(R.o, R.d); R.rc.far = L; R.rc.camera = this.camera; R.hits.length = 0;
+    R.rc.intersectObject(root, true, R.hits); for (const h of R.hits) { const m = h.object.material; if (m && !Array.isArray(m) && m.transparent && !m.userData.fadeClone) continue; return h.distance / L; } return 1;
+  }
+  // station fade: swap to cached transparent clones only when the state changes, animate their opacity
+  camFade(on) {
+    const st = this.stationRoot; if (!st) return; const F = st.userData.fade || (st.userData.fade = { on: false, a: 1, list: null });
+    if (on === F.on) return; F.on = on; this.cam.faded = on ? 1 : 0;
+    if (on && !F.list) { F.list = []; const cache = this._fadeMats || (this._fadeMats = new Map());
+      st.traverse((o) => { if (!o.isMesh || Array.isArray(o.material) || o.material.transparent) return; const m0 = o.material; let m1 = cache.get(m0);
+        if (!m1) { m1 = m0.clone(); m1.onBeforeCompile = m0.onBeforeCompile; m1.customProgramCacheKey = m0.customProgramCacheKey; m1.transparent = true; m1.depthWrite = false; m1.userData = { ...m0.userData, fadeClone: true }; cache.set(m0, m1); }
+        F.list.push(o, m0, m1); o.material = m1; }); }
+  }
+  camFadeTick(dt) {
+    const st = this.stationRoot; const F = st && st.userData.fade; if (!F || !F.list) return;
+    F.a = damp(F.a, F.on ? 0.22 : 1, 7, dt);
+    for (let i = 0; i < F.list.length; i += 3) F.list[i + 2].opacity = F.a;
+    if (!F.on && F.a > 0.985) { for (let i = 0; i < F.list.length; i += 3) F.list[i].material = F.list[i + 1]; F.list = null; F.a = 1; }
+  }
+}
+
+// v13 camera helpers (pure math, no allocations)
+const FRAME_K = { off: 0, mild: 0.45, full: 1 }, FOLLOW_K = { tight: 1.35, normal: 1, loose: 0.7 }, ROT_K = { snappy: 1.6, normal: 1, smooth: 0.55 };
+// first entry parameter of segment a + s*b into an axis-aligned box (-1 = miss, 0 = starts inside)
+function slabHit(ax, ay, az, bx, by, bz, x0, y0, z0, x1, y1, z1) {
+  let t0 = 0, t1 = 1;
+  if (Math.abs(bx) < 1e-9) { if (ax < x0 || ax > x1) return -1; } else { let u = (x0 - ax) / bx, v = (x1 - ax) / bx; if (u > v) { const w = u; u = v; v = w; } if (u > t0) t0 = u; if (v < t1) t1 = v; if (t0 > t1) return -1; }
+  if (Math.abs(by) < 1e-9) { if (ay < y0 || ay > y1) return -1; } else { let u = (y0 - ay) / by, v = (y1 - ay) / by; if (u > v) { const w = u; u = v; v = w; } if (u > t0) t0 = u; if (v < t1) t1 = v; if (t0 > t1) return -1; }
+  if (Math.abs(bz) < 1e-9) { if (az < z0 || az > z1) return -1; } else { let u = (z0 - az) / bz, v = (z1 - az) / bz; if (u > v) { const w = u; u = v; v = w; } if (u > t0) t0 = u; if (v < t1) t1 = v; if (t0 > t1) return -1; }
+  return t0;
+}
+// critically damped smoothing (Game Programming Gems 4 SmoothDamp): stable at any dt, no overshoot, zero allocations
+function smoothDamp(cur, target, S, smoothTime, dt) {
+  const w = 2 / Math.max(1e-4, smoothTime), x = w * dt, ex = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  const ch = cur - target, tmp = (S.v + w * ch) * dt; S.v = (S.v - w * tmp) * ex; let out = target + (ch + tmp) * ex;
+  if ((target - cur > 0) === (out > target)) { out = target; S.v = 0; } return out;
+}
+function sphereHit(ax, ay, az, bx, by, bz, cx, cy, cz, r) {
+  const mx = ax - cx, my = ay - cy, mz = az - cz; const A = bx * bx + by * by + bz * bz, B = mx * bx + my * by + mz * bz, Cc = mx * mx + my * my + mz * mz - r * r;
+  if (Cc < 0) return 0; const disc = B * B - A * Cc; if (disc < 0) return -1; const s = (-B - Math.sqrt(disc)) / A; return s >= 0 && s <= 1 ? s : -1;
 }

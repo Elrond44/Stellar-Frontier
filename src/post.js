@@ -38,12 +38,13 @@ export class CinematicPass {
   get uniforms() { return this.pass.uniforms; }
   // world lenses for this frame: {x,y,z, rWorld, strength, mode}; projected to screen and sorted by strength
   setLenses(list, camera, aspect) {
-    const U = this.pass.uniforms; let n = 0; U.uAspect.value = aspect; const proj = [];
+    const U = this.pass.uniforms; let n = 0; U.uAspect.value = aspect; const proj = []; const R = (this.right ||= new THREE.Vector3()).setFromMatrixColumn(camera.matrixWorld, 0);
     for (const L of list) {
       const v = this.v.set(L.x, L.y || 0, L.z).project(camera); if (v.z > 1) continue;
       const sx = v.x * 0.5 + 0.5, sy = v.y * 0.5 + 0.5;
       // world radius -> screen radius (in uv-y units) via a second projected point
-      const e = this.v.set(L.x + L.r, L.y || 0, L.z).project(camera); const rr = Math.hypot((e.x * 0.5 + 0.5 - sx) * aspect, e.y * 0.5 + 0.5 - sy);
+      // v13: offset along the camera's right axis (world +x is only screen-right for the north-up Classic view)
+      const e = this.v.set(L.x + R.x * L.r, (L.y || 0) + R.y * L.r, L.z + R.z * L.r).project(camera); const rr = Math.max(1e-3, Math.hypot((e.x * 0.5 + 0.5 - sx) * aspect, e.y * 0.5 + 0.5 - sy));
       if (sx < -rr * 6 || sx > 1 + rr * 6 || sy < -rr * 6 || sy > 1 + rr * 6) continue;
       proj.push({ sx, sy, rr, s: L.s, mode: L.mode || 0 });
     }

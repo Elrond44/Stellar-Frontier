@@ -13,6 +13,7 @@ import { Preview } from './preview.js?v=12';
 import { HULLS, HULL_IDS, UNIT_M } from './hulls.js?v=12';
 import { PRESETS } from './quality.js?v=12';
 import { PHEN } from './phenomena.js?v=12';
+import { CAM_PRESETS, PRESET_ORDER, BIND_DEFAULTS, BIND_LABELS, RESERVED_KEYS, keyName, camDefaults } from './camctl.js?v=12';
 
 const $ = (id) => document.getElementById(id);
 // v8: shipyard cards are cropped straight from the Stellar Odyssey concept sheet (art/ship-concepts.jpg, 1536x1024)
@@ -39,38 +40,92 @@ export class UI {
   float(x, y, z, t, c, big) { this.float3.spawn(x, y, z, t, c, big); }
 
   // ---------- input ----------
+  // v13: one pointer router. Each touch is either the joystick finger or a camera finger:
+  // joystick = first touch inside the move area (lower screen in portrait / left side in landscape, or anywhere),
+  // camera = any other touch on empty space (1 finger rotates after a dead zone, 2 fingers pinch-zoom / twist).
+  // HUD buttons and open menus never reach the canvas, so they never move the camera.
   bind() {
-    const canvas = this.opts.canvas; const joy = $('joy'), knob = $('joyKnob');
+    const canvas = this.opts.canvas; const joy = $('joy'), knob = $('joyKnob'); const g = this.g;
+    const cam = this.camPtr = new Map(); this.camG = { d0: 0, a0: 0, n: 0 }; this.rdrag = null; this.rebind = null;
+    const cfg = () => g.s.settings.cam;
+    const R = () => 56 * cfg().joySize;
     const rest = () => { joy.style.left = ''; joy.style.top = ''; joy.classList.remove('live'); knob.style.transform = 'translate(-50%,-50%)'; };
-    const start = (e) => {
-      if (this.joy.active || this.modalOpen) return;
-      this.audio.init();
-      this.joy.active = true; this.joy.id = e.pointerId; this.joy.ox = e.clientX; this.joy.oy = e.clientY; this.joy.x = this.joy.y = 0;
-      joy.style.left = e.clientX + 'px'; joy.style.top = e.clientY + 'px'; joy.classList.add('live');
+    this.applyControls = () => { const c = cfg(); joy.style.setProperty('--js', c.joySize); joy.classList.toggle('fixed', c.joyMode === 'fixed'); };
+    this.applyControls();
+    const inMoveZone = (x, y) => {
+      const c = cfg();
+      if (c.joyMode === 'fixed') { const r = joy.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2; return Math.hypot(x - cx, y - cy) < r.width * 0.85; }
+      if (c.moveZone === 'anywhere') return true;
+      return innerWidth < innerHeight ? y > innerHeight * 0.45 : x < innerWidth * 0.55;
+    };
+    const startJoy = (e) => {
+      this.joy.active = true; this.joy.id = e.pointerId; this.joy.x = this.joy.y = 0;
+      if (cfg().joyMode === 'fixed') { const r = joy.getBoundingClientRect(); this.joy.ox = r.left + r.width / 2; this.joy.oy = r.top + r.height / 2; joy.classList.add('held'); moveJoy(e); }
+      else { this.joy.ox = e.clientX; this.joy.oy = e.clientY; joy.style.left = e.clientX + 'px'; joy.style.top = e.clientY + 'px'; joy.classList.add('live'); }
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
       $('hint').classList.add('gone');
     };
-    const move = (e) => {
-      if (!this.joy.active || e.pointerId !== this.joy.id) return;
-      const R = 56; let dx = e.clientX - this.joy.ox, dy = e.clientY - this.joy.oy; const d = Math.hypot(dx, dy);
-      if (d > R) { dx *= R / d; dy *= R / d; }
-      this.joy.x = dx / R; this.joy.y = dy / R;
+    const moveJoy = (e) => {
+      const r = R(); let dx = e.clientX - this.joy.ox, dy = e.clientY - this.joy.oy; const d = Math.hypot(dx, dy);
+      if (d > r) { dx *= r / d; dy *= r / d; }
+      this.joy.x = dx / r; this.joy.y = dy / r;
       knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
     };
-    const end = (e) => { if (e.pointerId !== this.joy.id) return; this.joy.active = false; this.joy.x = this.joy.y = 0; rest(); };
+    const camGesture = () => { // re-baseline the pinch whenever the finger count changes
+      const G = this.camG; G.n = cam.size; if (cam.size === 2) { const [a, b] = cam.values(); G.d0 = Math.hypot(a.x - b.x, a.y - b.y); G.a0 = Math.atan2(b.y - a.y, b.x - a.x); }
+    };
+    const start = (e) => {
+      if (this.modalOpen || this.rebind) return;
+      this.audio.init();
+      if (e.pointerType === 'mouse') { if (e.button === 0 && !this.joy.active) startJoy(e); return; } // desktop: left-drag flies (classic), right-drag rotates (see mousedown)
+      if (!this.joy.active && inMoveZone(e.clientX, e.clientY)) { startJoy(e); return; }
+      if (cam.size >= 2) return;
+      cam.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, live: false });
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      camGesture(); $('hint').classList.add('gone');
+    };
+    const move = (e) => {
+      if (this.joy.active && e.pointerId === this.joy.id) { moveJoy(e); return; }
+      const P = cam.get(e.pointerId); if (!P) return;
+      if (this.modalOpen) { cam.clear(); return; }
+      const px = P.x, py = P.y; P.x = e.clientX; P.y = e.clientY; const c = cfg();
+      if (cam.size === 1) {
+        if (!P.live) { if (Math.hypot(P.x - P.sx, P.y - P.sy) < 8) return; P.live = true; return; } // dead zone, then rotate from here (no jump)
+        this.camDrag(P.x - px, P.y - py, c);
+      } else if (cam.size === 2) {
+        const [a, b] = cam.values(); const d = Math.hypot(a.x - b.x, a.y - b.y), an = Math.atan2(b.y - a.y, b.x - a.x); const G = this.camG;
+        if (G.d0 > 20 && d > 20) g.camZoomBy(Math.pow(G.d0 / d, c.zoomSens));
+        if (c.twist) { let da = an - G.a0; if (da > Math.PI) da -= Math.PI * 2; if (da < -Math.PI) da += Math.PI * 2; if (Math.abs(da) < 0.5) g.camRotate(-da * (c.invertX ? -1 : 1), 0); }
+        G.d0 = d; G.a0 = an; a.live = b.live = true;
+      }
+    };
+    const end = (e) => {
+      if (this.joy.active && e.pointerId === this.joy.id) { this.joy.active = false; this.joy.x = this.joy.y = 0; joy.classList.remove('held'); rest(); return; }
+      if (cam.delete(e.pointerId)) camGesture();
+    };
     canvas.addEventListener('pointerdown', start); window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
-    joy.addEventListener('pointerdown', (e) => { e.preventDefault(); start(e); });
+    joy.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!this.joy.active && !this.modalOpen) { this.audio.init(); startJoy(e); } });
+    // desktop camera: right-drag rotates, wheel zooms (mousedown fires for every button, unlike chorded pointer events)
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('mousedown', (e) => { if (e.button === 2 && !this.modalOpen) { this.rdrag = { x: e.clientX, y: e.clientY }; e.preventDefault(); } });
+    window.addEventListener('mousemove', (e) => { const D = this.rdrag; if (!D) return; if (this.modalOpen || !(e.buttons & 2)) { this.rdrag = null; return; } this.camDrag(e.clientX - D.x, e.clientY - D.y, cfg()); D.x = e.clientX; D.y = e.clientY; });
+    window.addEventListener('mouseup', (e) => { if (e.button === 2) this.rdrag = null; });
+    canvas.addEventListener('wheel', (e) => { e.preventDefault(); if (this.modalOpen) return; const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1; g.camZoomBy(Math.exp(clamp(e.deltaY * k, -240, 240) * 0.0011 * cfg().zoomSens)); }, { passive: false });
     window.addEventListener('keydown', (e) => {
+      if (this.rebind) { this.captureBind(e); return; }
       this.keys[e.code] = true; this.audio.init();
       if (e.code === 'Escape') this.close();
       if (this.modalOpen) return;
+      const B = cfg().binds;
       if (e.code === 'KeyU') this.open('upgrades'); if (e.code === 'KeyM') this.open('missions'); if (e.code === 'KeyG') this.open('map'); if (e.code === 'KeyK') this.open('upgrades', null, 'skills'); if (e.code === 'KeyI') this.open('upgrades', null, 'gear');
-      { const ab = this.g.abilities(); const n = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'].indexOf(e.code); if (n >= 0 && ab[n]) this.g.useAbility(ab[n]); if (e.code === 'Space' && ab.includes('dash')) this.g.useAbility('dash'); } if (e.code === 'KeyF') this.open('station', 'factory'); if (e.code === 'KeyH') this.stationBtn();
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) $('hint').classList.add('gone');
+      { const ab = this.g.abilities(); const n = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'].indexOf(e.code); if (n >= 0 && ab[n]) this.g.useAbility(ab[n]); if (e.code === B.boost && !e.repeat && ab.includes('dash')) this.g.useAbility('dash'); } if (e.code === 'KeyF') this.open('station', 'factory'); if (e.code === 'KeyH') this.stationBtn();
+      if (!e.repeat) { if (e.code === B.reset) g.camReset(); else if (e.code === B.recenter) g.camRecenter(); else if (e.code === B.preset) { const o = PRESET_ORDER; const id = o[(o.indexOf(cfg().preset) + 1) % o.length]; g.camPreset(id); this.toast(`Camera: ${CAM_PRESETS[id].name}`); g.save(); } }
+      if ([B.up, B.down, B.left, B.right, 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) $('hint').classList.add('gone');
+      if (['Space', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown'].includes(e.code) && e.target === document.body) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
-    window.addEventListener('blur', () => { this.keys = {}; });
+    window.addEventListener('blur', () => { this.keys = {}; this.rdrag = null; cam.clear(); });
     const click = (id, fn) => $(id).addEventListener('click', (e) => { e.stopPropagation(); this.audio.init(); this.audio.click(); fn(); });
     click('btnSettings', () => this.open('settings'));
     click('btnUpgrades', () => this.open('upgrades'));
@@ -93,16 +148,25 @@ export class UI {
     // live volume sliders (applied while dragging, saved on release)
     $('modalBody').addEventListener('input', (e) => { const k = e.target.dataset && e.target.dataset.vol; if (!k) return; const v = clamp(+e.target.value / 100, 0, 1); this.g.s.settings[k] = v;
       if (k === 'musicVol') this.g.s.settings.music = v > 0; if (k === 'sfxVol') this.g.s.settings.sfx = v > 0; const l = $('vol_' + k); if (l) l.textContent = Math.round(v * 100) + '%'; this.opts.applySettings(true); });
-    $('modalBody').addEventListener('change', (e) => { if (e.target.dataset && e.target.dataset.vol) { this.g.save(); if (e.target.dataset.vol !== 'musicVol') this.audio.click(); } });
+    $('modalBody').addEventListener('input', (e) => { const k = e.target.dataset && e.target.dataset.cam; if (!k) return; const v = +e.target.value; this.g.s.settings.cam[k] = v / +e.target.dataset.mul; const l = $('cam_' + k); if (l) l.textContent = v + '%'; });
+    $('modalBody').addEventListener('change', (e) => { if (e.target.dataset && e.target.dataset.cam) this.g.save(); if (e.target.dataset && e.target.dataset.vol) { this.g.save(); if (e.target.dataset.vol !== 'musicVol') this.audio.click(); } });
     $('modalTabs').addEventListener('click', (e) => { const t = e.target.closest('[data-tab]'); if (t) { this.audio.click(); if (this.modalOpen === 'upgrades') this.upTab = t.dataset.tab; else if (this.modalOpen === 'missions') this.mTab = t.dataset.tab; else if (this.modalOpen === 'map') this.mapPanel = t.dataset.tab; else this.tab = t.dataset.tab; this.render(true); } });
   }
-  readInput() {
+  // drag on empty space / right-drag: swipe right turns the view right, swipe up looks up (unless inverted)
+  camDrag(dx, dy, c) { const k = 0.0058; this.g.camRotate(-dx * k * c.sensX * (c.invertX ? -1 : 1), dy * k * 0.75 * c.sensY * (c.invertY ? -1 : 1)); }
+  readInput(dt = 0) {
+    const c = this.g.s.settings.cam, B = c.binds, k = this.keys;
     let x = this.joy.x, z = this.joy.y;
-    const k = this.keys;
-    const kx = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0), kz = (k.KeyS || k.ArrowDown ? 1 : 0) - (k.KeyW || k.ArrowUp ? 1 : 0);
+    // radial dead zone with rescale so small thumb jitter never moves the ship and full tilt still reaches 1
+    { const m = Math.hypot(x, z), dz = c.joyDead; if (m <= dz) { x = 0; z = 0; } else { const f = Math.min(1, (m - dz) / (1 - dz)) / m; x *= f; z *= f; } }
+    const kx = (k[B.right] || k.ArrowRight ? 1 : 0) - (k[B.left] || k.ArrowLeft ? 1 : 0), kz = (k[B.down] || k.ArrowDown ? 1 : 0) - (k[B.up] || k.ArrowUp ? 1 : 0);
     if (kx || kz) { const d = Math.hypot(kx, kz); x = kx / d; z = kz / d; }
     if (this.modalOpen) { x = 0; z = 0; }
-    this.g.input.x = x; this.g.input.z = z;
+    // camera-relative: "up" on the stick / W always means away from the camera, whatever the camera yaw
+    const o = this._in || (this._in = { x: 0, z: 0 }); this.g.camToWorld(x, z, o); this.g.input.x = o.x; this.g.input.z = o.z;
+    // keyboard camera (held keys)
+    if (!this.modalOpen && dt) { const ry = (k[B.camLeft] ? 1 : 0) - (k[B.camRight] ? 1 : 0), rp = (k[B.camDown] ? 1 : 0) - (k[B.camUp] ? 1 : 0), zz = (k[B.zoomOut] ? 1 : 0) - (k[B.zoomIn] ? 1 : 0);
+      if (ry || rp) this.g.camRotate(ry * 1.9 * c.sensX * dt, rp * 0.9 * c.sensY * (c.invertY ? -1 : 1) * dt); if (zz) this.g.camZoomBy(Math.exp(zz * 1.2 * c.zoomSens * dt)); }
   }
   stationBtn() {
     if (this.g.docked) this.open('station', 'market');
@@ -187,7 +251,7 @@ export class UI {
 
   // ---------- HUD per frame ----------
   update(dt, w, h) {
-    this.readInput();
+    this.readInput(dt);
     this.float3.update(dt, w, h);
     this.hudT -= dt; if (this.hudT <= 0) { this.hudT = 0.12; this.refreshHud(); }
     this.radarT -= dt; if (this.radarT <= 0) { this.radarT = 1 / 20; this.drawRadar(); }
@@ -318,6 +382,8 @@ export class UI {
     const T = g.hull(); const st = g.stats(); const HZ = g.phen ? g.phen.env : null; const neb = HZ ? HZ.neb : 0, ion = HZ ? HZ.ion : 0; const range = 85 * T.cam * st.radar * (1 - 0.45 * neb); const k = (R - 6) / range; this.radarRange = range; const px = g.player.x, pz = g.player.z; const fx = st.fx;
     ctx.clearRect(0, 0, S, S);
     ctx.save(); ctx.beginPath(); ctx.arc(R, R, R - 3, 0, Math.PI * 2); ctx.clip();
+    // v13: the scope turns with the camera so radar-up is always screen-up (Classic yaw 0 = north-up as before)
+    const cy = g.cam ? g.cam.yaw : 0; if (cy) { ctx.translate(R, R); ctx.rotate(cy); ctx.translate(-R, -R); }
     const grd = ctx.createRadialGradient(R, R, 0, R, R, R); grd.addColorStop(0, 'rgba(10,40,60,0.75)'); grd.addColorStop(1, 'rgba(4,14,26,0.85)');
     ctx.fillStyle = grd; ctx.fillRect(0, 0, S, S);
     ctx.strokeStyle = 'rgba(80,210,255,0.22)'; ctx.lineWidth = 1;
@@ -367,28 +433,30 @@ export class UI {
     for (const b of g.s.war.battles) if (Math.hypot(px - b.x, pz - b.z) < 260) edge(b.x, b.z, '#c99bff', '⚔');
     const tm = g.s.missions.active.find((m) => m.id === g.s.missions.tracked); if (tm) edge(tm.x, tm.z, MTYPES[tm.type].color, MTYPES[tm.type].icon);
     if (g.camp.lib) edge(g.camp.lib.c.x, g.camp.lib.c.z, '#5dff98', 'RELAY');
+    if (cy) ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (ion > 0.05 || neb > 0.05) { // jamming static / nebula fog on the scope
       if (neb > 0.05) { ctx.fillStyle = `rgba(150,80,200,${(0.25 * neb).toFixed(3)})`; ctx.fillRect(0, 0, S, S); }
       if (ion > 0.05) { ctx.strokeStyle = `rgba(170,200,255,${(0.35 * ion).toFixed(3)})`; ctx.lineWidth = 1; for (let i = 0; i < 10 * ion + 2; i++) { const y = Math.random() * S; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(S, y + (Math.random() - 0.5) * 6); ctx.stroke(); } }
       ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = ion > 0.05 ? '#b8ccff' : '#e0b0ff'; ctx.fillText(ion > 0.05 ? 'JAMMED' : 'RANGE ↓', R, S - 16); }
     ctx.restore();
     // player arrow
-    ctx.save(); ctx.translate(R, R); ctx.rotate(Math.PI - g.player.yaw);
+    ctx.save(); ctx.translate(R, R); ctx.rotate(Math.PI - g.player.yaw + cy);
     ctx.fillStyle = '#5fe3ff'; ctx.shadowColor = '#5fe3ff'; ctx.shadowBlur = 8;
     ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(6, 6); ctx.lineTo(0, 3); ctx.lineTo(-6, 6); ctx.closePath(); ctx.fill(); ctx.restore();
     ctx.strokeStyle = 'rgba(90,220,255,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(R, R, R - 2, 0, Math.PI * 2); ctx.stroke();
+    { const w = ((cy % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI; if (Math.abs(w) > 0.05) { const nx = R + Math.sin(cy) * (R - 9), ny = R - Math.cos(cy) * (R - 9); ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffd36a'; ctx.fillText('N', nx, ny); ctx.textBaseline = 'alphabetic'; } }
   }
 
   // ---------- modals ----------
   open(which, tab, upTab) {
-    this.audio.init(); if (!this.modalOpen) this.audio.menuOpen();
+    this.audio.init(); if (!this.modalOpen) this.audio.menuOpen(); if (this.camPtr) this.camPtr.clear(); this.rdrag = null; // menus block camera gestures
     if (upTab) this.upTab = upTab;
     this.modalOpen = which; if (tab) this.tab = tab; else if (which === 'station' && !this.tab) this.tab = 'market';
     $('modal').classList.remove('hidden'); $('modal').dataset.kind = which;
     this.render(true);
   }
   close() {
-    if (!this.modalOpen) return; this.modalOpen = null; this.preview.hide(); this.confirmKey = null; this.audio.menuClose(); this.mapCanvas = null;
+    if (!this.modalOpen) return; this.modalOpen = null; this.rebind = null; this.preview.hide(); this.confirmKey = null; this.audio.menuClose(); this.mapCanvas = null;
     $('modal').classList.add('hidden'); if (this.opts.isPlaying()) this.g.save();
   }
   render(resetScroll) {
@@ -805,10 +873,51 @@ export class UI {
     return `<div class="card"><h4>AUDIO</h4></div>` + sl('masterVol', 'Master') + sl('musicVol', 'Music') + sl('sfxVol', 'Sound effects') + tg('mute', 'Mute all') + this.renderMusicCard() + this.renderGraphicsCard(st) +
       `<div class="card row"><span>Flight assist</span><div class="seg">${[['low', 'LOW'], ['normal', 'NORMAL'], ['high', 'HIGH']].map(([q, l]) => `<button class="${(st.assist || 'normal') === q ? 'on' : ''}" data-act="assist" data-q="${q}">${l}</button>`).join('')}</div></div>
       <div class="card row"><span>Faction warfare<small class="muted" style="display:block">How often factions fight each other and take territory</small></span><div class="seg">${['off', 'low', 'normal', 'high'].map((q) => `<button class="${(st.war || 'normal') === q ? 'on' : ''}" data-act="warlvl" data-q="${q}">${q.toUpperCase()}</button>`).join('')}</div></div>
-      <div class="card"><h4>CONTROLS</h4><p>Touch: drag anywhere to steer (virtual joystick). Weapons fire automatically. Tap the round ability buttons on the right; tap the radar for the galaxy map.<br>Desktop: WASD / arrow keys or drag with the mouse. 1–6 = abilities, Space = Quantum Dash, G = galaxy map, K = skills, I = gear, U = upgrades, M = missions, F = factory, H = station/autopilot, Esc = close.</p></div>
+      ${this.renderCamCard()}
+      <div class="card"><h4>CONTROLS</h4><p>Touch: drag the lower screen to fly (virtual joystick), drag the upper screen or use a second finger to rotate the camera, pinch to zoom. Weapons fire automatically. Tap the round ability buttons; tap the radar for the galaxy map.<br>Desktop: WASD / arrow keys or left-drag to fly, right-drag to rotate, mouse wheel to zoom, Q/E rotate, R resets the camera, C puts it behind the ship, V cycles camera styles. 1–6 = abilities, Space = Quantum Dash, G = galaxy map, K = skills, I = gear, U = upgrades, M = missions, F = factory, H = station/autopilot, Esc = close.</p></div>
       <div class="card row"><span>Progress autosaves every few seconds.</span><span class="btnrow"><button class="btn sm gold" data-act="save">Save game</button><button class="btn sm" data-act="saves">Save / Load…</button></span></div>
       <div class="card row"><span>Erase all progress</span><button class="btn sm danger" data-act="reset" data-confirm="1">Reset</button></div>
-      <p class="muted">Stellar Frontier v12 · Built with three.js · Blender-built hulls matched to the concept sheet · Cinematic staged explosions &amp; destruction · 15 true-scale hull classes from the Stellar Odyssey concept sheet · Living space: planets, nebulae, ion storms, gravity wells & a black hole · Destructible bases · Newtonian flight & impulse physics · Sound effects synthesised in real time</p>`;
+      <p class="muted">Stellar Frontier v13 · Built with three.js · Orbit camera with 4 styles, pinch zoom &amp; camera-relative controls · Blender-built hulls matched to the concept sheet · Cinematic staged explosions &amp; destruction · 15 true-scale hull classes from the Stellar Odyssey concept sheet · Living space: planets, nebulae, ion storms, gravity wells & a black hole · Destructible bases · Newtonian flight & impulse physics · Sound effects synthesised in real time</p>`;
+  }
+  // v13 CAMERA & CONTROLS settings (all persisted in settings.cam)
+  renderCamCard() {
+    const c = this.g.s.settings.cam; const P = CAM_PRESETS[c.preset];
+    const seg = (k, list, cur = c[k]) => `<div class="seg">${list.map(([v, l]) => `<button class="${cur === v ? 'on' : ''}" data-act="camset" data-k="${k}" data-v="${v}" data-t="${typeof v}">${l}</button>`).join('')}</div>`;
+    const row = (label, help, ctl) => `<div class="card row"><span>${label}${help ? `<small class="muted" style="display:block">${help}</small>` : ''}</span>${ctl}</div>`;
+    const tog = (k, label, help) => row(label, help, `<button class="toggle ${c[k] ? 'on' : ''}" data-act="camset" data-k="${k}" data-v="${!c[k]}" data-t="boolean">${c[k] ? 'ON' : 'OFF'}</button>`);
+    const sl = (k, label, lo, hi, mul = 100) => { const v = Math.round(c[k] * mul); return `<div class="card row vol"><span>${label}</span><input type="range" min="${lo}" max="${hi}" step="1" value="${v}" data-cam="${k}" data-mul="${mul}" aria-label="${label}"><b class="volv" id="cam_${k}">${v}%</b></div>`; };
+    const binds = Object.keys(BIND_DEFAULTS).map((k) => `<div class="row bindrow"><span>${BIND_LABELS[k]}</span><button class="btn sm keycap ${this.rebind === k ? 'gold' : ''}" data-act="bind" data-k="${k}">${this.rebind === k ? 'Press a key…' : keyName(c.binds[k])}</button></div>`).join('');
+    return `<div class="card" id="camCard"><h4>CAMERA &amp; CONTROLS</h4></div>
+      <div class="card gfx"><div class="row"><span>Camera style</span><div class="seg">${PRESET_ORDER.map((id) => `<button class="${c.preset === id ? 'on' : ''}" data-act="campreset" data-q="${id}">${CAM_PRESETS[id].label}</button>`).join('')}</div></div>
+        <p class="muted small"><b>${P.name}</b>: ${P.desc}</p>
+        <div class="btnrow"><button class="btn sm" data-act="camreset">⟲ Reset view</button><button class="btn sm" data-act="camrecenter">⤓ Behind ship</button></div></div>
+      ${sl('sensX', 'Rotate sensitivity', 10, 300)}${sl('sensY', 'Tilt sensitivity', 10, 300)}${sl('zoomSens', 'Zoom sensitivity', 10, 300)}
+      ${tog('invertY', 'Invert vertical look', 'Swipe up tilts the view down')}${tog('invertX', 'Invert horizontal look', '')}
+      ${row('Zoom smoothing', '', seg('zoomSmooth', [[0.1, 'SNAPPY'], [0.2, 'SMOOTH'], [0.35, 'SOFT']]))}
+      ${row('Rotation smoothing', '', seg('rotSmooth', [['snappy', 'SNAPPY'], ['normal', 'NORMAL'], ['smooth', 'SMOOTH']]))}
+      ${row('Follow', 'How tightly the camera trails the ship', seg('follow', [['tight', 'TIGHT'], ['normal', 'NORMAL'], ['loose', 'LOOSE']]))}
+      ${row('Look-ahead', 'Shows more space in the direction you fly', seg('lookAhead', [[0, 'OFF'], [0.5, 'LOW'], [1, 'NORMAL'], [1.5, 'HIGH']]))}
+      ${row('Max zoom-out', 'Scales with your hull class', seg('zoomMax', [[1.5, '1.5×'], [2, '2×'], [2.5, '2.5×']]))}
+      ${row('Lowest camera angle', '', seg('pitchMin', [[20, '20°'], [25, '25°'], [35, '35°']]))}${row('Highest camera angle', '', seg('pitchMax', [[70, '70°'], [82, '82°'], [85, '85°']]))}
+      ${row('Combat auto-framing', 'Zooms out to fit enemies and capital bosses; never rotates or overrides your zoom', seg('autoFrame', [['off', 'OFF'], ['mild', 'MILD'], ['full', 'FULL']]))}
+      ${row('Auto-rotate behind ship', 'Only after a few seconds without camera input', seg('autoBehind', [['off', 'OFF'], ['slow', 'SLOW'], ['normal', 'NORMAL']]))}
+      ${tog('collide', 'Camera collision', 'Moves in when a station, capital hull or big asteroid blocks the view')}${tog('fade', 'Fade obstructions', 'The station turns see-through when it hides your ship (enemies never fade)')}
+      ${tog('camRel', 'Camera-relative steering', 'ON: up on the stick flies away from the camera. OFF: up is always north')}
+      <div class="card"><h4>TOUCH JOYSTICK</h4></div>
+      ${row('Joystick', 'Floating appears where you touch; fixed stays in the corner', seg('joyMode', [['floating', 'FLOATING'], ['fixed', 'FIXED']]))}
+      ${row('Joystick size', '', seg('joySize', [[0.8, 'S'], [1, 'M'], [1.25, 'L']]))}${sl('joyDead', 'Dead zone', 0, 30)}
+      ${row('Steering area', 'Lower screen: drag below to fly, above to rotate the camera', seg('moveZone', [['lower', 'LOWER SCREEN'], ['anywhere', 'ANYWHERE']]))}
+      ${tog('twist', 'Two-finger twist rotates', 'Pinch always zooms')}
+      <details class="card binds"><summary><b>KEYBOARD BINDINGS</b> <span class="muted small">(tap one, then press a key)</span></summary>${binds}
+        <p class="muted small">Arrow keys always steer. Right mouse drag rotates, mouse wheel zooms.</p><div class="btnrow"><button class="btn sm" data-act="bindsreset">Default keys</button></div></details>
+      <div class="card row"><span>Reset camera &amp; control settings</span><button class="btn sm" data-act="camdefaults">Defaults</button></div>`;
+  }
+  captureBind(e) {
+    e.preventDefault(); const k = this.rebind; const c = this.g.s.settings.cam; this.rebind = null;
+    if (e.code === 'Escape') { this.render(); return; }
+    if (RESERVED_KEYS.includes(e.code)) { this.toast(`${keyName(e.code)} is used by menus or abilities`, 'warn'); this.render(); return; }
+    for (const o in c.binds) if (o !== k && c.binds[o] === e.code) { c.binds[o] = c.binds[k]; this.toast(`Swapped with ${BIND_LABELS[o]}`); } // keep every action bound
+    c.binds[k] = e.code; this.g.save(); this.render();
   }
   renderGraphicsCard(st) { // v7: quality presets with auto-detect, camera shake level, frame cap, performance overlay
     const det = this.opts.detected || { q: 'medium', why: '' }; const act = this.opts.activeQuality ? this.opts.activeQuality() : det.q;
@@ -927,6 +1036,14 @@ export class UI {
       case 'track': this.audio.nextTrack(+b.dataset.d); break;
       case 'quality': g.s.settings.quality = b.dataset.q; this.opts.applySettings(); g.save(); break;
       case 'shakelvl': g.s.settings.shake = b.dataset.q; g.save(); if (b.dataset.q !== 'off') g.impulse(g.player.x + 1, g.player.z, 0.5); break;
+      case 'campreset': g.camPreset(b.dataset.q); g.save(); break;
+      case 'camreset': g.camReset(); this.toast('Camera reset'); break;
+      case 'camrecenter': g.camRecenter(); this.toast('Camera behind ship'); break;
+      case 'camset': { const c = g.s.settings.cam, k = b.dataset.k, t = b.dataset.t; c[k] = t === 'number' ? +b.dataset.v : t === 'boolean' ? b.dataset.v === 'true' : b.dataset.v;
+        if (k === 'pitchMin' || k === 'pitchMax' || k === 'zoomMax') { g.camRotate(0, 0); g.camZoomBy(1); } if (k === 'joyMode' || k === 'joySize') this.applyControls(); g.save(); break; }
+      case 'bind': this.rebind = this.rebind === b.dataset.k ? null : b.dataset.k; break;
+      case 'bindsreset': g.s.settings.cam.binds = { ...BIND_DEFAULTS }; g.save(); this.toast('Default keys restored'); break;
+      case 'camdefaults': { const view = g.s.settings.cam.view; g.s.settings.cam = { ...camDefaults(), view }; g.cam = null; g.camState(); g.camReset(); this.applyControls(); g.save(); this.toast('Camera & controls reset to defaults'); break; }
       case 'fpscap': g.s.settings.fpsCap = +b.dataset.q === 30 ? 30 : 60; g.save(); break;
       case 'assist': g.s.settings.assist = b.dataset.q; g.save(); this.toast(`Flight assist: ${b.dataset.q.toUpperCase()}${b.dataset.q === 'low' ? ' — Newtonian drift, manual braking' : b.dataset.q === 'high' ? ' — arcade handling' : ''}`); break;
       case 'save': { const ok = g.save(); if (ok) this.audio.saved(); this.toast(ok ? 'Game saved' : 'Save failed: storage is unavailable', ok ? 'good' : 'warn'); break; }

@@ -65,13 +65,13 @@ button{font-family:inherit;color:inherit;border:0;background:none;cursor:pointer
 #hullFill{background:linear-gradient(90deg,#29d67a,#9dff7a)}#hullFill.low{background:linear-gradient(90deg,#ff304a,#ff8a50)}
 .cargoSide{width:70px;text-align:center;font-size:9px;line-height:1.3;letter-spacing:.06em;border-left:1px solid rgba(95,227,255,.2);padding-left:8px}
 .cargoSide svg{width:24px;height:24px}
-#joy{position:absolute;right:26px;bottom:calc(var(--sab) + 108px);width:124px;height:124px;border-radius:50%;pointer-events:auto;touch-action:none;transform:none}
+#joy{position:absolute;right:26px;bottom:calc(var(--sab) + 108px);width:calc(124px * var(--js,1));height:calc(124px * var(--js,1));border-radius:50%;pointer-events:auto;touch-action:none;transform:none}
 #joy.live{right:auto;bottom:auto;transform:translate(-50%,-50%)}
 #joy .ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--cy2);background:radial-gradient(circle,rgba(20,60,90,.35),rgba(4,14,26,.55));box-shadow:0 0 14px rgba(60,200,255,.35),inset 0 0 20px rgba(60,200,255,.15)}
-#joy .ring::after{content:"";position:absolute;inset:34px;border-radius:50%;border:1.5px solid rgba(95,227,255,.35)}
+#joy .ring::after{content:"";position:absolute;inset:calc(34px * var(--js,1));border-radius:50%;border:1.5px solid rgba(95,227,255,.35)}
 #joy .ar{position:absolute;color:var(--cy);font-size:11px;opacity:.85}
 .ar.u{top:6px;left:50%;transform:translateX(-50%)}.ar.d{bottom:6px;left:50%;transform:translateX(-50%)}.ar.l{left:7px;top:50%;transform:translateY(-50%)}.ar.r{right:7px;top:50%;transform:translateY(-50%)}
-#joyKnob{position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 40% 35%,rgba(160,240,255,.55),rgba(30,120,170,.35));border:2px solid var(--cy);box-shadow:0 0 14px var(--cy)}
+#joyKnob{position:absolute;left:50%;top:50%;width:calc(52px * var(--js,1));height:calc(52px * var(--js,1));border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 40% 35%,rgba(160,240,255,.55),rgba(30,120,170,.35));border:2px solid var(--cy);box-shadow:0 0 14px var(--cy)}
 #btnStation{position:absolute;right:14px;bottom:calc(var(--sab) + 12px);width:82px;height:82px;flex-direction:column;display:flex;align-items:center;justify-content:center;gap:2px;font-size:10px;font-weight:800;letter-spacing:.06em}
 #btnStation svg{width:30px;height:30px;color:var(--cy)}
 #btnStation.docked{border-color:var(--gold);background:rgba(60,40,6,.75)}#btnStation.docked svg{color:var(--gold)}
@@ -471,3 +471,11 @@ ol.stages em span{font-size:9px;padding:1px 5px;border-radius:4px;background:rgb
 /* v8 shipyard: hull chips wrap; owned hulls get a marker */
 .pvSel.wrap{flex-wrap:wrap;gap:4px}.pvSel.wrap button{flex:0 0 auto;padding:6px 8px;font-size:11px;border-radius:8px}.pvSel.wrap button.own::after{content:' ✓';color:#5dff98}
 .card.tier .abilLine{font-size:11.5px;line-height:1.35;margin:4px 0;opacity:.92}.card.tier p.small,.pvCard p.small{font-size:11px}
+
+/* v13 camera & controls */
+#joy.fixed .ring{border-width:2.5px}
+#joy.held .ring{box-shadow:0 0 22px rgba(60,200,255,.6),inset 0 0 24px rgba(60,200,255,.25)}
+.binds summary{cursor:pointer;padding:2px 0}
+.bindrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px solid rgba(95,227,255,.12)}
+.bindrow .keycap{min-width:84px;font-family:inherit}
+#camCard{scroll-margin-top:8px}
