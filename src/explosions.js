@@ -7,7 +7,7 @@
 // leave persistent (capped) drifting wreckage. Everything is pooled: one instanced plasma mesh, one instanced debris
 // mesh, one line-segment arc buffer and the shared point-light pool — no per-explosion scene objects or materials.
 import * as THREE from 'three';
-import { ensureDamage, releaseDamage } from './vfx.js?v=13';
+import { ensureDamage, releaseDamage } from './vfx.js?v=14';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const TAU = Math.PI * 2;

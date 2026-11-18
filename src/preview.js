@@ -1,10 +1,11 @@
 // Rotating 3D previews (shipyard + station) rendered by one small, lazily created WebGL renderer.
 // Its canvas is moved into whichever menu slot needs it and only renders while visible.
 import * as THREE from 'three';
-import { HULLS, HULL_IDS, buildHull } from './hulls.js?v=13';
-import { TEX, TEX_IDS, preloadTex } from './glbhulls.js?v=13';
-import { skyEnv } from './shiplight.js?v=13';
-import { buildShip, buildStation, makeFlames, makeTurret, animateNavLights, animateStation, makeRockMaterial } from './models.js?v=13';
+import { HULLS, HULL_IDS, buildHull } from './hulls.js?v=14';
+import { TEX, TEX_IDS, preloadTex } from './glbhulls.js?v=14';
+import { ENV, buildStationAny } from './glbenv.js?v=14';
+import { skyEnv } from './shiplight.js?v=14';
+import { buildShip, buildStation, makeFlames, makeTurret, animateNavLights, animateStation, makeRockMaterial } from './models.js?v=14';
 
 const KIT = ['laser', 'cannon', 'missile', 'cannon', 'missile', 'pulse'];
 export class Preview {
@@ -41,11 +42,11 @@ export class Preview {
       if (id !== 'scout') { const gh = buildHull('scout', { tex: null }).group; const gm = new THREE.MeshBasicMaterial({ color: 0x6fd8ff, transparent: true, opacity: 0.35, depthWrite: false });
         gh.traverse((c) => { if (c.isMesh) c.material = gm; if (c.isSprite) c.visible = false; }); gh.position.set(H.beam * 0.5 + 3.2, 0, -H.len * 0.3); gh.name = 'scaleGhost'; b.group.add(gh); }
     } else {
-      const st = buildStation(arg, this.rockMat); g.add(st); anim = st; g.userData.nav = st.userData.main;
+      const st = buildStationAny(arg, this.rockMat); g.add(st); anim = st; g.userData.nav = st.userData.main; if (!st.userData.glb && ENV.enabled) g.userData.noCache = true;
     }
     const box = new THREE.Box3().setFromObject(g); const sph = box.getBoundingSphere(new THREE.Sphere());
     g.userData.radius = sph.radius; g.userData.center = sph.center.clone(); g.userData.station = anim;
-    this.cache.set(key, g); return g;
+    if (!g.userData.noCache) this.cache.set(key, g); return g;
   }
   show(container, kind, arg) {
     if (!container || !this.init()) return false;

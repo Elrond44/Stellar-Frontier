@@ -144,3 +144,37 @@ Brief: ../briefs/camera-controls.txt (written for a fantasy RPG; mapped to the s
 - [x] Final v13cam run 50/50 ALL PASS (tests/v13cam.last.log); old suites smoke, smoke5, compat, v8, v9, blender_ingame, blender_viewer, registry, yardcheck, live10 all PASS
 - [x] Cache-bust ?v=13, README v13 section, shots/v13 (presets, rotated, zoomed in/out, occlusion, settings)
 - [x] Merged camera -> main (ff), pushed 2726739 at 12:12 AM EST Nov 18; live: v13cam 50/50, smoke5, live10 ALL PASS against elrond44.github.io (run from the box)
+
+## v14: Environment assets in Blender (branch env)
+Source: the user's concept sheets. Sheets 1 and 3 reached the box (briefs/env-concepts-1.png: stations / asteroids + mining rigs / celestial;
+env-concepts-3.png: stations, asteroids + rigs + crystals, celestial). The second sheet never arrived; it's an alternate take of the same assets.
+Style: dark gunmetal hulls, warm amber windows, red ring/accent lights, teal-blue reactor and crystal glow, gold industrial cranes and
+scaffolding, blue solar wings, heavy greebles, purple/teal nebula space.
+Same pipeline as the ships: bmesh builders in blender/src (env_kit.py, station.py, asteroids.py) -> glb -> meshopt -> game/models/env/
+(copied by blender/sync_env.sh). Showcase renders + concept-vs-<asset>.png comparisons are in blender/shots/env/ (copied to game/shots/env/);
+concept crops are in briefs/crops/; compare_env.py builds the comparisons.
+
+Plan / batches
+1. Batch 1 (this release): the player station's 6 growth stages (Outpost Refinery -> Solar Refinery -> Factory Station ->
+   Orbital Works -> Industrial Hub -> Frontier Citadel) plus the asteroid set (lumpy x2, porous, holed cavern, molten, green-veined,
+   gold-nugget, and 3 crystal-cluster rich rocks), matched to minerals: molten = ferrite/crimsonite, veins = viridium,
+   cavern = voidstone, nuggets = ferrite/crimsonite; crystals take each mineral's glow colour.
+2. Batch 2: pirate citadel, faction stations (ring station, industrial hub, dome biosphere, reactor, comms relay, beacon
+   spire, hangar block, turret platforms), mining-rig asteroids (open pit, crystal drill, tunnel hangar, dome colony), ore pickups and crystals.
+3. Batch 3: planets (rim-lit dark planet, banded ringed gas giant, cratered moon), fiery star, blue black hole, teal/purple nebula clouds.
+
+Batch 1 checklist
+- [x] env_kit.py: extra slots (red, solar, greenery, rock, rock glow, nugget, beacon), torus/sphere/lathe/tube/beam/truss/dish/crystal/
+      faceted pitted rock primitives, AO bake, nebula world + showcase camera
+- [x] station.py L1..L6 (5k -> 52k tris; 0.19-1.5 MB): same footprint and dock port (0,0,7.9) as the procedural station; animated parts are
+      pivot empties (spin_ring, crane_N) so meshopt quantization can't move their pivots; empties stack_/chase_/dock_/nav*; drones stay procedural
+- [x] asteroids.py: unit-radius hi/lo LOD rocks (hi 2.5-8k tris, lo 320-1.9k), glow slot -> aGlow; one 0.9 MB glb; no normals/uvs (flat shaded)
+- [x] showcase sheets + concept-vs comparisons in blender/shots/env/
+- [x] game: src/glbenv.js loader; Game/preview use buildStationAny, AsteroidField uses the glb rocks with a per-mineral shape map;
+      `?env=proc` (sticky) and any load failure (404/timeout) fall back to procedural; startup awaits rocks + the saved station level,
+      the next level preloads in the background, a level that isn't loaded yet shows procedurally and swaps in when ready
+- [x] occlusion fade, docking, upgrades, shipyard/station live view, mining damage/hit glow all work; no console errors
+- [x] Playwright: tests/v14env.js (34 checks, all pass) + shots in game/shots/v14/
+- [x] fix: station keeps its v8 capital scale (x2) with the glb models (caught by v8 suite); footprint check measured in world units, drones excluded (glb reach 36-43 vs procedural 38-42)
+- [x] old suites green: smoke, smoke5, v8, v9, v13cam, registry, blender_ingame, blender_tex_registry, yardcheck, compat
+- [x] merge to main, cache-bust v14, push, verify live

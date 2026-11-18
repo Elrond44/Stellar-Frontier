@@ -1,7 +1,7 @@
 // Procedural models v2: detailed ships, turrets, pirates, station, asteroid geometry + materials.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
-import { mulberry, fbm3 } from './util.js?v=13';
+import { mulberry, fbm3 } from './util.js?v=14';
 
 // ================= Procedural textures =================
 function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -814,6 +814,13 @@ export function buildStation(level, rockMat) {
     }
   }
   const main = k.build(); root.add(main);
+  addStationDrones(root, level, anim, rng);
+  root.userData.anim = anim; root.userData.main = main;
+  root.userData.dockPort = new THREE.Vector3(0, 0, 7.9);
+  return root;
+}
+// v14: shared by the procedural and the Blender (glb) station
+export function addStationDrones(root, level, anim, rng = mulberry(4242)) {
   // drone traffic: freighters looping between station and space (more drones as the station grows)
   const nDrones = [0, 2, 3, 4, 6, 10][level - 1];
   if (nDrones) {
@@ -822,9 +829,6 @@ export function buildStation(level, rockMat) {
     const dg = dk.build(); const fl = makeFlames(dk.engines); dg.add(fl.group);
     for (let i = 0; i < nDrones; i++) { const d = dg.clone(); root.add(d); anim.drones.push({ obj: d, r: 15 + rng() * 22, speed: (0.15 + rng() * 0.25) * (rng() < 0.5 ? 1 : -1), a: rng() * 6.28, y: -1 + rng() * 6, wob: rng() * 6 }); }
   }
-  root.userData.anim = anim; root.userData.main = main;
-  root.userData.dockPort = new THREE.Vector3(0, 0, 7.9);
-  return root;
 }
 export function animateStation(root, t, dt) {
   const a = root.userData.anim; if (!a) return;
