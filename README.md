@@ -12,6 +12,13 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 
 Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). The ship hulls, the home station, the asteroids, the pirate/faction installations, the mining rigs and the ore gems are modelled in Blender from Python scripts (`tools/blender/`) and shipped as compressed glTF (`models/`); everything else (effects, enemy bases, music and sound) is generated procedurally in code. Progress autosaves to your browser's local storage.
 
+## v16: Blender-baked planets, stars and a blue black hole (environment batch 3)
+- The backdrop now uses Blender-baked surface maps from the celestial concept rows: a dark world with glowing orange fissure lights and a hot sun-rim with a lens flare, banded purple/tan gas giants (mostly ringed, often with a grey companion moon) and grey cratered moons, mixed in with the existing procedural planets.
+- Fiery stars sit deep below many sectors (always under Haven), with a granulated surface, corona and flare loops (flares off on Low).
+- Black holes switched to the concept's blue look: a streaked blue accretion disc, spiral arms, polar jets (Medium and High) and a blue photon ring on the lens. Gravity anomalies now show a violet swirl. Pull, horizon size and the lens are unchanged.
+- Nebula clouds use a baked teal/violet data map; the far layer sits beneath the planets so it backs them instead of veiling them.
+- Textures are KTX2 (WebP fallback, `?skyfmt=webp`): full set on High, half-res set on Medium, none on Low. `?env=proc` keeps the v15 look.
+
 ## v15: Blender installations, mining rigs and gems (environment batch 2)
 - Pirate and faction installations are now Blender models from the environment concept sheets, tinted per faction: Faction Stronghold (spiked citadel), Orbital Defense Platform (turret fortress drum with banners), Communication Array (dish relay), Hidden Shipyard (hangar block with gold gantry), Fusion Reactor (blue-core ring), Shield Generator (ring outpost), Defense Turret (armoured pad) and Fighter Hangar. Live turrets, shields, hit radii and HP are unchanged.
 - Resource Facilities are open-pit mining-rig asteroids with a crane; crystal drill rigs, tunnel hangars and dome colonies drift far below the play plane as set dressing (Medium 2, High 3, none on Low).

@@ -3,19 +3,20 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
-import { Game } from './game.js?v=15';
-import { ENV, preloadEnv, DepthRigs } from './glbenv.js?v=15';
-import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer, texLevelFor } from './glbhulls.js?v=15';
-import { applyShipLight } from './shiplight.js?v=15';
-import { UI } from './ui.js?v=15';
-import { Audio } from './audio.js?v=15';
-import { makeSky, makeStarLayer, makeDust } from './world.js?v=15';
-import { Environment } from './environment.js?v=15';
-import { CinematicPass } from './post.js?v=15';
-import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=15';
-import { Profiler } from './profiler.js?v=15';
-import { SECTORS, sectorAt } from './data.js?v=15';
-import { owner } from './galaxy.js?v=15';
+import { Game } from './game.js?v=16';
+import { ENV, preloadEnv, DepthRigs } from './glbenv.js?v=16';
+import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer, texLevelFor } from './glbhulls.js?v=16';
+import { applyShipLight } from './shiplight.js?v=16';
+import { UI } from './ui.js?v=16';
+import { Audio } from './audio.js?v=16';
+import { makeSky, makeStarLayer, makeDust } from './world.js?v=16';
+import { Environment } from './environment.js?v=16';
+import { CinematicPass } from './post.js?v=16';
+import { SKY, setSkyRenderer } from './sky.js?v=16';
+import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=16';
+import { Profiler } from './profiler.js?v=16';
+import { SECTORS, sectorAt } from './data.js?v=16';
+import { owner } from './galaxy.js?v=16';
 
 const canvas = document.getElementById('c');
 let renderer;
@@ -62,7 +63,7 @@ const prof = new Profiler(renderer, scene); const adapt = new AdaptiveQuality();
 if (window.SF_FORCE_QUALITY && PRESETS[window.SF_FORCE_QUALITY]) { detected.q = window.SF_FORCE_QUALITY; detected.why += ' (pinned by test harness)'; adapt.off = true; } // automated tests pin AUTO so software rendering stays comparable
 
 const audio = new Audio();
-setTexRenderer(renderer);
+setTexRenderer(renderer); setSkyRenderer(renderer); if (SKY.enabled) { camera.far = 4200; camera.updateProjectionMatrix(); } // v16: the per-sector suns sit 1.5-2 km below
 if (GLB.enabled) { try { await preloadGlbHulls(); } catch (e) { console.warn('glb hulls off', e); } } // blender-test toggle (?hulls=glb)
 if (ENV.enabled) { // v14: Blender station + asteroid set (?env=proc keeps the procedural ones)
   let lv = 1; try { lv = Math.max(1, Math.min(6, (JSON.parse(localStorage.getItem('stellar-frontier-save-v1') || '{}').stationLvl | 0) || 1)); } catch (e) { /* */ }
@@ -93,7 +94,7 @@ function setupQuality() {
     composer = new EffectComposer(renderer);
     composer.setPixelRatio(pr); composer.setSize(innerWidth, innerHeight);
     composer.addPass(new RenderPass(scene, camera));
-    cine = new CinematicPass(); composer.addPass(cine.pass);
+    cine = new CinematicPass(); if (SKY.enabled) cine.uniforms.uRingCol.value.set(0.7, 1.2, 2.2); composer.addPass(cine.pass); // v16: blue photon ring for the concept black hole
     bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), P.bloom, 0.5, 0.92);
     composer.addPass(bloom); composer.addPass(new OutputPass());
   }
@@ -200,7 +201,7 @@ const damp0 = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const perf = { upd: 0, calls: 0, tris: 0 };
 // soundtrack: the manifest is tiny; each song streams only when it is about to play
 audio.musicMode = game.s.settings.musicMode;
-fetch('music/tracks.json?v=15').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
+fetch('music/tracks.json?v=16').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
   if (!Array.isArray(list) || !list.length) return; const s = game.s.settings;
   audio.setTracks(list, s.trackIdx < list.length ? s.trackIdx : 0, s.trackIdx < list.length ? s.trackPos : 0);
 }).catch((e) => console.info('No soundtrack, using generated music:', e.message));
@@ -222,4 +223,4 @@ resize();
 frame();
 
 // test / debug hook
-window.SF = { perf, game, ui, audio, renderer, camera, scene, env, ENV, prof, detected, PRESETS, get fps() { return fps; }, get quality() { return activeQ; }, get cine() { return cine; }, get composer() { return composer; }, setQuality(q) { game.s.settings.quality = q; applySettings(); }, profile() { return prof.snapshot(); } };
+window.SF = { perf, game, ui, audio, renderer, camera, scene, env, ENV, SKY, prof, detected, PRESETS, get fps() { return fps; }, get quality() { return activeQ; }, get cine() { return cine; }, get composer() { return composer; }, setQuality(q) { game.s.settings.quality = q; applySettings(); }, profile() { return prof.snapshot(); } };

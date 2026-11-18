@@ -34,10 +34,10 @@
 <div id="hint"></div>
 <script type="module">
 import * as THREE from 'three';
-import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=15';
-import { makeFlames, animateNavLights } from './src/models.js?v=15';
-import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer } from './src/glbhulls.js?v=15';
-import { skyEnv } from './src/shiplight.js?v=15';
+import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=16';
+import { makeFlames, animateNavLights } from './src/models.js?v=16';
+import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer } from './src/glbhulls.js?v=16';
+import { skyEnv } from './src/shiplight.js?v=16';
 if (GLB.enabled) { try { await preloadGlbHulls(); } catch (e) { /* procedural fallback */ } }
 const q = new URLSearchParams(location.search); const mode = q.get('mode') || 'lineup';
 const canvas = document.getElementById('c'); const R = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });

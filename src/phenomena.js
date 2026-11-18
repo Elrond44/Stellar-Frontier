@@ -2,9 +2,10 @@
 // Zones are deterministic per galaxy sector. Each has a visible boundary, an approach warning, and limited, consistent
 // physics that applies to the player, enemies, projectiles and asteroids alike.
 import * as THREE from 'three';
-import { mulberry, clamp, rand, TAU } from './util.js?v=15';
-import { GSECTORS, installations, LAIRS } from './galaxy.js?v=15';
-import { nebulaTexture } from './environment.js?v=15';
+import { mulberry, clamp, rand, TAU } from './util.js?v=16';
+import { GSECTORS, installations, LAIRS } from './galaxy.js?v=16';
+import { nebulaTexture } from './environment.js?v=16';
+import { SKY, skyTex } from './sky.js?v=16';
 
 export const PHEN = {
   ion:       { name: 'Ion Storm', short: 'ION STORM', icon: '⚡', col: [0.55, 0.7, 3.2], css: '#8fb4ff', warn: 'Lightning strikes (watch the warning circles) · sensors jammed', inside: 'SENSORS JAMMED · LIGHTNING' },
@@ -93,12 +94,31 @@ const ZONE_FS = {
       float dop = 0.55 + 0.45*sin(ang + 0.6); // relativistic beaming: approaching side brighter
       float a = smoothstep(0.0, 0.06, t) * smoothstep(1.0, 0.45, t) * (0.35 + 0.9*g) * (0.5 + 0.9*dop);
       gl_FragColor = vec4(col*a, 0.0); }`,
+  // v16 concept black hole: blue accretion disc with Blender-baked spiral streaks, outer spiral glow, polar jets
+  accretionB: `uniform sampler2D uTex; uniform sampler2D uDisc; uniform float uHasD; uniform float uTime; varying vec2 vL; varying vec2 vW;
+    void main(){ float r = length(vL); float t = (r - 1.35)/(5.2 - 1.35); if (t < 0.0 || t > 1.0) discard; float ang = atan(vL.y, vL.x);
+      float sw = ang/6.2831853 + uTime*(0.22/(0.4+t*2.0)); float g;
+      if (uHasD > 0.5) { vec3 d = texture2D(uDisc, vec2(sw, t)).rgb; vec3 d2 = texture2D(uDisc, vec2(sw*2.0 + 0.3, t*0.9 + 0.05)).rgb; g = d.r*0.8 + d2.g*0.5; }
+      else { vec2 uv = vec2(sw*3.0, t*1.6 - uTime*0.05); g = texture2D(uTex, uv).r*0.6 + texture2D(uTex, uv*2.3 + 0.4).g*0.6; }
+      float heat = pow(1.0 - t, 1.8); vec3 col = mix(vec3(0.0,0.06,0.9), vec3(0.05,0.55,2.6), heat); col = mix(col, vec3(0.9,1.8,3.2), heat*heat*heat*0.5);
+      float dop = 0.55 + 0.45*sin(ang + 0.6);
+      float a = smoothstep(0.0, 0.05, t) * (1.0 - smoothstep(0.35, 1.0, t)) * (0.3 + 1.0*g) * (0.5 + 0.9*dop);
+      gl_FragColor = vec4(col*a*0.3, 0.0); }`,
+  bhspiral: `uniform sampler2D uDisc; uniform float uHasD; uniform float uTime; uniform float uA; varying vec2 vL; varying vec2 vW;
+    void main(){ float r = length(vL); if (r > 1.0) discard; float ang = atan(vL.y, vL.x); float lr = log(r + 0.02);
+      float arm = pow(0.5 + 0.5*sin(ang*2.0 - lr*5.0 + uTime*0.25), 4.0);
+      float d = uHasD > 0.5 ? texture2D(uDisc, vec2(ang/6.2831853 + lr*0.3 - uTime*0.01, clamp(r, 0.0, 1.0))).r : 0.6;
+      float fall = smoothstep(1.0, 0.25, r) * smoothstep(0.06, 0.18, r);
+      gl_FragColor = vec4(vec3(0.04,0.22,1.6)*arm*fall*(0.35 + 0.8*d)*0.2*uA, 0.0); }`,
   ring: `uniform float uTime; uniform vec3 uCol; uniform float uA; uniform float uStripes; varying vec2 vL; varying vec2 vW;
     void main(){ float ang = atan(vL.y, vL.x); float dash = step(0.5, fract(ang*(uStripes > 0.5 ? 18.0 : 24.0)/6.2831 - uTime*0.08));
       vec3 c = uStripes > 0.5 ? mix(uCol, vec3(0.02,0.02,0.0), dash) : uCol*dash; float a = uStripes > 0.5 ? 1.0 : dash;
       gl_FragColor = vec4(c*uA, a*uA*0.0); }`,
 };
 const LIGHT = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false };
+// v16: these zone shaders write colour with alpha 0 (meant as pure additive light); non-premultiplied additive blending
+// (SRC_ALPHA, ONE) drew them invisible, so the sky pack uses premultiplied additive (ONE, ONE) for the black hole / gravity wells
+const LIGHTP = { ...LIGHT, premultipliedAlpha: true };
 const PREMUL = { transparent: true, depthWrite: false, premultipliedAlpha: true, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, fog: false };
 let DISC = null, RING = null, RING_T = null;
 function geos() {
@@ -120,7 +140,7 @@ function buildZone(Z, quality) {
   else if (Z.type === 'nebula') { // stacked translucent slices: real occlusion of ships flying inside
     const ys = quality === 'low' ? [2.5] : quality === 'medium' ? [-3, 3.2] : [-4, 0.9, 4.6];
     ys.forEach((y, i) => { const m = disc(ZONE_FS.nebula, y, Z.r * (1 - i * 0.05), PREMUL, i === ys.length - 1 ? 0.55 : 0.7); m.material.uniforms.uSeed = { value: Z.seed * 0.013 + i * 0.21 }; m.renderOrder = 8 + i; V.parts.push(m); });
-  } else if (Z.type === 'gravity') V.parts.push(disc(ZONE_FS.gravity, -0.6, Z.r));
+  } else if (Z.type === 'gravity') V.parts.push(disc(ZONE_FS.gravity, -0.6, Z.r, SKY.enabled ? LIGHTP : LIGHT, SKY.enabled ? 0.8 : 1));
   else if (Z.type === 'radiation') {
     V.parts.push(disc(ZONE_FS.radiation, -0.8, Z.r));
     const core = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2, 1), new THREE.MeshStandardMaterial({ color: 0x223014, emissive: new THREE.Color(1.6, 3.2, 0.4), emissiveIntensity: 1, roughness: 0.6, metalness: 0.3, flatShading: true }));
@@ -134,6 +154,19 @@ function buildZone(Z, quality) {
     const halo = new THREE.Mesh(RING_T, acc.material); halo.scale.set(H * 0.82, H * 0.82, H * 0.5); halo.position.set(0, 0.6, -H * 0.15); halo.rotation.set(-1.15, 0, 0); halo.renderOrder = 5; g.add(halo); V.halo = halo;
     const ph = new THREE.Mesh(new THREE.TorusGeometry(H * 1.05, 0.16, 6, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.4, 1.6), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); ph.rotation.x = Math.PI / 2; ph.position.y = 0.5; g.add(ph);
     V.parts.push(disc(ZONE_FS.gravity, -0.8, Z.r * 0.55, LIGHT, 0.6));
+    if (SKY.enabled) { // v16: blue concept look (gameplay, horizon size and lens unchanged)
+      U.uDisc = { value: null }; U.uHasD = { value: 0 };
+      acc.material.dispose(); acc.material = halo.material = new THREE.ShaderMaterial({ ...LIGHTP, vertexShader: DISC_VS, fragmentShader: ZONE_FS.accretionB, uniforms: { uTex: U.uTex, uTime: U.uTime, uDisc: U.uDisc, uHasD: U.uHasD } });
+      ph.material.color.setRGB(1.6, 2.4, 4.0); const gm = V.parts[V.parts.length - 1].material; gm.premultipliedAlpha = true; gm.uniforms.uCol.value.setRGB(0.1, 0.45, 2.4); gm.uniforms.uA.value = 0.07;
+      const sp = new THREE.Mesh(DISC, new THREE.ShaderMaterial({ ...LIGHTP, vertexShader: DISC_VS, fragmentShader: ZONE_FS.bhspiral, uniforms: { uDisc: U.uDisc, uHasD: U.uHasD, uTime: U.uTime, uA: { value: 1 } } })); sp.position.y = -1.0; sp.scale.setScalar(H * 11); sp.rotation.y = 0.4; sp.renderOrder = 4; sp.name = 'bh-spiral'; g.add(sp); V.spiral = sp;
+      if (quality !== 'low') { // polar jets: visible from the tilted cinematic angles, faded when seen end-on from above
+        const jg = new THREE.CylinderGeometry(0.55, 0.1, 1, 20, 1, true); jg.translate(0, 0.5, 0);
+        const jm = new THREE.ShaderMaterial({ ...LIGHTP, side: THREE.DoubleSide, uniforms: { uTime: U.uTime }, vertexShader: `varying vec2 vU; varying vec3 vN; varying vec3 vP; void main(){ vU = uv; vec4 w = modelMatrix*vec4(position,1.0); vP = w.xyz; vN = normalize(mat3(modelMatrix)*normal); gl_Position = projectionMatrix*viewMatrix*w; }`,
+          fragmentShader: `uniform float uTime; varying vec2 vU; varying vec3 vN; varying vec3 vP; void main(){ vec3 V = normalize(cameraPosition - vP); float core = pow(abs(dot(normalize(vN), V)), 2.0); float side = smoothstep(0.25, 0.6, length(cross(vec3(0.0,1.0,0.0), V)));
+            float along = pow(1.0 - vU.y, 1.4) * smoothstep(0.0, 0.04, vU.y); float fl = 0.75 + 0.25*sin(uTime*7.0 + vU.y*40.0); gl_FragColor = vec4(vec3(0.5,1.1,3.0)*core*along*fl*side*0.3, 0.0); }` });
+        for (const sgn of [1, -1]) { const j = new THREE.Mesh(jg, jm); j.scale.set(H * 0.28, H * 9 * sgn, H * 0.28); j.position.y = 0.5; j.rotation.set(0.22, 0, 0.1); j.renderOrder = 6; j.name = 'bh-jet'; g.add(j); }
+      }
+    }
   }
   const ring = boundary(Z, def, tex, U); g.add(ring); V.ring = ring;
   return V;
@@ -202,10 +235,11 @@ export class Phenomena {
       if (Z.type === 'ion') { V.U.uFlash.value = Math.max(0, V.U.uFlash.value - dt * 3); if (d < Z.r + 30) this.ionStorm(Z, V, dt); }
       if (Z.type === 'radiation') { V.core.rotation.y += dt * 0.6; V.shell.rotation.y -= dt * 0.9; V.shell.rotation.x += dt * 0.4; V.core.material.emissiveIntensity = 0.8 + 0.4 * Math.sin(t * 2.4);
         if (d < Z.r + 40 && Math.random() < 0.9 * g.fx.budget) { const a = rand(0, TAU), rr = Math.sqrt(Math.random()) * Z.r; g.fx.emit(Z.x + Math.cos(a) * rr, 0.2, Z.z + Math.sin(a) * rr, 0, rand(1.5, 4), 0, 0.9, 0.35, 0.05, 1.4, 3.2, 0.4, 1); } }
+      if (Z.type === 'nebula' && SKY.enabled) { const nt = skyTex('nebula'); if (nt) V.U.uTex.value = nt; }
       if (Z.type === 'nebula' && d < Z.r + 20 && Math.random() < 0.3 * g.fx.budget && g.smoke.budget > 0) { const a = rand(0, TAU), rr = Math.sqrt(Math.random()) * Z.r * 0.9; g.smoke.emit(Z.x + Math.cos(a) * rr, rand(-1, 3), Z.z + Math.sin(a) * rr, rand(-0.5, 0.5), 0.1, rand(-0.5, 0.5), 5, 3, 7, 0.3, 0.16, 0.36, 0.25, 0.25); }
       if (Z.type === 'gravity') { this.lenses.push({ x: Z.x, y: 0, z: Z.z, r: 5, s: 0.035, mode: 0 });
         if (d < Z.r + 30 && Math.random() < 0.6 * g.fx.budget) { const a = rand(0, TAU), rr = Z.r * rand(0.5, 1); const vx = -Math.sin(a) * 6 - Math.cos(a) * 3, vz = Math.cos(a) * 6 - Math.sin(a) * 3; g.fx.emit(Z.x + Math.cos(a) * rr, 0.3, Z.z + Math.sin(a) * rr, vx, 0, vz, 1.4, 0.3, 0.05, 1.0, 0.7, 2.4, 1); } }
-      if (Z.type === 'blackhole') { V.acc.rotation.y += dt * 0.05; this.lenses.push({ x: Z.x, y: 0.5, z: Z.z, r: BH_HORIZON * 1.18, s: 0.2, mode: 0 });
+      if (Z.type === 'blackhole') { V.acc.rotation.y += dt * 0.05; if (V.U.uDisc) { const dt2 = skyTex('bhdisc'); V.U.uDisc.value = dt2; V.U.uHasD.value = dt2 ? 1 : 0; } this.lenses.push({ x: Z.x, y: 0.5, z: Z.z, r: BH_HORIZON * 1.18, s: 0.2, mode: 0 });
         if (d < Z.r + 60 && Math.random() < 1.2 * g.fx.budget) { const a = rand(0, TAU), rr = rand(14, 40); const sp = 10 + 160 / rr; g.fx.emit(Z.x + Math.cos(a) * rr, 0.5, Z.z + Math.sin(a) * rr, -Math.sin(a) * sp - Math.cos(a) * 4, 0, Math.cos(a) * sp - Math.sin(a) * 4, 1.2, 0.4, 0.05, 3.0, 1.5, 0.5, 1); } }
     }
   }

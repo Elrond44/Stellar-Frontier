@@ -1,6 +1,6 @@
 // Story missions + rotating contracts
-import { MINERALS } from './data.js?v=15';
-import { pick, randInt } from './util.js?v=15';
+import { MINERALS } from './data.js?v=16';
+import { pick, randInt } from './util.js?v=16';
 
 // kind: event-driven counters ('collect', 'collect:<type>', 'sell', 'upgrade', 'claim', 'kill', 'rock', 'boss')
 // or state checks ('station', 'tier', 'sector', 'level')

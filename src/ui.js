@@ -1,19 +1,19 @@
 // HUD, joystick, radar and menus (DOM overlay)
-import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=15';
-import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=15';
-import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=15';
-import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=15';
-import { factionStats, WAR_LEVELS, allied } from './war.js?v=15';
-import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=15';
-import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=15';
-import { INV_CAP } from './save.js?v=15';
-import { fmt, clamp } from './util.js?v=15';
-import { FloatText } from './fx.js?v=15';
-import { Preview } from './preview.js?v=15';
-import { HULLS, HULL_IDS, UNIT_M } from './hulls.js?v=15';
-import { PRESETS } from './quality.js?v=15';
-import { PHEN } from './phenomena.js?v=15';
-import { CAM_PRESETS, PRESET_ORDER, BIND_DEFAULTS, BIND_LABELS, RESERVED_KEYS, keyName, camDefaults } from './camctl.js?v=15';
+import { MINERALS, MINERAL_KEYS, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, xpForLevel, LEVEL_TITLES, sectorAt } from './data.js?v=16';
+import { BRANCHES, SKILLS, SKILL_BY_ID, ABILITIES, skillCost } from './rpg.js?v=16';
+import { RARITIES, TEMPLATES, CATS, SPECIALS, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, merchantStock } from './items.js?v=16';
+import { FACTIONS, FACTION_KEYS, INSIGNIA, GSECTORS, SECTOR_BY_ID, RINGS, MAP_R, gsectorAt, installations, caches, liberation, libStages, owner, isPirate, isHome, threatLabel, neighbours, NEUTRAL, INST_KINDS, LAIRS, HOME, instName, STAGES } from './galaxy.js?v=16';
+import { factionStats, WAR_LEVELS, allied } from './war.js?v=16';
+import { BOSSES, BOSS_BY_BP, ATTACKS } from './bosses.js?v=16';
+import { MTYPES, MAX_ACTIVE, missionTitle } from './missions.js?v=16';
+import { INV_CAP } from './save.js?v=16';
+import { fmt, clamp } from './util.js?v=16';
+import { FloatText } from './fx.js?v=16';
+import { Preview } from './preview.js?v=16';
+import { HULLS, HULL_IDS, UNIT_M } from './hulls.js?v=16';
+import { PRESETS } from './quality.js?v=16';
+import { PHEN } from './phenomena.js?v=16';
+import { CAM_PRESETS, PRESET_ORDER, BIND_DEFAULTS, BIND_LABELS, RESERVED_KEYS, keyName, camDefaults } from './camctl.js?v=16';
 
 const $ = (id) => document.getElementById(id);
 // v8: shipyard cards are cropped straight from the Stellar Odyssey concept sheet (art/ship-concepts.jpg, 1536x1024)
@@ -877,7 +877,7 @@ export class UI {
       <div class="card"><h4>CONTROLS</h4><p>Touch: drag the lower screen to fly (virtual joystick), drag the upper screen or use a second finger to rotate the camera, pinch to zoom. Weapons fire automatically. Tap the round ability buttons; tap the radar for the galaxy map.<br>Desktop: WASD / arrow keys or left-drag to fly, right-drag to rotate, mouse wheel to zoom, Q/E rotate, R resets the camera, C puts it behind the ship, V cycles camera styles. 1–6 = abilities, Space = Quantum Dash, G = galaxy map, K = skills, I = gear, U = upgrades, M = missions, F = factory, H = station/autopilot, Esc = close.</p></div>
       <div class="card row"><span>Progress autosaves every few seconds.</span><span class="btnrow"><button class="btn sm gold" data-act="save">Save game</button><button class="btn sm" data-act="saves">Save / Load…</button></span></div>
       <div class="card row"><span>Erase all progress</span><button class="btn sm danger" data-act="reset" data-confirm="1">Reset</button></div>
-      <p class="muted">Stellar Frontier v15 · Built with three.js · Blender-built pirate &amp; faction installations, mining-rig asteroids &amp; faceted gem pickups · Blender-built home station (6 growth stages) &amp; 10 asteroid &amp; crystal types from the environment concept sheet · Orbit camera with 4 styles, pinch zoom &amp; camera-relative controls · Blender-built hulls matched to the concept sheet · Cinematic staged explosions &amp; destruction · 15 true-scale hull classes from the Stellar Odyssey concept sheet · Living space: planets, nebulae, ion storms, gravity wells & a black hole · Destructible bases · Newtonian flight & impulse physics · Sound effects synthesised in real time</p>`;
+      <p class="muted">Stellar Frontier v16 · Built with three.js · Blender-baked planets, fiery stars &amp; a blue black hole · Blender-built pirate &amp; faction installations, mining-rig asteroids &amp; faceted gem pickups · Blender-built home station (6 growth stages) &amp; 10 asteroid &amp; crystal types from the environment concept sheet · Orbit camera with 4 styles, pinch zoom &amp; camera-relative controls · Blender-built hulls matched to the concept sheet · Cinematic staged explosions &amp; destruction · 15 true-scale hull classes from the Stellar Odyssey concept sheet · Living space: planets, nebulae, ion storms, gravity wells & a black hole · Destructible bases · Newtonian flight & impulse physics · Sound effects synthesised in real time</p>`;
   }
   // v13 CAMERA & CONTROLS settings (all persisted in settings.cam)
   renderCamCard() {
