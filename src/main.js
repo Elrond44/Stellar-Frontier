@@ -3,19 +3,19 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
-import { Game } from './game.js?v=14';
-import { ENV, preloadEnv, DepthRigs } from './glbenv.js?v=14';
-import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer, texLevelFor } from './glbhulls.js?v=14';
-import { applyShipLight } from './shiplight.js?v=14';
-import { UI } from './ui.js?v=14';
-import { Audio } from './audio.js?v=14';
-import { makeSky, makeStarLayer, makeDust } from './world.js?v=14';
-import { Environment } from './environment.js?v=14';
-import { CinematicPass } from './post.js?v=14';
-import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=14';
-import { Profiler } from './profiler.js?v=14';
-import { SECTORS, sectorAt } from './data.js?v=14';
-import { owner } from './galaxy.js?v=14';
+import { Game } from './game.js?v=15';
+import { ENV, preloadEnv, DepthRigs } from './glbenv.js?v=15';
+import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer, texLevelFor } from './glbhulls.js?v=15';
+import { applyShipLight } from './shiplight.js?v=15';
+import { UI } from './ui.js?v=15';
+import { Audio } from './audio.js?v=15';
+import { makeSky, makeStarLayer, makeDust } from './world.js?v=15';
+import { Environment } from './environment.js?v=15';
+import { CinematicPass } from './post.js?v=15';
+import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=15';
+import { Profiler } from './profiler.js?v=15';
+import { SECTORS, sectorAt } from './data.js?v=15';
+import { owner } from './galaxy.js?v=15';
 
 const canvas = document.getElementById('c');
 let renderer;
@@ -200,7 +200,7 @@ const damp0 = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const perf = { upd: 0, calls: 0, tris: 0 };
 // soundtrack: the manifest is tiny; each song streams only when it is about to play
 audio.musicMode = game.s.settings.musicMode;
-fetch('music/tracks.json?v=14').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
+fetch('music/tracks.json?v=15').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((list) => {
   if (!Array.isArray(list) || !list.length) return; const s = game.s.settings;
   audio.setTracks(list, s.trackIdx < list.length ? s.trackIdx : 0, s.trackIdx < list.length ? s.trackPos : 0);
 }).catch((e) => console.info('No soundtrack, using generated music:', e.message));

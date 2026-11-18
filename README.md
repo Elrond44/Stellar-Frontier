@@ -10,7 +10,14 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 - Climb a class path of 15 hulls, from a 20 m Scout to a 720 m Dreadnought, all built at true relative scale.
 - Push into pirate sectors for rare ores and loot, liberate them stage by stage from five warring pirate factions, and bring down each faction's flagship.
 
-Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). The ship hulls, the home station and the asteroids are modelled in Blender from Python scripts (`tools/blender/`) and shipped as compressed glTF (`models/`); everything else (effects, enemy bases, music and sound) is generated procedurally in code. Progress autosaves to your browser's local storage.
+Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). The ship hulls, the home station, the asteroids, the pirate/faction installations, the mining rigs and the ore gems are modelled in Blender from Python scripts (`tools/blender/`) and shipped as compressed glTF (`models/`); everything else (effects, enemy bases, music and sound) is generated procedurally in code. Progress autosaves to your browser's local storage.
+
+## v15: Blender installations, mining rigs and gems (environment batch 2)
+- Pirate and faction installations are now Blender models from the environment concept sheets, tinted per faction: Faction Stronghold (spiked citadel), Orbital Defense Platform (turret fortress drum with banners), Communication Array (dish relay), Hidden Shipyard (hangar block with gold gantry), Fusion Reactor (blue-core ring), Shield Generator (ring outpost), Defense Turret (armoured pad) and Fighter Hangar. Live turrets, shields, hit radii and HP are unchanged.
+- Resource Facilities are open-pit mining-rig asteroids with a crane; crystal drill rigs, tunnel hangars and dome colonies drift far below the play plane as set dressing (Medium 2, High 3, none on Low).
+- Ore pickups are faceted gem chips per mineral (blue hex, gold cubic, green emerald, purple amethyst), and rich asteroids use four matching crystal styles with sharper, more saturated facets.
+- The home station gained hanging pendants, scaffolds, pipe runs, roof vents and bigger crystal clusters.
+- `?env=proc` still switches every environment model back to the procedural one.
 
 ## v14: Blender stations and asteroids (environment batch 1)
 - Your home station is now a Blender model at all six growth stages, built from the environment concept sheets: Outpost Refinery, Solar Refinery (blue solar booms, reactor with a teal core), Factory Station (segmented ring with red light grooves that spins), Orbital Works (gold lattice cranes, container yard, gold ore heap, blue crystal pile, hab pods), Industrial Hub (stepped spires, glass biosphere dome on the rock, big comms dish, turret pads) and Frontier Citadel (wide outer ring, green halo beacon, hanging spire).

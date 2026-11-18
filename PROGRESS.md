@@ -198,5 +198,5 @@ Checklist:
 - [x] gem pickups + rich crystal styles + facet shader
 - [x] home station detail pass: hanging pendants under the rings, scaffolds, pipe runs + roof vents, hanging spires (L1/L5), bigger hex crystal clusters on the rock (L6 52k -> 59k tris); low-angle renders station-l*-low.png
 - [x] concept-vs comparisons: shots/env/concept-vs-inst-*.png (9 kinds + hq-b), concept-vs-rig-*.png (4), concept-vs-pickups.png, concept-vs-sheet-crystals.png, concept-vs-station-l4-low / l6-low.png
-- [ ] tests/v15env.js + old suites green
-- [ ] merge to main, cache-bust v15, push, verify live
+- [x] tests/v15env.js (all pass) + old suites green (smoke, smoke5, v8, v9, v13cam, registry, blender_ingame, blender_tex_registry, yardcheck, compat, v14env)
+- [x] merge to main, cache-bust v15, push, verify live
