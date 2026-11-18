@@ -143,4 +143,4 @@ Brief: ../briefs/camera-controls.txt (written for a fantasy RPG; mapped to the s
 - [x] tests/v13cam.js (15 criteria, CDP multitouch, wheel, right-drag, keys, settings UI, reload persistence, migration) + tests/v13shots.js. WIP commit 91a2e6b.
 - [x] Final v13cam run 50/50 ALL PASS (tests/v13cam.last.log); old suites smoke, smoke5, compat, v8, v9, blender_ingame, blender_viewer, registry, yardcheck, live10 all PASS
 - [x] Cache-bust ?v=13, README v13 section, shots/v13 (presets, rotated, zoomed in/out, occlusion, settings)
-- [ ] merge to main, push, live check
+- [x] Merged camera -> main (ff), pushed 2726739 at 12:12 AM EST Nov 18; live: v13cam 50/50, smoke5, live10 ALL PASS against elrond44.github.io (run from the box)
