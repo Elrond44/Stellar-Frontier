@@ -144,3 +144,31 @@ Brief: ../briefs/camera-controls.txt (written for a fantasy RPG; mapped to the s
 - [x] Final v13cam run 50/50 ALL PASS (tests/v13cam.last.log); old suites smoke, smoke5, compat, v8, v9, blender_ingame, blender_viewer, registry, yardcheck, live10 all PASS
 - [x] Cache-bust ?v=13, README v13 section, shots/v13 (presets, rotated, zoomed in/out, occlusion, settings)
 - [x] Merged camera -> main (ff), pushed 2726739 at 12:12 AM EST Nov 18; live: v13cam 50/50, smoke5, live10 ALL PASS against elrond44.github.io (run from the box)
+
+## v14: Environment assets in Blender (branch env)
+Source: the user's 3 concept sheets (stations / asteroids+mining rigs+crystals / celestial). The PNGs never reached the box,
+so we're working from a written description of them. Style: dark gunmetal hulls, warm amber windows, red accent/ring lights, teal-blue
+reactor and crystal glow, gold industrial cranes and scaffolding, blue solar wings, heavy greebles, purple/teal nebula space.
+Same pipeline as the ships: bmesh builders in blender/src (env_kit.py, station.py, asteroids.py) -> glb -> meshopt -> game/models/env/.
+Showcase renders go to blender/shots/env/ (no concept-vs comparisons, because there are no sheets on the box).
+
+Plan / batches
+1. Batch 1 (this release): the player station's 6 growth stages (Outpost Refinery -> Solar Refinery -> Factory Station ->
+   Orbital Works -> Industrial Hub -> Frontier Citadel) plus the asteroid set (lumpy, porous, cavern, molten, veined,
+   nugget, and 3 crystal-cluster rich rocks) matched to minerals: molten=ferrite, veins=viridium, cavern=voidstone,
+   crystals tinted by mineral.
+2. Batch 2: pirate citadel, faction stations (ring station, industrial hub, dome biosphere, reactor, comms relay, beacon
+   spire, hangar block, turret platforms), mining-rig asteroids, ore pickups and crystals.
+3. Batch 3: planets, sun, ringed gas giant, moon, star, black hole, nebula clouds.
+
+Batch 1 checklist
+- [ ] env_kit.py: extra slots (red, solar, green, rock), torus/sphere/dome/tube/beam/dish/crystal/rock primitives, AO bake
+- [ ] station.py L1..L6: same footprint and dock port (0,0,7.9) as the procedural station; animation hooks as named nodes
+      (spin_ring, crane_N jibs, stack_/chase_/nav* empties); drones stay procedural
+- [ ] asteroids.py: unit-radius hi/lo LOD rocks with a glow slot -> aGlow attribute, so the rock shader, damage, hit flash
+      and mineral glow colours keep working
+- [ ] showcase sheets in blender/shots/env/ (per asset plus contact sheets)
+- [ ] game: src/glbenv.js loader; station + AsteroidField swap; `?env=proc` (sticky) and any load failure fall back to procedural
+- [ ] occlusion fade, docking, upgrades, shipyard preview, mining/damage all still work; no console errors
+- [ ] Playwright: tests/v14env.js (+ shots in game/shots/v14/); old suites green
+- [ ] merge to main, cache-bust v14, push, verify live
