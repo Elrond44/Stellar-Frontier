@@ -10,7 +10,13 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 - Climb a class path of 15 hulls, from a 20 m Scout to a 720 m Dreadnought, all built at true relative scale.
 - Push into pirate sectors for rare ores and loot, liberate them stage by stage from five warring pirate factions, and bring down each faction's flagship.
 
-Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). The ship hulls are modelled in Blender from Python scripts (`tools/blender/`) and shipped as compressed glTF (`models/`); everything else (effects, stations, music and sound) is generated procedurally in code. Progress autosaves to your browser's local storage.
+Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). The ship hulls, the home station and the asteroids are modelled in Blender from Python scripts (`tools/blender/`) and shipped as compressed glTF (`models/`); everything else (effects, enemy bases, music and sound) is generated procedurally in code. Progress autosaves to your browser's local storage.
+
+## v14: Blender stations and asteroids (environment batch 1)
+- Your home station is now a Blender model at all six growth stages, built from the environment concept sheets: Outpost Refinery, Solar Refinery (blue solar booms, reactor with a teal core), Factory Station (segmented ring with red light grooves that spins), Orbital Works (gold lattice cranes, container yard, gold ore heap, blue crystal pile, hab pods), Industrial Hub (stepped spires, glass biosphere dome on the rock, big comms dish, turret pads) and Frontier Citadel (wide outer ring, green halo beacon, hanging spire).
+- New asteroid set: blocky pitted rocks, swiss-cheese porous rock, a rock with a tunnel through it, molten rock with glowing cracks, green-veined rock, gold-nugget rock and three crystal-cluster rich rocks. The shape follows the mineral (molten for Ferrite/Crimsonite, veins for Viridium, the holed rock for Voidstone) and crystals glow in the mineral's colour.
+- Same dock port, footprint, collision, HP and mining as before; the station still fades for the camera, rings spin, cranes swing and drones fly. `?env=proc` switches back to the procedural station and rocks (remembered), `?env=glb` turns the models back on, and the game falls back by itself if a model can't load.
+- Builders: `tools/blender/station.py`, `asteroids.py`, `env_kit.py`; models in `models/env/`; showcase sheets and concept comparisons in `shots/env/`.
 
 ## v13: Advanced controls & dynamic camera
 - Orbit camera: free 360° rotation around your ship, adjustable angle (20°–85° limits), smooth zoom that scales with your hull class. Classic (the original 58° north-up view) stays the default; R restores it any time, C swings the camera behind your ship.

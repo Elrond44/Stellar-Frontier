@@ -20,8 +20,8 @@ SHOTS = os.path.join(os.path.dirname(__file__), '..', 'shots', 'env')
 
 def env_materials(glow=(0.4, 2.2, 3.4), xglow=(0.5, 1.9, 3.6)):
     spec = {  # base, metal, rough, emission, strength
-        'H': (hexrgb(0x6e757f), 0.6, 0.45, None, 0), 'P': (hexrgb(0x9aa0a8), 0.5, 0.4, None, 0),
-        'D': (hexrgb(0x3b4049), 0.7, 0.5, None, 0), 'A': (hexrgb(0xd19a2a), 0.55, 0.42, None, 0),
+        'H': (hexrgb(0x8a919b), 0.45, 0.42, None, 0), 'P': (hexrgb(0xa9afb7), 0.4, 0.4, None, 0),
+        'D': (hexrgb(0x4a505a), 0.55, 0.5, None, 0), 'A': (hexrgb(0xd19a2a), 0.55, 0.42, None, 0),
         'C': ((0.03, 0.09, 0.14), 0.9, 0.05, (0.05, 0.25, 0.35), 1), 'W': ((1, 0.7, 0.35), 0, 0.5, (3.2, 1.6, 0.4), 1.2),
         'G': ((1, 1, 1), 0, 0.5, glow, 4), 'R': ((1, 0.2, 0.2), 0, 0.5, (3.5, 0.35, 0.3), 2.5),
         'S': (hexrgb(0x1d3f8f), 0.8, 0.22, (0.02, 0.08, 0.25), 1), 'V': (hexrgb(0x3f8f3a), 0.0, 0.8, (0.05, 0.25, 0.05), 1),
@@ -115,11 +115,11 @@ class Env(Ship):
         base = Vector(base); d, u, v = frame(d); a0 = self.rng.uniform(0, 1)
         self._faces([self.ring_pts(base - d * rad * 0.6, rad * 0.8, seg, d, u, v, a0), self.ring_pts(base + d * length * 0.72, rad, seg, d, u, v, a0),
                      self.ring_pts(base + d * length, rad * 0.04, seg, d, u, v, a0)], mat, True, True)
-    def cluster(self, base, d, n, size, mat=X, spread=0.55):
+    def cluster(self, base, d, n, size, mat=X, spread=0.55, fat=1.0):
         d0 = Vector(d).normalized(); rr = self.rng
         for i in range(n):
             dd = (d0 + Vector((rr.uniform(-1, 1), rr.uniform(-1, 1), rr.uniform(-1, 1))) * spread).normalized()
-            L = size * rr.uniform(0.45, 1.0) * (1.3 if i == 0 else 1); self.crystal(Vector(base) + dd * size * 0.05, dd, L, L * rr.uniform(0.14, 0.22), mat)
+            L = size * rr.uniform(0.45, 1.0) * (1.3 if i == 0 else 1); self.crystal(Vector(base) + dd * size * 0.05, dd, L, L * rr.uniform(0.14, 0.22) * fat, mat)
     def rock(self, c, radii, seed, mat=K, sub=3, amp=0.3, craters=4, pits=0, glow=None, glow_dent=None, facets=9, pitsmall=0):
         """displaced icosphere; glow(dir)->material override per face (veins/cracks)."""
         bm = self.bm; rnd = random.Random(seed); o = Vector((rnd.uniform(0, 50), rnd.uniform(0, 50), rnd.uniform(0, 50)))
@@ -217,12 +217,13 @@ def space_world(strength=1.0):
     nt.links.new(st.outputs['Distance'], m.inputs['Value']); add = nt.nodes.new('ShaderNodeMix'); add.data_type = 'RGBA'; add.blend_type = 'ADD'; add.inputs['Factor'].default_value = 1
     nt.links.new(cr.outputs['Color'], add.inputs['A']); nt.links.new(m.outputs['Result'], add.inputs['B']); nt.links.new(add.outputs['Result'], bg.inputs['Color'])
 
-def shoot(objs, path, view=(0.62, -0.55, 0.42), res=(1280, 720), samples=40, dist=1.0, lights=True, ctr=None, rad=None):
+def shoot(objs, path, view=(0.62, -0.55, 0.42), res=(1280, 720), samples=40, dist=1.0, lights=True, ctr=None, rad=None, key=(1.1, 0.25, 0.75)):
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.device = 'CPU'; sc.cycles.samples = samples
     try: sc.cycles.use_denoising = True
     except Exception: pass
     sc.render.resolution_x, sc.render.resolution_y = res; sc.view_settings.view_transform = 'Khronos PBR Neutral'
     if not sc.world: space_world()
+    bpy.context.view_layer.update()
     pts = []
     for o in objs:
         for ob in [o] + list(o.children_recursive):
@@ -237,7 +238,7 @@ def shoot(objs, path, view=(0.62, -0.55, 0.42), res=(1280, 720), samples=40, dis
             o = bpy.data.objects.new(kind, d); o.location = ctr + Vector(loc); sc.collection.objects.link(o)
             o.rotation_euler = (-Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
         k = L * L
-        light('key', (L * 1.1, L * 0.25, L * 0.75), 30 * k, (1, 0.88, 0.75), L * 0.35)  # raking side light: relief reads
+        light('key', (L * key[0], L * key[1], L * key[2]), 30 * k, (1, 0.88, 0.75), L * 0.35)  # raking side light: relief reads
         light('rim', (-L * 0.9, L * 0.8, L * 0.3), 14 * k, (0.55, 0.4, 1.0), L * 0.4)
         light('fill', (-L * 0.5, -L * 1.0, -L * 0.1), 1.5 * k, (0.4, 0.8, 1), L * 0.8)
     cam = bpy.data.cameras.new('cam'); cam.lens = 50; co = bpy.data.objects.new('cam', cam); sc.collection.objects.link(co); sc.camera = co

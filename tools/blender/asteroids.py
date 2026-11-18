@@ -65,9 +65,9 @@ def build(v, lod):
     else:  # crystal_a/b/c: rich rocks, crystal clusters erupting along the top ridge
         k = 'abc'.index(v[-1]); s.rock((0, 0, 0), (1.15, 0.85, 0.75), seed, K, sub, 0.24, 3, pitsmall=ps // 2)
         rr = random.Random(seed)
-        for c in range(4 + k):
-            d = Vector((rr.uniform(-1, 1) * 0.9, rr.uniform(-0.5, 0.5), rr.uniform(0.35, 1))).normalized()
-            s.cluster(Vector((d.x * 1.0, d.y * 0.75, d.z * 0.62)), d, 5, 0.6 + 0.12 * k + rr.uniform(0, 0.25), X, 0.4)
+        for c in range(6 + k):  # dense gem masses over the upper half (concept: crystals dominate the rich rocks)
+            d = Vector((rr.uniform(-1, 1) * 0.9, rr.uniform(-0.7, 0.7), rr.uniform(0.15, 1))).normalized()
+            s.cluster(Vector((d.x * 0.95, d.y * 0.7, d.z * 0.6)), d, 6, 0.6 + 0.08 * k + rr.uniform(0, 0.2), X, 0.5, fat=1.4)
     return s
 
 VARIANTS = ['lumpy_a', 'lumpy_b', 'porous', 'cavern', 'molten', 'veined', 'nugget', 'crystal_a', 'crystal_b', 'crystal_c']
@@ -102,7 +102,7 @@ if __name__ == '__main__':
             ob = objs[v + '_hi']
             if v in tint:  # per-object glow copy of X
                 m = bpy.data.materials['X'].copy(); b = m.node_tree.nodes['Principled BSDF']; c = tint[v]; mx = max(c)
-                b.inputs['Emission Color'].default_value = (c[0] / mx, c[1] / mx, c[2] / mx, 1); b.inputs['Emission Strength'].default_value = 1.6 * mx; b.inputs['Base Color'].default_value = (c[0] / mx * 0.3, c[1] / mx * 0.3, c[2] / mx * 0.3, 1)
+                b.inputs['Emission Color'].default_value = (c[0] / mx, c[1] / mx, c[2] / mx, 1); b.inputs['Emission Strength'].default_value = 0.32 * mx; b.inputs['Base Color'].default_value = (c[0] / mx * 0.6, c[1] / mx * 0.6, c[2] / mx * 0.6, 1); b.inputs['Roughness'].default_value = 0.15
                 for j, sl in enumerate(ob.material_slots):
                     if sl.material and sl.material.name == 'X': ob.material_slots[j].link = 'OBJECT'; ob.material_slots[j].material = m
         # single shots
@@ -115,3 +115,10 @@ if __name__ == '__main__':
         for i, v in enumerate(VARIANTS):
             ob = objs[v + '_hi']; ob.hide_render = False; ob.location = ((i % 5 - 2) * 2.9, 0, (1 - i // 5) * 2.7 - 1.35); ob.rotation_euler = (0.3, 0.2, i * 0.7)
         shoot(hi, os.path.join(SHOTS, 'sheet-asteroids.png'), view=(0.0, -1, 0.12), res=(1600, 800), samples=40, dist=0.55, rad=6.6)
+
+        # crystal colour sheet: the rich rocks tinted like the concept's blue / gold / green / purple crystals
+        for o in hi: o.hide_render = True
+        row = ['crystal_a', 'crystal_b', 'veined', 'crystal_c']
+        for i, v in enumerate(row):
+            ob = objs[v + '_hi']; ob.hide_render = False; ob.location = ((i - 1.5) * 3.0, 0, 0); ob.rotation_euler = (0.25, 0.1, 0.4 + i * 0.5)
+        shoot([objs[v + '_hi'] for v in row], os.path.join(SHOTS, 'sheet-crystals.png'), view=(0.0, -1, 0.3), res=(1600, 600), samples=40, dist=0.42, rad=6.2)

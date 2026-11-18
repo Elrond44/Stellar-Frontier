@@ -74,24 +74,34 @@ class St(Env):
             self.lbox(M, (0, 0, 0), (pw + 0.12, 0.1, 0.1), A)
         if light: self.empty(light, tuple(p1 + Vector((0, 0, 0.3))), 1.4)
     def seg_ring(self, z, Rr, n, w, h, pods=0, red=True, spokes=0, hubr=3.5, chase=0):
-        """chunky polygonal ring of box segments (concept ring stations)."""
+        """chunky polygonal ring of box segments (concept ring stations: wide deck, red light groove on the inner rim)."""
+        r = self.rng
         for i in range(n):
-            a = 2 * math.pi * i / n; seglen = 2 * Rr * math.sin(math.pi / n) + w * 0.35
+            a = 2 * math.pi * i / n; seglen = 2 * Rr * math.sin(math.pi / n) + w * 0.12
             M = T(math.cos(a) * Rr, math.sin(a) * Rr, z) @ Rz(a)
-            self.lbox(M, (0, 0, 0), (w, seglen, h), H if i % 2 else D, ch=h * 0.18)
-            self.lbox(M, (0, 0, h / 2 + 0.03), (w * 0.6, seglen * 0.9, 0.08), A if i % 2 else P)
-            if red: self.lbox(M, (w / 2 + 0.03, 0, 0), (0.05, seglen * 0.8, h * 0.22), R)
-            nwin = 4
-            for k in range(nwin): self.lbox(M, (-w / 2 - 0.02, -seglen / 2 + (k + 0.5) * seglen / nwin, 0.05), (0.05, seglen / nwin * 0.5, h * 0.18), W)
+            self.lbox(M, (0, 0, 0), (w, seglen, h), H if i % 2 else D, ch=h * 0.16)
+            self.lbox(M, (w * 0.18, 0, h / 2 + 0.05), (w * 0.5, seglen * 0.86, 0.12), P if i % 2 else H)  # raised deck plates
+            self.lbox(M, (-w / 2 + 0.06, 0, h / 2 + 0.02), (0.16, seglen * 0.98, 0.08), R if red else W)  # inner rim light groove
+            self.lbox(M, (0, 0, -h * 0.18), (w + 0.1, seglen * 0.98, h * 0.12), A)  # gold trim band
+            if red: self.lbox(M, (w / 2 + 0.04, 0, h * 0.12), (0.05, seglen * 0.7, h * 0.16), R)
+            nwin = 5
+            for k in range(nwin):
+                if r.random() < 0.8: self.lbox(M, (-w / 2 - 0.02, -seglen / 2 + (k + 0.5) * seglen / nwin, h * 0.12), (0.05, seglen / nwin * 0.5, h * 0.16), W)
+            for k in range(2):
+                gw = r.uniform(0.2, 0.45) * w; self.lbox(M, (w * 0.25, r.uniform(-0.35, 0.35) * seglen, h / 2 + 0.11 + 0.15), (gw, gw * 1.4, 0.3), r.choice((H, D)), ch=0.04)
+            self.lbox(M, (0, 0, -h / 2 - 0.15), (w * 0.6, seglen * 0.6, 0.3), D)
         for i in range(pods):
             a = 2 * math.pi * (i + 0.5) / pods
-            M = T(math.cos(a) * Rr, math.sin(a) * Rr, z + h * 0.45) @ Rz(a)
-            pm = M @ T(0, 0, h * 0.35); self.module(pm, w * 1.6, w * 2.2, h * 1.1, red=1 if red else 0, greeb=3)
+            M = T(math.cos(a) * (Rr + w * 0.15), math.sin(a) * (Rr + w * 0.15), z + h * 0.5) @ Rz(a)
+            self.module(M @ T(0, 0, h * 0.45), w * 1.2, w * 1.9, h * 1.1, red=1 if red else 0, greeb=3)
+            self.lbox(M, (0, 0, -h * 1.2), (w * 0.8, w * 1.2, h * 1.2), D, ch=0.1)  # hanging under-module
+            self.lbox(M, (w * 0.42, 0, -h * 1.0), (0.05, w * 0.8, 0.12), R)
         for i in range(spokes):
             a = 2 * math.pi * i / spokes + math.pi / spokes
-            self.truss((math.cos(a) * hubr, math.sin(a) * hubr, z), (math.cos(a) * (Rr - w / 2), math.sin(a) * (Rr - w / 2), z), 0.35, 0.06, D)
+            self.truss((math.cos(a) * hubr, math.sin(a) * hubr, z), (math.cos(a) * (Rr - w / 2), math.sin(a) * (Rr - w / 2), z), 0.4, 0.07, D)
+            self.tube((math.cos(a) * hubr, math.sin(a) * hubr, z), (math.cos(a) * (Rr - w / 2), math.sin(a) * (Rr - w / 2), z), 0.12, P, 6)
         for i in range(chase):
-            a = 2 * math.pi * i / chase; self.empty('chase', (math.cos(a) * Rr, math.sin(a) * Rr, z + h / 2 + 0.35), 1.1)
+            a = 2 * math.pi * i / chase; self.empty('chase', (math.cos(a) * (Rr - w / 2 + 0.1), math.sin(a) * (Rr - w / 2 + 0.1), z + h / 2 + 0.35), 1.1)
     def turret_pad(self, c, r=2.0):
         cx, cy, cz = c
         self.lathe((cx, cy, cz - 0.4), [(r * 0.7, 0), (r, 0.25), (r, 0.6), (r * 0.9, 0.8)], D, 16)
@@ -180,7 +190,7 @@ def build(level):
             s.lathe((x - 0.8, y + 0.6, 1.0), [(0.45, 0), (0.35, 2.6)], D, 10); s.torus((x - 0.8, y + 0.6, 3.6), 0.33, 0.06, W, 12, 6); s.empty('stack', (x - 0.8, y + 0.6, 3.7), 1)
             s.lathe((x + 0.7, y + 0.6, 1.0), [(0.45, 0), (0.35, 2.0)], D, 10)
         rg = St('spin_ring', 5.0, seed=7)
-        rg.seg_ring(0, 10, 16, 1.2, 1.0, pods=6, spokes=6, hubr=3.6, chase=24)
+        rg.seg_ring(0, 10, 16, 1.9, 1.1, pods=6, spokes=6, hubr=3.6, chase=24)
         objs.append(pivot('spin_ring', rg, (0, 0, -1.2)))
     if level >= 4:  # ---- orbital works: cranes, container yard, tanks, crystal pile, hab pods ----
         for i, (x, y, h) in enumerate(((-6.5, 4.5, 9), (7.5, 6.5, 8), (8.5, -6.5, 7))):
@@ -188,6 +198,9 @@ def build(level):
         s.container_yard((10.5, 1.0, -1.6), 2, 3, 3); s.tank((6.3, 9.6, -1.8), 0.9, 2.6); s.tank((8.2, 10.4, -1.8), 0.7, 2.0)
         s.box((7.2, 10.0, -1.9), (4.0, 2.6, 0.3), D, ch=0.06)
         s.crystal_pile((11.2, -3.6, -1.4))
+        s.box((11.0, 5.8, -1.7), (3.0, 2.4, 0.5), D, ch=0.08); s.box((11.0, 5.8, -1.38), (3.1, 2.5, 0.08), A)
+        for i in range(10):  # gold ore heap
+            rr_ = rng.uniform(0.25, 0.55); s.rock((11.0 + rng.uniform(-1, 1), 5.8 + rng.uniform(-0.7, 0.7), -1.2 + rr_ * 0.3), (rr_, rr_, rr_ * 0.7), 300 + i, N, 1, 0.3, 0, facets=0)
         for i in range(4):
             a = i / 4 * 2 * math.pi + 0.4; px, py = math.sin(a) * 13.5, -math.cos(a) * 13.5
             s.lathe((px, py, -2.6), [(1.3, 0), (1.3, 3.2)], H, 12); s.lathe((px, py, -0.6), [(1.36, 0), (1.36, 0.4)], A, 12)
@@ -212,7 +225,7 @@ def build(level):
         for sx in (-1, 1): s.turret_pad((sx * 10, -9, 0.2))
         s.solar((-2.0, 3.5), (-2.0, 15.0), 3.0, 3, light='navw'); s.solar((2.0, 3.5), (12.5, 13.0), 3.0, 2)
     if level >= 6:  # ---- frontier citadel: outer ring, beacon, hanging spire ----
-        s.seg_ring(-2.2, 19, 28, 1.6, 1.4, pods=8, spokes=8, hubr=4.0)
+        s.seg_ring(-2.2, 19, 28, 2.6, 1.5, pods=8, spokes=8, hubr=4.0)
         for i in range(8):
             a = 2 * math.pi * (i + 0.5) / 8; s.box((math.cos(a) * 19, math.sin(a) * 19, -0.2), (0.5, 0.5, 0.4), G)
         s.spire((0, 19.0, -1.2), 9.0, 0.9, 4, 3.0, light='navg')
@@ -236,6 +249,7 @@ if __name__ == '__main__':
         export(ob.name, [ob])
         if '--render' in sys.argv:
             space_world(0.7); rock_detail(4.0)
+            from kit import detail_materials; detail_materials(2.5)
             for o in objs:
                 if o.name.startswith('crane_'): o.rotation_euler = (0, 0, random.Random(o.name).uniform(-1.2, 1.2))
-            shoot([ob], os.path.join(SHOTS, f'station-l{lv}.png'), view=(0.55, -0.75, 0.55), res=(1280, 800), samples=32, dist=0.5)
+            shoot([ob], os.path.join(SHOTS, f'station-l{lv}.png'), view=(0.55, -0.75, 0.55), res=(1280, 800), samples=32, dist=0.4 if lv >= 3 else 0.5, key=(0.4, -1.0, 0.9))
