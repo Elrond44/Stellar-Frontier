@@ -254,8 +254,9 @@ export class Minerals {
     this.max = max; this.list = [];
     const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.0, metalness: 0.5, roughness: 0.12, flatShading: true });
     // make emissive follow instance colour
-    mat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += vColor.rgb * 1.9;'); };
-    const G = ENV.enabled && ENV.pickups; this.glb = !!G; this.styleOf = (t) => (G ? PICKUP_BY_TYPE[t] || 'hex' : 'gem');
+    const G = ENV.enabled && ENV.pickups; const glow = G ? '0.75' : '1.9'; // v15: faceted gem chips glow less so the facets read instead of a bloom blob
+    mat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += vColor.rgb * ' + glow + ';'); };
+    mat.customProgramCacheKey = () => 'ore-' + glow; this.glb = !!G; this.styleOf = (t) => (G ? PICKUP_BY_TYPE[t] || 'hex' : 'gem');
     const geos = {};
     if (G) { for (const k in G) geos[k] = G[k]; mat.vertexColors = true; mat.roughness = 0.08; mat.metalness = 0.2; }
     else { const geo = new THREE.CylinderGeometry(0.0, 0.36, 0.5, 6, 1); geo.translate(0, -0.25, 0); const top = new THREE.CylinderGeometry(0.22, 0.36, 0.16, 6, 1); top.translate(0, 0.08, 0); const gem = mergeGeometries([geo.toNonIndexed(), top.toNonIndexed()]); gem.computeVertexNormals(); geos.gem = gem; }
