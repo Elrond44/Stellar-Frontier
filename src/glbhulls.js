@@ -11,7 +11,7 @@ import { KTX2Loader } from '../vendor/addons/loaders/KTX2Loader.js';
 
 export const GLB_IDS = ['scout', 'interceptor', 'strike', 'bomber', 'corvette', 'gunship', 'engineer', 'explorer', 'frigate', 'destroyer', 'icarrier', 'cruiser', 'battlecruiser', 'fleetcarrier', 'dreadnought'];
 // GO-LIVE SWITCH: set to true to make the Blender hulls the default for everyone (?hulls=proc still opts out).
-export const GLB_DEFAULT = false;
+export const GLB_DEFAULT = true;
 export const GLB_UNIT = 1 / 5; // Blender metres -> game units (1 u = 5 m)
 const P = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
 const q = P.get('hulls');
@@ -24,7 +24,7 @@ export function preloadGlbHulls(ids = GLB_IDS, base = 'models/', timeoutMs = 150
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   const one = (id) => new Promise((res) => {
     const t = setTimeout(() => { GLB.failed[id] = 'timeout'; res(); }, timeoutMs);
-    loader.load(base + id + '.glb?v=bt3', (g) => { clearTimeout(t); try { GLB.cache[id] = prep(g.scene); } catch (e) { GLB.failed[id] = String(e); } res(); },
+    loader.load(base + id + '.glb?v=bt4', (g) => { clearTimeout(t); try { GLB.cache[id] = prep(g.scene); } catch (e) { GLB.failed[id] = String(e); } res(); },
       undefined, (e) => { clearTimeout(t); GLB.failed[id] = String(e && e.message || e); console.warn('glb hull fallback', id, e); res(); });
   });
   GLB.loading = Promise.all(ids.map(one)).then(() => GLB);

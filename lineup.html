@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" href="data:,">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stellar Frontier · Fleet Registry (true scale)</title>
@@ -22,10 +23,10 @@
 <div id="cls"></div>
 <script type="module">
 import * as THREE from 'three';
-import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=9';
-import { makeFlames, animateNavLights } from './src/models.js?v=9';
-import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer } from './src/glbhulls.js?v=9';
-import { skyEnv } from './src/shiplight.js?v=9';
+import { HULLS, HULL_IDS, UNIT_M, buildHull, FACTION_PAINT, PAINT_NAMES } from './src/hulls.js?v=10';
+import { makeFlames, animateNavLights } from './src/models.js?v=10';
+import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer } from './src/glbhulls.js?v=10';
+import { skyEnv } from './src/shiplight.js?v=10';
 if (GLB.enabled) { try { await preloadGlbHulls(); } catch (e) { /* procedural fallback */ } }
 const q = new URLSearchParams(location.search); const mode = q.get('mode') || 'lineup';
 const canvas = document.getElementById('c'); const R = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });

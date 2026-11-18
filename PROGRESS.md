@@ -105,3 +105,7 @@ Approved by Elrond (t28u): Dreadnought + Scout only, baked texture maps + lighti
   - Faction paint: mask RGBA = H/P/A/D slot weights; shader multiplies masked texels by scheme colour / Blender palette colour, so seams, grime and wear survive any paint. Chained into the damage shader via a shared prePatch registry (vfx.js), damage clones keep the tint.
   - Lighting (src/shiplight.js, only with the tex toggle and only on Medium/High): PMREM env from the game's own sky shader + key/rim lobes, key 2.2->2.55, rim 1.1->1.8/2.1. Low and toggle-off keep today's look exactly. No SSAO (too costly on phones); baked AO in the ORM map is the AO.
 - Tests: tests/blender_tex.js (toggle off/High/Medium/Low, shipyard close-ups, FPS samples, faction tint, damage chaining, no console errors) -> shots in blender/shots/tex (copied to shots/blender-tex). Comparison sheets: `blender/src/tex_compare.py scout dreadnought` -> tex-vs-<id>.png, closeup-<id>.png, gameplay-<id>.png.
+
+## v10: Blender fleet live (main)
+- Merged blender-tex (blender-test + the opt-in texture test) into main. `GLB_DEFAULT = true` (Blender hulls are the default, `?hulls=proc` opts out), `TEX_DEFAULT = false` (textures only with `?tex=1`; models/tex/* is never fetched otherwise).
+- Cache-busters ?v=10 everywhere, glb ?v=bt4. lineup.html got a favicon link (the 404). About says v10. README/CREDITS updated.

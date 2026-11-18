@@ -10,7 +10,13 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 - Climb a class path of 15 hulls, from a 20 m Scout to a 720 m Dreadnought, all built at true relative scale.
 - Push into pirate sectors for rare ores and loot, liberate them stage by stage from five warring pirate factions, and bring down each faction's flagship.
 
-Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). All models, effects, music and sound are generated procedurally in code. Progress autosaves to your browser's local storage.
+Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). The ship hulls are modelled in Blender from Python scripts (`tools/blender/`) and shipped as compressed glTF (`models/`); everything else (effects, stations, music and sound) is generated procedurally in code. Progress autosaves to your browser's local storage.
+
+## v10: Blender-built fleet
+- All 15 hulls are now hand-built Blender models matched to the concept sheet (`models/*.glb`, about 1.8 MB for the whole fleet, meshopt-compressed). Builders live in `tools/blender/` and run with Blender's `bpy` module.
+- Same hitboxes, stats, faction paint, damage states, far-away LODs and engine/hardpoint positions as before; carriers launch fighters from their modelled hangar bays; modelled turrets replace the old bolt-on ones; real glass canopies.
+- `?hulls=proc` switches back to the old procedural hulls (sticky); any model that fails to load falls back automatically.
+- Optional, off by default: `?tex=1` turns on the cinematic texture test (baked Blender textures on the Scout and Dreadnought, KTX2, with nebula-reflection lighting on Medium/High). Those files are only downloaded when it is on.
 
 ## v9: Cinematic explosions and destruction 2.0
 

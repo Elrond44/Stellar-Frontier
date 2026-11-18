@@ -14,3 +14,7 @@
 
 ## v9
 - The explosion and destruction system (plasma noise shader, temperature ramp, debris physics, destruction sequences) and the layered explosion sound effects are original, procedurally generated code. No third-party assets were added.
+
+## v10
+- **Blender hulls:** all 15 ship hulls are original models built with Blender (bpy, GPL; only the exported models ship, not Blender) from scripts in `tools/blender/`, following the concept sheet Elrond supplied. Compressed with glTF-Transform (MIT); loaded with three.js GLTFLoader + meshopt decoder (MIT).
+- **Optional texture test:** baked textures for the Scout and Dreadnought are original Blender bakes; KTX2/Basis encoding with KTX-Software (Apache-2.0); three.js KTX2Loader and the Basis Universal transcoder (Apache-2.0) are vendored in `vendor/addons/`.
