@@ -5,7 +5,7 @@ import math, sys, os
 import bpy  # noqa: F401
 sys.path.insert(0, os.path.dirname(__file__))
 from kit import Ship
-from parts import warship, blade, hangar, H, P, D, A, C, W, G
+from parts import warship, blade, wing, hangar, H, P, D, A, C, W, G
 
 PAL = dict(hull=0x37415a, plate=0x8c98b0, dark=0x161a22, accent=0x3a4a6a, glow=(3.4, 2.0, 0.5), win=(3.4, 2.0, 0.6))
 
@@ -20,7 +20,7 @@ def build():
         sec = [(-56, 1.5, 1, -5, 0, 0.5, side * 18), (-36, 10, 7, -7, 2, 1.5, side * 23), (-6, 18, 14, -8, 5, 2, cx), (70, 20, 16, -8, 6, 2, cx), (78, 16, 13, -7, 5, 2, cx)]
         s.loft(sec, H)
         s.skin([q[:6] for q in sec], -34, 74, 6, 0.8, 0.3, lambda i: (P, H, P, A, P, H)[i], zclip=0.0)
-        s.loft([(-4, 9, 7, 5.6, 9, 1.5, cx), (40, 10, 8, 5.6, 9.5, 1.5, cx), (60, 8, 6, 5.6, 8, 1.2, cx)], P)  # raised shoulder deck
+        s.loft([(-4, 10, 5, 5.6, 9, 1.5, cx), (14, 13, 7, 5.6, 13, 2, cx), (46, 14, 8, 5.6, 14, 2, cx), (66, 11, 6, 5.6, 11, 1.5, cx)], P)  # raised shoulder deck (v12: taller, sloped)
         s.strips(0, 58, abs(cx) + 4.4, 7.4, side, 0.5, seg=(0.01, 0.03), gap=(0.004, 0.012), mat=W, fill=0.8)
         # hangar mouths: two in the bow face of the shoulder (drones launch forward) + two on the outer flank
         for dx in (-4.5, 4.5): hangar(s, cx + dx, -6.4, -3.0, 6.5, 4.0, 1, axis='Y')
@@ -28,6 +28,14 @@ def build():
         s.strips(-4, 72, 37.25, -6.2, side, 0.6, seg=(0.02, 0.05), gap=(0.008, 0.02), mat=W, fill=0.85)
         s.nozzle((cx, 79.5, -2), 3.0, 3.0, seg=12); s.empty('engine', (cx, 81, -2), 3.0)
         blade(s, side, (6, -10, top), [(4, 0), (30, 0), (44, 9), (41, 9.6), (12, 1.4)], 0.8, P, cant=40)
+        wing(s, side, (36.5, -2, 1.0), [(0, 0), (0, 34), (5, 36), (17, -8), (14, -12), (7, -6)], 1.4, P, dihedral=8)  # v12: forward-swept outboard blade wing (the concept's mandible wings)
+        s.loft([(-12, 0.5, 0.5, 1.8, 2.4, 0, side * 44), (28, 0.5, 0.5, 1.8, 2.4, 0, side * 38)], W)
+    # v12 reshape: the concept's tall forward bridge spine (sloped nose, amber glass) and a raised stern block
+    s.loft([(-46, 4, 2, top - 1, top + 2, 0.6), (-30, 10, 6, top - 1, top + 9, 1.4), (6, 12, 7, top - 1, top + 10, 1.6), (18, 10, 6, top - 1, top + 8, 1.4)], H)
+    s.loft([(-36.5, 6, 4, top + 4.4, top + 6.6, 0.4), (-30.2, 8.4, 5, top + 6.6, top + 8.2, 0.4)], W)  # amber bridge glass
+    for side in (1, -1): s.strips(-26, 14, 5.6, top + 6, side, 0.7, seg=(0.02, 0.05), gap=(0.008, 0.02), mat=W, fill=0.85)
+    s.loft([(46, 12, 8, top - 1, top + 5, 1.2), (52, 16, 11, top - 1, top + 7, 1.6), (74, 16, 11, top - 1, top + 7, 1.6), (78, 13, 9, top - 1, top + 5.5, 1.2)], P)
+    s.box((0, 62, top + 7.4), (6, 10, 0.8), G)
     return s
 
 if __name__ == '__main__':
