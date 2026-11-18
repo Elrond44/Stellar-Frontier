@@ -27,12 +27,13 @@ if __name__ == '__main__':
     export('pickups', objs, normals=False, uvs=False)
     if '--render' in sys.argv:
         space_world(1.0)
-        tint = {'hex': (0.3, 1.4, 3.6), 'cube': (3.4, 2.0, 0.4), 'emerald': (0.25, 2.6, 0.8), 'amethyst': (2.2, 0.7, 3.6)}
+        tint = {'hex': (0.3, 1.4, 3.6), 'cube': (3.4, 2.3, 0.45), 'emerald': (0.25, 2.6, 0.8), 'amethyst': (2.2, 0.7, 3.6)}
         for i, (st, ob) in enumerate(zip(STYLES, objs)):
             ob.location = ((i - 1.5) * 0.9, 0, 0)
             m = bpy.data.materials['X'].copy(); b = m.node_tree.nodes['Principled BSDF']; c = tint[st]; mx = max(c); sat = lambda x: (x / mx) ** 2.2
             b.inputs['Emission Color'].default_value = (sat(c[0]), sat(c[1]), sat(c[2]), 1); b.inputs['Emission Strength'].default_value = 0.25 * mx
-            b.inputs['Base Color'].default_value = (sat(c[0]) * 0.7, sat(c[1]) * 0.7, sat(c[2]) * 0.7, 1); b.inputs['Roughness'].default_value = 0.06
+            k = 0.42 if st == 'emerald' else 0.7; b.inputs['Base Color'].default_value = (sat(c[0]) * k, sat(c[1]) * k, sat(c[2]) * k, 1)
+            if st == 'emerald': b.inputs['Emission Strength'].default_value = 0.12 * mx; b.inputs['Roughness'].default_value = 0.06
             for j, sl in enumerate(ob.material_slots):
                 if sl.material and sl.material.name == 'X': ob.material_slots[j].link = 'OBJECT'; ob.material_slots[j].material = m
         shoot(objs, os.path.join(SHOTS, 'sheet-pickups.png'), view=(0.0, -1, 0.45), res=(1400, 500), samples=32, dist=0.5)

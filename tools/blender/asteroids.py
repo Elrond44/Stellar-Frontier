@@ -107,7 +107,8 @@ if __name__ == '__main__':
             if v in tint:  # per-object glow copy of X
                 m = bpy.data.materials['X'].copy(); b = m.node_tree.nodes['Principled BSDF']; c = tint[v]; mx = max(c)
                 gem = v.startswith('crystal'); sat = lambda x: (x / mx) ** (2.2 if gem else 1)
-                b.inputs['Emission Color'].default_value = (sat(c[0]), sat(c[1]), sat(c[2]), 1); b.inputs['Emission Strength'].default_value = (0.07 if gem else 0.32) * mx; b.inputs['Base Color'].default_value = (sat(c[0]) * 0.85, sat(c[1]) * 0.85, sat(c[2]) * 0.85, 1); b.inputs['Roughness'].default_value = 0.06 if gem else 0.15
+                b.inputs['Emission Color'].default_value = (sat(c[0]), sat(c[1]), sat(c[2]), 1); b.inputs['Emission Strength'].default_value = (0.07 if gem else 0.32) * mx; k = 0.5 if v == 'crystal_d' else 0.85; b.inputs['Base Color'].default_value = (sat(c[0]) * k, sat(c[1]) * k, sat(c[2]) * k, 1); b.inputs['Roughness'].default_value = 0.06 if gem else 0.15
+                if v == 'crystal_d': b.inputs['Emission Strength'].default_value = 0.035 * mx
                 for j, sl in enumerate(ob.material_slots):
                     if sl.material and sl.material.name == 'X': ob.material_slots[j].link = 'OBJECT'; ob.material_slots[j].material = m
         # single shots
