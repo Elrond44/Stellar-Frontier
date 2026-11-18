@@ -6,9 +6,9 @@ import { ShaderPass } from '../vendor/addons/postprocessing/ShaderPass.js';
 
 const CinematicShader = {
   uniforms: { tDiffuse: { value: null }, uLens: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] }, uMode: { value: new THREE.Vector4() }, uCount: { value: 0 }, uAspect: { value: 1 },
-    uVig: { value: 0.32 }, uSat: { value: 1.08 }, uLift: { value: new THREE.Vector3(0.0, 0.002, 0.006) }, uGain: { value: new THREE.Vector3(1.02, 1.0, 0.98) }, uTint: { value: new THREE.Vector3(1, 1, 1) } },
+    uVig: { value: 0.32 }, uSat: { value: 1.08 }, uLift: { value: new THREE.Vector3(0.0, 0.002, 0.006) }, uGain: { value: new THREE.Vector3(1.02, 1.0, 0.98) }, uTint: { value: new THREE.Vector3(1, 1, 1) }, uRingCol: { value: new THREE.Vector3(1.6, 1.2, 0.8) } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-  fragmentShader: `uniform sampler2D tDiffuse; uniform vec4 uLens[4]; uniform vec4 uMode; uniform int uCount; uniform float uAspect; uniform float uVig; uniform float uSat; uniform vec3 uLift; uniform vec3 uGain; uniform vec3 uTint; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform vec4 uLens[4]; uniform vec4 uMode; uniform int uCount; uniform float uAspect; uniform float uVig; uniform float uSat; uniform vec3 uLift; uniform vec3 uGain; uniform vec3 uTint; uniform vec3 uRingCol; varying vec2 vUv;
     void main(){
       vec2 uv = vUv; float shadow = 0.0; float ringGlow = 0.0;
       for (int i = 0; i < 4; i++) {
@@ -25,7 +25,7 @@ const CinematicShader = {
         }
       }
       vec3 c = texture2D(tDiffuse, uv).rgb;
-      c = mix(c, vec3(0.0), shadow) + vec3(1.6,1.2,0.8)*ringGlow*0.25;
+      c = mix(c, vec3(0.0), shadow) + uRingCol*ringGlow*0.25;
       // grade: lift / gain, gentle saturation, sector tint in the shadows
       float l = dot(c, vec3(0.2126,0.7152,0.0722));
       c = mix(vec3(l), c, uSat); c = c*uGain + uLift*uTint*(1.0 - clamp(l*4.0, 0.0, 1.0));

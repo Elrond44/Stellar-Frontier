@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { mulberry, hash2, clamp } from './util.js?v=15';
 import { makeRockGeometry } from './models.js?v=15';
+import { SKY, skyTex, flareTexture, SkyStars, setSkyQuality } from './sky.js?v=15';
 
 // ---------------------------------------------------------------- tileable nebula texture (CPU, once)
 // R: large gas  G: ridged filaments  B: fine particulate  A: dark dust
@@ -31,7 +32,7 @@ export function nebulaTexture(size = 256) {
 
 // ---------------------------------------------------------------- layered nebula planes
 const NEB_VS = `varying vec2 vW; void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xz; gl_Position = projectionMatrix*viewMatrix*w; }`;
-const NEB_FS = `uniform sampler2D uTex; uniform vec3 uTint; uniform vec3 uTint2; uniform float uTime; uniform float uScale; uniform float uAlpha; uniform float uDust; uniform float uGain; uniform float uFil; uniform vec2 uOff; uniform vec2 uCenter; uniform float uHalf; varying vec2 vW;
+const NEB_FS = `uniform sampler2D uTex; uniform vec3 uTint; uniform vec3 uTint2; uniform float uTime; uniform float uScale; uniform float uAlpha; uniform float uDust; uniform float uGain; uniform float uFil; uniform vec2 uOff; uniform vec2 uCenter; uniform float uHalf; uniform float uPal; varying vec2 vW;
   void main(){
     vec2 uv = vW*uScale + uOff;
     vec4 a = texture2D(uTex, uv*0.37 + vec2(uTime*0.0011, -uTime*0.0007));
@@ -42,6 +43,10 @@ const NEB_FS = `uniform sampler2D uTex; uniform vec3 uTint; uniform vec3 uTint2;
     float dust = smoothstep(0.52, 0.8, texture2D(uTex, uv*0.61 + warp*0.6 + 0.37).a) * uDust;
     vec3 col = mix(uTint, uTint2, smoothstep(0.25, 0.85, a.b)) * gas * (0.55 + 0.7*b.b);
     col += mix(uTint2, vec3(0.9,0.95,1.0), 0.5) * fil * 0.6;
+    if (uPal > 0.5) { // v16 concept palette: teal + violet billows with magenta edges and bright cores, keeping 35% of the sector tint
+      vec3 pal = mix(vec3(0.05, 0.62, 0.6), vec3(0.42, 0.12, 0.78), smoothstep(0.3, 0.72, a.b)); pal = mix(pal, vec3(0.75, 0.2, 0.7), smoothstep(0.62, 0.9, b.b)*0.45);
+      vec3 pc = pal*gas*(0.6 + 0.8*b.b) + mix(pal, vec3(0.85, 0.95, 1.0), 0.6)*fil*0.9;
+      col = mix(col, pc, 0.6); }
     col *= uGain * (1.0 - dust*0.9);
     float fade = 1.0 - smoothstep(uHalf*0.55, uHalf, length(vW - uCenter));
     float al = clamp(gas*0.22*uAlpha + dust*0.55, 0.0, 0.85);
@@ -52,10 +57,12 @@ export class NebulaLayers {
     this.scene = scene; this.layers = []; this.tex = nebulaTexture();
     // far: huge diffuse formations; mid: filaments + dust closer to the play plane; near (high only): faint particulate veil
     const defs = [{ y: -520, half: 1500, scale: 1 / 1400, alpha: 1.0, dust: 0.75, gain: 0.16, fil: 0.6, ro: -9 }, { y: -210, half: 700, scale: 1 / 520, alpha: 0.5, dust: 0.45, gain: 0.06, fil: 1.0, ro: -7 }, { y: -70, half: 320, scale: 1 / 210, alpha: 0.3, dust: 0.0, gain: 0.03, fil: 0.5, ro: -6 }];
+    // v16 sky pack: the far layer sits beneath the planets (and stars) so it backs them instead of veiling them; same on-screen scale
+    if (SKY.enabled) Object.assign(defs[0], { y: -1350, half: 3650, scale: 1 / 3400 });
     const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2); geo.userData.shared = true;
     defs.forEach((d, i) => {
       const m = new THREE.ShaderMaterial({ vertexShader: NEB_VS, fragmentShader: NEB_FS, transparent: true, depthWrite: false, premultipliedAlpha: true, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, fog: false,
-        uniforms: { uTex: { value: this.tex }, uTint: { value: new THREE.Color() }, uTint2: { value: new THREE.Color() }, uTime: { value: 0 }, uScale: { value: d.scale }, uAlpha: { value: d.alpha }, uDust: { value: d.dust }, uGain: { value: d.gain }, uFil: { value: d.fil }, uOff: { value: new THREE.Vector2(i * 0.37, i * 0.61) }, uCenter: { value: new THREE.Vector2() }, uHalf: { value: d.half } } });
+        uniforms: { uTex: { value: this.tex }, uTint: { value: new THREE.Color() }, uTint2: { value: new THREE.Color() }, uTime: { value: 0 }, uScale: { value: d.scale }, uAlpha: { value: d.alpha }, uDust: { value: d.dust }, uGain: { value: d.gain }, uFil: { value: d.fil }, uOff: { value: new THREE.Vector2(i * 0.37, i * 0.61) }, uCenter: { value: new THREE.Vector2() }, uHalf: { value: d.half }, uPal: { value: 0 } } });
       const mesh = new THREE.Mesh(geo, m); mesh.scale.set(d.half * 2, 1, d.half * 2); mesh.position.y = d.y; mesh.renderOrder = d.ro; mesh.frustumCulled = false; scene.add(mesh);
       this.layers.push({ mesh, d });
     });
@@ -66,7 +73,8 @@ export class NebulaLayers {
     const c2 = this._c2 ||= new THREE.Color();
     // complementary hue for the second gas colour keeps the sector identity but adds layered gradients
     c2.setRGB(tint.z * 0.7 + 0.15, tint.x * 0.5 + 0.1, tint.y * 0.9 + 0.2);
-    for (const L of this.layers) { if (!L.mesh.visible) continue; const u = L.mesh.material.uniforms; L.mesh.position.x = cam.x; L.mesh.position.z = cam.z; u.uCenter.value.set(cam.x, cam.z); u.uTime.value = time; u.uTint.value.setRGB(tint.x, tint.y, tint.z); u.uTint2.value.copy(c2); }
+    const nt = SKY.enabled ? skyTex('nebula') : null; // v16: Blender-baked billow map + concept palette once loaded
+    for (const L of this.layers) { if (!L.mesh.visible) continue; const u = L.mesh.material.uniforms; u.uTex.value = nt || this.tex; u.uPal.value = SKY.enabled ? 1 : 0; L.mesh.position.x = cam.x; L.mesh.position.z = cam.z; u.uCenter.value.set(cam.x, cam.z); u.uTime.value = time; u.uTint.value.setRGB(tint.x, tint.y, tint.z); u.uTint2.value.copy(c2); }
   }
 }
 
@@ -149,6 +157,34 @@ const RING_FS = `uniform vec3 uL; uniform vec3 uC1; uniform vec3 uCenter; unifor
     float a = clamp(den*0.75 + dustL, 0.0, 0.9);
     gl_FragColor = vec4(col*a, a);
   }`;
+// v16: Blender-baked equirect planets (dark world with fissure lights + sun rim, banded gas giant, cratered moon)
+const TPLANET_FS = `uniform vec3 uL; uniform vec3 uAtm; uniform float uKind; uniform float uSpin; uniform float uTime; uniform sampler2D uAlb; uniform sampler2D uNrm; uniform float uHasN;
+  uniform vec3 uCenter; uniform float uR; uniform float uRing; uniform vec3 uRingN; uniform vec2 uRingR; uniform sampler2D uRingTex; uniform float uHasRing; varying vec3 vO; varying vec3 vWN; varying vec3 vWP;
+  void main(){
+    vec3 p = normalize(vO); float u = atan(p.z, p.x)/6.2831853 + 0.5; float v = asin(clamp(p.y,-1.0,1.0))/3.14159265 + 0.5; float u2 = fract(u+0.5)-0.5; float uu = fwidth(u) < fwidth(u2) + 1e-6 ? u : u2; vec2 uv = vec2(uu, v);
+    vec4 A = texture2D(uAlb, uv); vec3 n = normalize(vWN); vec3 V = normalize(cameraPosition - vWP); vec3 nb = n;
+    if (uHasN > 0.5) { vec3 m = texture2D(uNrm, uv).xyz*2.0 - 1.0; vec3 T = normalize(vec3(-p.z, 0.0, p.x) + vec3(1e-5, 0.0, 0.0)); vec3 Bn = cross(T, p);
+      vec3 o = normalize(T*m.x + Bn*m.y + p*m.z); float c = cos(uSpin), s = sin(uSpin); nb = normalize(vec3(c*o.x + s*o.z, o.y, -s*o.x + c*o.z)); }
+    float ndl = dot(nb, uL); float ndl0 = dot(n, uL); float day = smoothstep(-0.12, 0.25, ndl0); float mu = max(dot(n, V), 0.0); float rim = pow(1.0 - mu, 3.0);
+    vec3 c3;
+    if (uKind < 0.5) { // dark world: near-black crust, glowing fissure / settlement network on the night side, hot sun crescent on the limb
+      c3 = A.rgb*(max(ndl, 0.0)*1.2 + 0.02);
+      c3 += vec3(2.6, 0.85, 0.22)*A.a*(0.1 + 0.62*(1.0 - day));
+      c3 += uAtm*pow(1.0 - mu, 5.0)*smoothstep(-0.15, 0.55, ndl0)*2.0;
+    } else if (uKind < 1.5) { // gas giant: soft limb darkening + violet haze
+      c3 = A.rgb*(max(ndl, 0.0)*1.05 + 0.025)*(0.7 + 0.3*pow(mu, 0.4)); c3 += uAtm*rim*(0.2 + 0.8*day);
+    } else { // airless moon: hard terminator, no haze
+      c3 = A.rgb*(max(ndl, 0.0)*1.25 + 0.012);
+    }
+    if (uRing > 0.5) { float dn = dot(uL, uRingN); if (abs(dn) > 0.01) { float t = dot(uCenter - vWP, uRingN)/dn; if (t > 0.0) { vec3 q = vWP + uL*t; float rr = length(q - uCenter)/uR; float tt = (rr - uRingR.x)/(uRingR.y - uRingR.x);
+      float den = uHasRing > 0.5 && tt > 0.0 && tt < 1.0 ? texture2D(uRingTex, vec2(tt, 0.5)).a : 0.0; c3 *= 1.0 - 0.7*den; } } }
+    gl_FragColor = vec4(c3, 1.0);
+  }`;
+const TRING_FS = `uniform vec3 uL; uniform vec3 uCenter; uniform float uR; uniform vec2 uRingR; uniform vec3 uRingN; uniform sampler2D uRingTex; varying vec3 vWP; varying float vR;
+  void main(){ float t = (vR - uRingR.x)/(uRingR.y - uRingR.x); if (t < 0.0 || t > 1.0) discard; vec4 R = texture2D(uRingTex, vec2(t, 0.5));
+    vec3 oc = vWP - uCenter; float bb = dot(oc, uL); float cc = dot(oc,oc) - uR*uR; float sh = (bb < 0.0 && bb*bb - cc > 0.0) ? 0.1 : 1.0;
+    float lit = (0.4 + 0.75*abs(dot(uRingN, uL)))*sh; float a = R.a*0.92; vec3 rc = R.rgb*vec3(1.08, 0.9, 0.7); // warm tan (concept rings)
+    gl_FragColor = vec4(rc*lit*a, a); }`;
 const PTYPES = [
   { type: 0, c: [[0.42, 0.28, 0.2], [0.72, 0.52, 0.36], [0.9, 0.82, 0.7]], atm: [0.9, 0.5, 0.25] },   // desert
   { type: 1, c: [[0.03, 0.12, 0.32], [0.22, 0.42, 0.18], [0.55, 0.5, 0.38]], atm: [0.25, 0.55, 1.2] }, // ocean
@@ -158,11 +194,19 @@ const PTYPES = [
   { type: 4, c: [[0.12, 0.08, 0.08], [0.3, 0.2, 0.18], [0.9, 0.4, 0.1]], atm: [1.1, 0.35, 0.15] },     // volcanic
   { type: 0, c: [[0.32, 0.26, 0.38], [0.55, 0.45, 0.62], [0.8, 0.75, 0.85]], atm: [0.7, 0.4, 1.2] },   // violet rock
 ];
+// v16 concept bodies (Blender textures when loaded; these procedural colours are the Low / loading fallback)
+const T_DARK = { type: 4, tex: 'dark', kind: 0, c: [[0.03, 0.03, 0.04], [0.09, 0.08, 0.08], [0.9, 0.4, 0.1]], atm: [1.7, 0.75, 0.28] };
+const T_GAS = { type: 2, tex: 'gas', kind: 1, c: [[0.36, 0.26, 0.56], [0.82, 0.72, 0.6], [0.62, 0.42, 0.27]], atm: [0.55, 0.42, 0.95] };
+const T_MOON = { type: 0, tex: 'moon', kind: 2, c: [[0.2, 0.2, 0.21], [0.34, 0.34, 0.35], [0.45, 0.45, 0.46]], atm: [0.0, 0.0, 0.0] };
+const PTYPES16 = [...PTYPES, T_DARK, T_DARK, T_GAS, T_GAS, T_MOON];
+export const SKY_PTYPES = { dark: T_DARK, gas: T_GAS, moon: T_MOON };
 export const PLANET_CELL = 1100;
 export function planetAt(ci, cj) { // deterministic planet for a world cell (or null)
   const h = hash2(ci, cj, 4242); const r = mulberry(h); if (r() > 0.5 || (ci === 0 && cj === 0)) return null;
-  const T = PTYPES[Math.floor(r() * PTYPES.length)]; const R = 70 + r() * 90;
-  return { id: ci + ':' + cj, x: (ci + 0.2 + r() * 0.6) * PLANET_CELL, z: (cj + 0.2 + r() * 0.6) * PLANET_CELL, y: -(520 + r() * 380), R, T, seed: r() * 50, ring: r() < (T.type === 2 ? 0.75 : 0.3), tilt: (r() - 0.5) * 0.9, tilt2: (r() - 0.5) * 0.8, spin: 0.004 + r() * 0.01 };
+  const TL = SKY.enabled ? PTYPES16 : PTYPES; const T = TL[Math.floor(r() * TL.length)]; const R = (T.tex === 'moon' ? 45 + r() * 40 : 70 + r() * 90) * (T.tex === 'gas' ? 1.15 : 1);
+  const P = { id: ci + ':' + cj, x: (ci + 0.2 + r() * 0.6) * PLANET_CELL, z: (cj + 0.2 + r() * 0.6) * PLANET_CELL, y: -(520 + r() * 380), R, T, seed: r() * 50, ring: r() < (T.tex === 'gas' ? 0.9 : T.tex ? 0 : T.type === 2 ? 0.75 : 0.3), tilt: (r() - 0.5) * 0.9, tilt2: (r() - 0.5) * 0.8, spin: 0.004 + r() * 0.01 };
+  if (T.tex === 'gas' && r() < 0.75) { const a = r() * Math.PI * 2; P.moon = { dx: Math.cos(a) * R * 2.9, dz: Math.sin(a) * R * 2.9, dy: R * (0.4 + r() * 0.5), r: R * (0.2 + r() * 0.08) }; } // companion moon (concept: moon beside the ringed giant)
+  return P;
 }
 export class Planets {
   constructor(scene, light) {
@@ -180,7 +224,17 @@ export class Planets {
     const ring = new THREE.Mesh(this.ringGeo, new THREE.ShaderMaterial({ uniforms: U, vertexShader: RING_VS, fragmentShader: RING_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide, premultipliedAlpha: true, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));
     body.renderOrder = -8; atm.renderOrder = -7.5; ring.renderOrder = -7.4; body.frustumCulled = atm.frustumCulled = ring.frustumCulled = false;
     const g = new THREE.Group(); g.add(body, atm, ring); g.visible = false; this.scene.add(g);
-    return { g, body, atm, ring, U, id: null };
+    // v16 textured variants (built once per slot; swapped in when the Blender maps for the planet's kind are loaded)
+    const TU = { ...U, uL: { value: new THREE.Vector3().copy(this.L) }, uAlb: { value: null }, uNrm: { value: null }, uHasN: { value: 0 }, uKind: { value: 0 }, uRingTex: { value: null }, uHasRing: { value: 0 } };
+    const tbody = new THREE.Mesh(this.geo, new THREE.ShaderMaterial({ uniforms: TU, vertexShader: PLANET_VS, fragmentShader: TPLANET_FS })); tbody.renderOrder = -8; tbody.frustumCulled = false; tbody.visible = false; g.add(tbody);
+    const tatm = new THREE.Mesh(this.geo, new THREE.ShaderMaterial({ uniforms: TU, vertexShader: PLANET_VS, fragmentShader: ATM_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); tatm.renderOrder = -7.5; tatm.frustumCulled = false; tatm.visible = false; g.add(tatm);
+    const tring = new THREE.Mesh(this.ringGeo, new THREE.ShaderMaterial({ uniforms: TU, vertexShader: RING_VS, fragmentShader: TRING_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide, premultipliedAlpha: true, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor })); tring.renderOrder = -7.4; tring.frustumCulled = false; tring.visible = false; g.add(tring);
+    const MU = { ...TU, uL: TU.uL, uKind: { value: 2 }, uSpin: { value: 0 }, uAlb: { value: null }, uNrm: { value: null }, uHasN: { value: 0 }, uRing: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uR: { value: 1 } };
+    const moon = new THREE.Mesh(this.geo, new THREE.ShaderMaterial({ uniforms: MU, vertexShader: PLANET_VS, fragmentShader: TPLANET_FS })); moon.renderOrder = -8; moon.frustumCulled = false; moon.visible = false; g.add(moon);
+    const PU = { ...U, uL: TU.uL, uC1: { value: new THREE.Color(0.2, 0.2, 0.21) }, uC2: { value: new THREE.Color(0.34, 0.34, 0.35) }, uC3: { value: new THREE.Color(0.45, 0.45, 0.46) }, uAtm: { value: new THREE.Color(0, 0, 0) }, uType: { value: 0 }, uSeed: { value: 3 }, uSpin: { value: 0 }, uRing: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uR: { value: 1 } };
+    const moonP = new THREE.Mesh(this.geo, new THREE.ShaderMaterial({ uniforms: PU, vertexShader: PLANET_VS, fragmentShader: PLANET_FS, defines: { OCT: 4, CRATERS: 1 } })); moonP.renderOrder = -8; moonP.frustumCulled = false; moonP.visible = false; g.add(moonP);
+    const flare = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTexture(), color: 0xffb070, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, transparent: true, fog: false })); flare.renderOrder = -7.3; flare.visible = false; g.add(flare);
+    return { g, body, atm, ring, U, id: null, tbody, tatm, tring, TU, moon, MU, moonP, PU, flare };
   }
   setDetail(q) { // low: 3 octaves, no clouds/craters; medium: clouds; high: everything
     this.detail = q; this.max = q === 'low' ? 1 : q === 'medium' ? 2 : 3;
@@ -192,7 +246,7 @@ export class Planets {
     out.sort((a, b) => a.d - b.d); return out.slice(0, this.max);
   }
   update(cam, time) {
-    const list = this.visibleList(cam.x, cam.z); this.active = list;
+    this.cam = cam; const list = this.visibleList(cam.x, cam.z); this.active = list;
     const used = new Set();
     for (const P of list) { let s = this.pool.find((x) => x.id === P.id); if (!s) continue; used.add(s); this.fill(s, P, time); }
     for (const P of list) { if (this.pool.some((x) => x.id === P.id && used.has(x))) continue; const s = this.pool.find((x) => !used.has(x)); if (!s) break; used.add(s); s.id = P.id; this.fill(s, P, time); }
@@ -205,6 +259,31 @@ export class Planets {
     U.uType.value = P.T.type; U.uSeed.value = P.seed; U.uTime.value = time; U.uSpin.value = time * P.spin; U.uR.value = P.R; U.uCenter.value.set(P.x, P.y, P.z);
     s.ring.visible = P.ring; U.uRing.value = P.ring ? 1 : 0;
     if (P.ring) { s.ring.scale.setScalar(P.R); s.ring.rotation.set(-Math.PI / 2 + P.tilt, P.tilt2, 0); s.ring.updateMatrixWorld(); U.uRingN.value.set(0, 0, 1).applyQuaternion(s.ring.getWorldQuaternion(this._q ||= new THREE.Quaternion())).normalize(); U.uRingR.value.set(1.35, 2.45); }
+    this.fillTex(s, P, time);
+  }
+  // v16: Blender maps for the concept bodies (dark world / gas giant / moon) + companion moon + limb flare
+  fillTex(s, P, time) {
+    const T = P.T; const alb = T.tex ? skyTex(T.tex) : null; const nrm = T.tex && T.tex !== 'gas' ? skyTex(T.tex + '-normal') : null; const rt = P.ring && T.tex === 'gas' ? skyTex('ring') : null;
+    const on = !!alb; const TU = s.TU; s.body.visible = s.atm.visible = !on; s.tbody.visible = on; s.tatm.visible = on && T.kind !== 2; s.tring.visible = on && P.ring && !!rt; if (on && P.ring && rt) s.ring.visible = false;
+    if (on) {
+      s.tbody.scale.setScalar(P.R); s.tatm.scale.setScalar(P.R * (T.kind === 0 ? 1.03 : 1.04)); if (P.ring) { s.tring.scale.copy(s.ring.scale); s.tring.rotation.copy(s.ring.rotation); }
+      TU.uAlb.value = alb; TU.uNrm.value = nrm; TU.uHasN.value = nrm ? 1 : 0; TU.uKind.value = T.kind; TU.uRingTex.value = rt; TU.uHasRing.value = rt ? 1 : 0; TU.uAtm.value.setRGB(...T.atm);
+    }
+    // light: shared key light, except the dark world, which is lit from behind (thin hot crescent + flare, like the concept)
+    const Lv = TU.uL.value; const cam = this.cam;
+    if (T.kind === 0 && cam) {
+      const V = (this._v ||= new THREE.Vector3()).set(cam.x - P.x, cam.y - P.y, cam.z - P.z).normalize(); const side = (this._s ||= new THREE.Vector3()).copy(this.L).addScaledVector(V, -this.L.dot(V)).normalize();
+      Lv.copy(V).multiplyScalar(-0.62).addScaledVector(side, 0.8).normalize();
+      const f = s.flare; f.visible = on && SKY.level === 'full'; if (f.visible) { const lim = (this._l ||= new THREE.Vector3()).copy(Lv).addScaledVector(V, -Lv.dot(V)).normalize(); f.position.copy(lim).multiplyScalar(P.R * 0.99).addScaledVector(V, P.R * 0.1); f.scale.setScalar(P.R * 1.5); f.material.opacity = 0.9; }
+    } else if (T.kind === 2 && cam) { // airless moon: side-lit half phase toward the viewer (concept: lit hemisphere with crisp craters on the terminator)
+      const V = (this._v ||= new THREE.Vector3()).set(cam.x - P.x, cam.y - P.y, cam.z - P.z).normalize(); const side = (this._s ||= new THREE.Vector3()).copy(this.L).addScaledVector(V, -this.L.dot(V)).normalize();
+      Lv.copy(V).multiplyScalar(0.3).addScaledVector(side, 0.95).normalize(); s.flare.visible = false;
+    } else { Lv.copy(this.L); s.flare.visible = false; }
+    // companion moon
+    const M = P.moon; const mt = M ? skyTex('moon') : null; const mn = M ? skyTex('moon-normal') : null;
+    s.moon.visible = !!(M && mt); s.moonP.visible = !!(M && !mt);
+    if (M) { const mm = mt ? s.moon : s.moonP; mm.position.set(M.dx, M.dy, M.dz); mm.scale.setScalar(M.r); const MU = mt ? s.MU : s.PU; MU.uCenter.value.set(P.x + M.dx, P.y + M.dy, P.z + M.dz); MU.uR.value = M.r; MU.uSpin.value = time * 0.004;
+      if (mt) { s.MU.uAlb.value = mt; s.MU.uNrm.value = mn; s.MU.uHasN.value = mn ? 1 : 0; } }
   }
 }
 
@@ -236,11 +315,13 @@ export class Environment {
     this.planets = new Planets(scene, new THREE.Vector3(0.78, 0.3, -0.55));
     this.bgRocks = new DepthRocks(scene, { count: 56, L: 420, y0: -95, y1: -38, s0: 2.2, s1: 7.5, seed: 5 });
     this.fgRocks = new DepthRocks(scene, { count: 14, L: 150, y0: 8, y1: 15, s0: 0.12, s1: 0.32, seed: 9, fg: true });
+    this.stars = new SkyStars(scene); // v16: per-sector suns far below the play plane
     this.setQuality('high');
   }
   setQuality(q) {
     this.q = q; this.neb.setCount(q === 'low' ? 1 : q === 'medium' ? 2 : 3); this.planets.setDetail(q);
     this.bgRocks.setCount(q === 'low' ? 0 : q === 'medium' ? 28 : 56); this.fgRocks.setCount(q === 'high' ? 14 : 0);
+    setSkyQuality(q); this.stars.setQuality(q);
   }
-  update(camera, tint, time) { const c = camera.position; this.neb.update(c, tint, time); this.planets.update(c, time); this.bgRocks.update(c.x, c.z, time); this.fgRocks.update(c.x, c.z, time); }
+  update(camera, tint, time) { const c = camera.position; this.neb.update(c, tint, time); this.planets.update(c, time); this.stars.update(camera, time); this.bgRocks.update(c.x, c.z, time); this.fgRocks.update(c.x, c.z, time); }
 }

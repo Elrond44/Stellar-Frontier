@@ -12,6 +12,7 @@ import { Audio } from './audio.js?v=15';
 import { makeSky, makeStarLayer, makeDust } from './world.js?v=15';
 import { Environment } from './environment.js?v=15';
 import { CinematicPass } from './post.js?v=15';
+import { SKY, setSkyRenderer } from './sky.js?v=15';
 import { PRESETS, detectQuality, AdaptiveQuality } from './quality.js?v=15';
 import { Profiler } from './profiler.js?v=15';
 import { SECTORS, sectorAt } from './data.js?v=15';
@@ -62,7 +63,7 @@ const prof = new Profiler(renderer, scene); const adapt = new AdaptiveQuality();
 if (window.SF_FORCE_QUALITY && PRESETS[window.SF_FORCE_QUALITY]) { detected.q = window.SF_FORCE_QUALITY; detected.why += ' (pinned by test harness)'; adapt.off = true; } // automated tests pin AUTO so software rendering stays comparable
 
 const audio = new Audio();
-setTexRenderer(renderer);
+setTexRenderer(renderer); setSkyRenderer(renderer); if (SKY.enabled) { camera.far = 4200; camera.updateProjectionMatrix(); } // v16: the per-sector suns sit 1.5-2 km below
 if (GLB.enabled) { try { await preloadGlbHulls(); } catch (e) { console.warn('glb hulls off', e); } } // blender-test toggle (?hulls=glb)
 if (ENV.enabled) { // v14: Blender station + asteroid set (?env=proc keeps the procedural ones)
   let lv = 1; try { lv = Math.max(1, Math.min(6, (JSON.parse(localStorage.getItem('stellar-frontier-save-v1') || '{}').stationLvl | 0) || 1)); } catch (e) { /* */ }
@@ -93,7 +94,7 @@ function setupQuality() {
     composer = new EffectComposer(renderer);
     composer.setPixelRatio(pr); composer.setSize(innerWidth, innerHeight);
     composer.addPass(new RenderPass(scene, camera));
-    cine = new CinematicPass(); composer.addPass(cine.pass);
+    cine = new CinematicPass(); if (SKY.enabled) cine.uniforms.uRingCol.value.set(0.7, 1.2, 2.2); composer.addPass(cine.pass); // v16: blue photon ring for the concept black hole
     bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), P.bloom, 0.5, 0.92);
     composer.addPass(bloom); composer.addPass(new OutputPass());
   }
@@ -222,4 +223,4 @@ resize();
 frame();
 
 // test / debug hook
-window.SF = { perf, game, ui, audio, renderer, camera, scene, env, ENV, prof, detected, PRESETS, get fps() { return fps; }, get quality() { return activeQ; }, get cine() { return cine; }, get composer() { return composer; }, setQuality(q) { game.s.settings.quality = q; applySettings(); }, profile() { return prof.snapshot(); } };
+window.SF = { perf, game, ui, audio, renderer, camera, scene, env, ENV, SKY, prof, detected, PRESETS, get fps() { return fps; }, get quality() { return activeQ; }, get cine() { return cine; }, get composer() { return composer; }, setQuality(q) { game.s.settings.quality = q; applySettings(); }, profile() { return prof.snapshot(); } };

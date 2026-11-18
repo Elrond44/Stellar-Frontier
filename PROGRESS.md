@@ -200,3 +200,23 @@ Checklist:
 - [x] concept-vs comparisons: shots/env/concept-vs-inst-*.png (9 kinds + hq-b), concept-vs-rig-*.png (4), concept-vs-pickups.png, concept-vs-sheet-crystals.png, concept-vs-station-l4-low / l6-low.png
 - [x] tests/v15env.js (all pass) + old suites green (smoke, smoke5, v8, v9, v13cam, registry, blender_ingame, blender_tex_registry, yardcheck, compat, v14env)
 - [x] merge to main, cache-bust v15, push, verify live
+
+## v16: Environment batch 3 - celestial bodies (branch env)
+Source: celestial rows of briefs/env-concepts-1.png + -3.png (crops in briefs/crops3/).
+- Blender bakes (tools/blender/celestial.py, Cycles EMIT bake of UV->sphere-direction noise graphs, seamless equirect):
+  dark planet (albedo + fissure-light mask + normal), banded purple/tan gas giant, cratered grey moon (albedo + normal),
+  star surface data (granulation / plasma / spots), nebula data map, black-hole disc streaks, ring strip.
+  -> models/sky/*.ktx2 (ETC1S colour, UASTC data, mipmapped) + *.webp fallback; '-half' set for Medium; Low loads none.
+- src/sky.js: lazy KTX2 loader (WebP fallback, ?skyfmt=webp), per-quality level, stars (one per ~60% of sectors, Haven always) with
+  corona + flare loops billboard. environment.js: textured planet / ring shaders, new types (dark x2, gas x2, moon), gas giants get
+  rings + companion moons, back-lit dark world with limb flare; far nebula layer moved under the planets. phenomena.js: blue
+  black-hole palette (accretion texture, spiral arms, polar jets on Medium+), gravity-well swirl now actually visible (premultiplied
+  additive; the old non-premultiplied additive blend with alpha 0 drew nothing). post.js: lens ring colour uniform (blue with the pack).
+- Gameplay, black-hole pull / horizon, lens, saves, presets, v13 camera unchanged. ?env=proc = v15 look (no stars, original planet types).
+Checklist:
+- [x] bakes + KTX2/WebP + half set; loader + quality levels
+- [x] dark / gas / moon textured planets, companion moon, rings
+- [x] stars with corona / flares; black hole blue disc + spiral + jets
+- [ ] concept-vs comparisons (shots/sky/concept-vs-*.png)
+- [ ] tests/v16env.js + old suites green
+- [ ] merge to main, cache-bust v16, push, verify live
