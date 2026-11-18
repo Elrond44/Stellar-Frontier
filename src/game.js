@@ -1,29 +1,29 @@
 // Core game: state, player ship, weapons, enemies, economy, quests, saving
 import * as THREE from 'three';
-import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=13';
-import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=13';
-import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=13';
-import { Campaign, FLEET } from './campaign.js?v=13';
-import { roleAI } from './ai.js?v=13';
-import { BOSS_BY_BP } from './bosses.js?v=13';
-import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=13';
-import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=13';
-import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, ROLE_ABILITIES, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=13';
-import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=13';
-import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=13';
-import { AsteroidField, Minerals } from './world.js?v=13';
-import { Particles, Debris, Rings, Bolts, Flashes, BOLT_TIME } from './fx.js?v=13';
-import { FXManager, Sequencer, EnergyShells, MetalDebris, makeShieldMaterial, ShieldFX, ShieldBubbles, prepareDamage, ensureDamage, releaseDamage, DMG_TIME, DMG_STATS, plasmaMaterial } from './vfx.js?v=13';
-import { STORY, makeContract } from './quests.js?v=13';
-import { Phenomena } from './phenomena.js?v=13';
-import { Wrecks } from './structures.js?v=13';
-import { ExplosionManager, classify, PROFILES } from './explosions.js?v=13';
-import { HULLS, HULL_IDS, buildHull, ENEMY_HULL, FLAGSHIP_HULL, FACTION_PAINT, hullSegs, MAIN_PATH } from './hulls.js?v=13';
-import { HullLOD } from './lod.js?v=13';
-import { hideTurret } from './glbhulls.js?v=13';
-import { buildStationAny } from './glbenv.js?v=13';
-import { CAM_PRESETS, DEG, angDiff } from './camctl.js?v=13';
-import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=13';
+import { clamp, lerp, damp, rand, randInt, pick, angleDiff, TAU } from './util.js?v=14';
+import { MINERALS, MINERAL_KEYS, SECTORS, sectorAt, BOSS_LAIR, TIERS, STATION_LEVELS, UPGRADES, upgradeCost, ENEMIES, xpForLevel } from './data.js?v=14';
+import { buildShip, makeTurret, makeFlames, buildPirate, buildStation, animateStation, animateNavLights, disposeObject, glowTexture, tintPirate, buildInstallation, makeDome, rarityRing, buildLootPod, buildCacheCrate, buildInstallationV5, buildFlagship, buildBossPart, factionMats, retint } from './models.js?v=14';
+import { Campaign, FLEET } from './campaign.js?v=14';
+import { roleAI } from './ai.js?v=14';
+import { BOSS_BY_BP } from './bosses.js?v=14';
+import { RING_L0, TTK, ttkHp, shipK, dmgK } from './balance.js?v=14';
+import { newGame, readKey, writeKey, deleteKey, slotKey, meta, exportCode, importCode, AUTO_KEY, SLOT_COUNT, INV_CAP } from './save.js?v=14';
+import { SKILLS, SKILL_BY_ID, ABILITIES, ABILITY_ORDER, ROLE_ABILITIES, spEarned, spSpent, skillFx, skillState, skillCost, respecCost } from './rpg.js?v=14';
+import { RARITIES, TEMPLATES, makeItem, itemStats, itemPower, upgradeCost as itemUpCost, salvageValue, rollLoot, lootChance, merchantStock } from './items.js?v=14';
+import { FACTIONS, GSECTORS, SECTOR_BY_ID, gsectorAt, caches, liberation, owner, dangerOf, isPirate, neighbours, bindWorld } from './galaxy.js?v=14';
+import { AsteroidField, Minerals } from './world.js?v=14';
+import { Particles, Debris, Rings, Bolts, Flashes, BOLT_TIME } from './fx.js?v=14';
+import { FXManager, Sequencer, EnergyShells, MetalDebris, makeShieldMaterial, ShieldFX, ShieldBubbles, prepareDamage, ensureDamage, releaseDamage, DMG_TIME, DMG_STATS, plasmaMaterial } from './vfx.js?v=14';
+import { STORY, makeContract } from './quests.js?v=14';
+import { Phenomena } from './phenomena.js?v=14';
+import { Wrecks } from './structures.js?v=14';
+import { ExplosionManager, classify, PROFILES } from './explosions.js?v=14';
+import { HULLS, HULL_IDS, buildHull, ENEMY_HULL, FLAGSHIP_HULL, FACTION_PAINT, hullSegs, MAIN_PATH } from './hulls.js?v=14';
+import { HullLOD } from './lod.js?v=14';
+import { hideTurret } from './glbhulls.js?v=14';
+import { buildStationAny } from './glbenv.js?v=14';
+import { CAM_PRESETS, DEG, angDiff } from './camctl.js?v=14';
+import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=14';
 
 export const STATION_SCALE = 2; // v8: the home station is built at capital-ship scale
 const DOCK_R = 54;
@@ -167,7 +167,8 @@ export class Game {
   // ---------- station ----------
   buildStationModel() {
     if (this.stationRoot) { this.scene.remove(this.stationRoot); disposeObject(this.stationRoot); }
-    this.stationRoot = buildStationAny(this.s.stationLvl, this.field.stationMat, (lv) => { if (lv === this.s.stationLvl && this.stationRoot && !this.stationRoot.userData.glb) this.buildStationModel(); }); // v14: Blender station when loaded this.stationRoot.scale.setScalar(STATION_SCALE); // v8: sized against capital hulls
+    this.stationRoot = buildStationAny(this.s.stationLvl, this.field.stationMat, (lv) => { if (lv === this.s.stationLvl && this.stationRoot && !this.stationRoot.userData.glb) this.buildStationModel(); }); // v14: Blender station when loaded
+    this.stationRoot.scale.setScalar(STATION_SCALE); // v8: sized against capital hulls
     const ud = this.stationRoot.userData; ud.dockPortW = ud.dockPort.clone().multiplyScalar(STATION_SCALE); for (const v of ud.anim.stacks || []) v.multiplyScalar && v.multiplyScalar(STATION_SCALE);
     this.scene.add(this.stationRoot);
   }

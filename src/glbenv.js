@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from '../vendor/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
-import { materials, glowTexture, addStationDrones, buildStation } from './models.js?v=13';
+import { materials, glowTexture, addStationDrones, buildStation } from './models.js?v=14';
 
 export const ENV_DEFAULT = true;
 export const ENV_VER = 'e1';

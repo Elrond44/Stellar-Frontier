@@ -174,6 +174,7 @@ Batch 1 checklist
       `?env=proc` (sticky) and any load failure (404/timeout) fall back to procedural; startup awaits rocks + the saved station level,
       the next level preloads in the background, a level that isn't loaded yet shows procedurally and swaps in when ready
 - [x] occlusion fade, docking, upgrades, shipyard/station live view, mining damage/hit glow all work; no console errors
-- [x] Playwright: tests/v14env.js (36 checks) + shots in game/shots/v14/
-- [ ] old suites green
-- [ ] merge to main, cache-bust v14, push, verify live
+- [x] Playwright: tests/v14env.js (34 checks, all pass) + shots in game/shots/v14/
+- [x] fix: station keeps its v8 capital scale (x2) with the glb models (caught by v8 suite); footprint check measured in world units, drones excluded (glb reach 36-43 vs procedural 38-42)
+- [x] old suites green: smoke, smoke5, v8, v9, v13cam, registry, blender_ingame, blender_tex_registry, yardcheck, compat
+- [x] merge to main, cache-bust v14, push, verify live
