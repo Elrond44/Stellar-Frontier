@@ -4,6 +4,7 @@ import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
 import { Game } from './game.js?v=13';
+import { ENV, preloadEnv } from './glbenv.js?v=13';
 import { GLB, preloadGlbHulls, TEX, preloadTex, setTexRenderer, texLevelFor } from './glbhulls.js?v=13';
 import { applyShipLight } from './shiplight.js?v=13';
 import { UI } from './ui.js?v=13';
@@ -63,6 +64,10 @@ if (window.SF_FORCE_QUALITY && PRESETS[window.SF_FORCE_QUALITY]) { detected.q = 
 const audio = new Audio();
 setTexRenderer(renderer);
 if (GLB.enabled) { try { await preloadGlbHulls(); } catch (e) { console.warn('glb hulls off', e); } } // blender-test toggle (?hulls=glb)
+if (ENV.enabled) { // v14: Blender station + asteroid set (?env=proc keeps the procedural ones)
+  let lv = 1; try { lv = Math.max(1, Math.min(6, (JSON.parse(localStorage.getItem('stellar-frontier-save-v1') || '{}').stationLvl | 0) || 1)); } catch (e) { /* */ }
+  try { await preloadEnv(lv); } catch (e) { console.warn('glb env off', e); }
+}
 const game = new Game(scene, camera, audio); game.prof = prof;
 const opts = { canvas, showFps: false, fpsText: () => '', applySettings: null, isPlaying: () => playing, onLoaded: null };
 const ui = new UI(game, audio, opts);
@@ -217,4 +222,4 @@ resize();
 frame();
 
 // test / debug hook
-window.SF = { perf, game, ui, audio, renderer, camera, scene, env, prof, detected, PRESETS, get fps() { return fps; }, get quality() { return activeQ; }, get cine() { return cine; }, get composer() { return composer; }, setQuality(q) { game.s.settings.quality = q; applySettings(); }, profile() { return prof.snapshot(); } };
+window.SF = { perf, game, ui, audio, renderer, camera, scene, env, ENV, prof, detected, PRESETS, get fps() { return fps; }, get quality() { return activeQ; }, get cine() { return cine; }, get composer() { return composer; }, setQuality(q) { game.s.settings.quality = q; applySettings(); }, profile() { return prof.snapshot(); } };

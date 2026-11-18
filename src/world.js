@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mulberry, hash2, rand, TAU } from './util.js?v=13';
 import { MINERALS, sectorAt } from './data.js?v=13';
 import { makeRockGeometry, makeRockMaterial, rockUniforms } from './models.js?v=13';
+import { ENV, ROCK_BY_TYPE } from './glbenv.js?v=13';
 import { mergeGeometries } from '../vendor/addons/utils/BufferGeometryUtils.js';
 
 export function makeSky() {
@@ -147,12 +148,18 @@ export class AsteroidField {
     this.mat = makeRockMaterial(0x000000, 1);
     this.stationMat = makeRockMaterial(0x38c8ff, 0.45);
     this.meshes = { hi: [], lo: [], rhi: [], rlo: [] };
-    for (let i = 0; i < NV; i++) {
+    const G = ENV.enabled && ENV.rocks; // v14: Blender asteroid set (shape per mineral), procedural otherwise
+    if (G) {
+      for (let i = 0; i < G.hi.length; i++) { this.meshes.hi.push(makeInst(G.hi[i], this.mat, 140)); this.meshes.lo.push(makeInst(G.lo[i], this.mat, 200)); }
+      for (let i = 0; i < G.rhi.length; i++) { this.meshes.rhi.push(makeInst(G.rhi[i], this.mat, 48)); this.meshes.rlo.push(makeInst(G.rlo[i], this.mat, 64)); }
+      this.typeMap = ROCK_BY_TYPE; this.glb = true;
+    }
+    for (let i = 0; i < (G ? 0 : NV); i++) {
       const o = { detail: 3, stretch: i % 3 === 1, amp: i % 3 === 2 ? 0.42 : 0.32, craters: 3 + (i % 3) };
       this.meshes.hi.push(makeInst(makeRockGeometry(500 + i * 13, o), this.mat, 120));
       this.meshes.lo.push(makeInst(makeRockGeometry(500 + i * 13, { ...o, detail: 2 }), this.mat, 160));
     }
-    for (let i = 0; i < NR; i++) {
+    for (let i = 0; i < (G ? 0 : NR); i++) {
       const o = { detail: 3, crystals: 4 + i, amp: 0.28, craters: 2 };
       this.meshes.rhi.push(makeInst(makeRockGeometry(900 + i * 7, o), this.mat, 48));
       this.meshes.rlo.push(makeInst(makeRockGeometry(900 + i * 7, { ...o, detail: 2 }), this.mat, 64));
@@ -212,7 +219,8 @@ export class AsteroidField {
       this._sph.center.set(a.x, a.y, a.z); this._sph.radius = a.r * 1.5;
       if (cam && !this.frustum.intersectsSphere(this._sph)) continue;
       const near = Math.hypot(a.x - px, a.z - pz) < this.hiDist;
-      const set = a.rich ? (near ? this.meshes.rhi : this.meshes.rlo)[a.variant % NR] : (near ? this.meshes.hi : this.meshes.lo)[a.variant % NV];
+      const tm = this.typeMap && this.typeMap[a.type]; const vi = tm ? tm[a.variant % tm.length] : a.variant % this.meshes.hi.length;
+      const set = a.rich ? (near ? this.meshes.rhi : this.meshes.rlo)[a.variant % this.meshes.rhi.length] : (near ? this.meshes.hi : this.meshes.lo)[vi];
       const u = set.userData; if (u.n >= u.cap) continue; const i = u.n++;
       const pulse = a.hitT > 0 ? 1 + Math.sin(a.hitT * 60) * 0.035 * a.hitT * 6 : 1;
       this._e.set(a.rx, a.ry, 0); this._q.setFromEuler(this._e); this._p.set(a.x, a.y, a.z); this._s.setScalar(a.r * pulse);

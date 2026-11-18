@@ -21,6 +21,7 @@ import { ExplosionManager, classify, PROFILES } from './explosions.js?v=13';
 import { HULLS, HULL_IDS, buildHull, ENEMY_HULL, FLAGSHIP_HULL, FACTION_PAINT, hullSegs, MAIN_PATH } from './hulls.js?v=13';
 import { HullLOD } from './lod.js?v=13';
 import { hideTurret } from './glbhulls.js?v=13';
+import { buildStationAny } from './glbenv.js?v=13';
 import { CAM_PRESETS, DEG, angDiff } from './camctl.js?v=13';
 import { FlightModel, SpatialHash, collideCircles, sweptCircle, TIER_MASS, massOf, rockMass, assistValue } from './physics.js?v=13';
 
@@ -166,7 +167,7 @@ export class Game {
   // ---------- station ----------
   buildStationModel() {
     if (this.stationRoot) { this.scene.remove(this.stationRoot); disposeObject(this.stationRoot); }
-    this.stationRoot = buildStation(this.s.stationLvl, this.field.stationMat); this.stationRoot.scale.setScalar(STATION_SCALE); // v8: sized against capital hulls
+    this.stationRoot = buildStationAny(this.s.stationLvl, this.field.stationMat, (lv) => { if (lv === this.s.stationLvl && this.stationRoot && !this.stationRoot.userData.glb) this.buildStationModel(); }); // v14: Blender station when loaded this.stationRoot.scale.setScalar(STATION_SCALE); // v8: sized against capital hulls
     const ud = this.stationRoot.userData; ud.dockPortW = ud.dockPort.clone().multiplyScalar(STATION_SCALE); for (const v of ud.anim.stacks || []) v.multiplyScalar && v.multiplyScalar(STATION_SCALE);
     this.scene.add(this.stationRoot);
   }
