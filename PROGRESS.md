@@ -117,3 +117,9 @@ Approved by Elrond (t28u): Dreadnought + Scout only, baked texture maps + lighti
 - Catalog mode (?mode=catalog): 3/4/5 columns by aspect, each cell framed for its own shape (was broken on portrait phones), labels inside their cells.
 - In-game shipyard checked at 390×844, 844×390 and 360×640: no overlapping or clipped text, no change needed.
 - Cache-busters ?v=11. Tests: tests/registry.js (overlap/on-screen/card/no-errors), tests/yardcheck.js.
+
+## v12: reshape the big hulls toward the concept silhouettes (branch reshape)
+- Pipeline: edit blender/src/<hull>.py -> `.venv/bin/python src/<hull>.py --render && ./sync.sh` -> `node tests/reshape_shots.js <ids>` (in-game solo renders) -> `.venv/bin/python src/reshape_compare.py <ids>` -> blender/shots/reshape/concept-vs-<id>.png + side-<id>.png (before = blender/shots/reshape/before, copies of the v10 renders; v10 builders + glbs backed up in blender/backup-pre-reshape/). Copied to game/shots/reshape.
+- [x] Dreadnought v3: stacked layers that start further aft and higher (deck -> tier 2 hoods -> tier 3 hoods -> crown -> stepped citadel ~z 140 + spires), each tier built from separate chunky sloped "hood" modules (silver / two red / red emblem block with a winged emblem), longer pointed prow taper, deep ventral keel of hanging modules + dropped towers + fins. Height ~0.3 L like the art (was ~0.17). 11,968 tris (was 10,824), meshopt glb ~340 KB (was 313 KB). Same 8 heavy + 16 PD turret anchors, same engines.
+- [ ] Fleet Carrier  - [ ] Battlecruiser  - [ ] Cruiser  - [ ] Intercept Carrier
+- [ ] tests (yardcheck, registry, live10, blender_ingame, blender_viewer, smoke5) in glb mode; v12 cache-bust (?v=12, glb ?v=bt5); ?tex=1 decision for the reshaped Dreadnought
