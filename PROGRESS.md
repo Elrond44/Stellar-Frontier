@@ -129,3 +129,17 @@ Approved by Elrond (t28u): Dreadnought + Scout only, baked texture maps + lighti
 - [x] Cache-bust: modules ?v=12, glbs ?v=bt5; About says v12; README v12 section.
 - [x] Tests (local, glb default): yardcheck, registry, live10, blender_ingame, blender_viewer (all 15 hulls, bays, variants, 404 fallback), smoke, smoke5, compat, v8, v9, blender_tex -> all PASS.
 - Fleet glb total after reshape: ~1.86 MB (was ~1.80 MB).
+
+## v13: Advanced player controls & dynamic camera (branch camera)
+Brief: ../briefs/camera-controls.txt (written for a fantasy RPG; mapped to the space game: character -> ship, terrain/walls -> station, capital hulls, big asteroids; dodge -> Space dash).
+- [x] One camera controller, extended in place (`Game.updateCamera`): free 360° yaw, clamped pitch (default 25–82°, settings 20/25/35 and 70/82/85), user zoom ×0.5–×2 (max 1.5/2/2.5) on top of the hull-class distance; critically damped (SmoothDamp) yaw/pitch/zoom, slower eased glides for presets/reset/recenter. Classic (yaw 0, 58.4°, ×1, full framing) reproduces the v12 view exactly and is the default for old saves.
+- [x] Contextual combat/boss framing kept; strength Off/Mild/Full only scales the context zoom, never touches yaw/pitch or the manual zoom.
+- [x] Presets: Classic / Dynamic (48°, ×0.88, more look-ahead) / Tactical (78°, ×1.55) / Cinematic (32°, ×0.72, slow rotation). V cycles, R resets, C = behind the ship; optional auto-rotate-behind (off by default).
+- [x] Occlusion every 0.1 s, no per-frame allocations: station (AABB then exact raycast; pull in to ≥55% then fade to 22% via cached transparent material clones, restored after), capital hulls / outposts (oriented boxes, pull in only, enemies never faded), asteroids r≥3 (spheres). Never closer than the ship's hull (minD).
+- [x] Input (`UI.bind`/`readInput`): touch router: first touch in the move area (lower 55% portrait / left 55% landscape / anywhere) = joystick, other touches on empty space = camera (1 finger rotate after 8 px dead zone, 2 fingers pinch + optional twist); joystick and camera fingers work together; HUD and menus never start camera gestures; opening a menu cancels gestures. Desktop: left-drag flies, right-drag rotates, wheel zooms, Q/E, PgUp/PgDn, +/-; all keys rebindable (menu/ability keys reserved; conflicts swap).
+- [x] Camera-relative movement for stick and keys (toggle to classic north-up); radial joystick dead zone with rescale; floating or fixed joystick, size S/M/L.
+- [x] Settings: CAMERA & CONTROLS card (style, reset/recenter, 3 sensitivity sliders, invert Y/X, zoom & rotation smoothing, follow, look-ahead, max zoom-out, pitch limits, auto-framing, auto-rotate, collision, fade, camera-relative, joystick mode/size/dead zone/area, twist, key bindings, defaults). Stored in settings.cam (camctl.js sanitizeCam migrates/repairs); current yaw/pitch/zoom persist.
+- [x] Radar turns with the camera (radar-up = screen-up, N marker when rotated); cinematic lens pass sized along the camera right axis (fixes a grey-screen bug at rotated views); streaming radius widens at low pitch.
+- [x] tests/v13cam.js (15 criteria, CDP multitouch, wheel, right-drag, keys, settings UI, reload persistence, migration) + tests/v13shots.js. WIP commit 91a2e6b.
+- [ ] Final full v13cam run, old suites (smoke, smoke5, compat, v8, v9, blender_ingame, blender_viewer, registry, yardcheck, live10)
+- [ ] Cache-bust ?v=13, README v13 section, merge to main, push, live check, shots/v13
