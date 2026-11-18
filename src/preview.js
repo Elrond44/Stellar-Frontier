@@ -1,10 +1,10 @@
 // Rotating 3D previews (shipyard + station) rendered by one small, lazily created WebGL renderer.
 // Its canvas is moved into whichever menu slot needs it and only renders while visible.
 import * as THREE from 'three';
-import { HULLS, HULL_IDS, buildHull } from './hulls.js?v=11';
-import { TEX, TEX_IDS, preloadTex } from './glbhulls.js?v=11';
-import { skyEnv } from './shiplight.js?v=11';
-import { buildShip, buildStation, makeFlames, makeTurret, animateNavLights, animateStation, makeRockMaterial } from './models.js?v=11';
+import { HULLS, HULL_IDS, buildHull } from './hulls.js?v=12';
+import { TEX, TEX_IDS, preloadTex } from './glbhulls.js?v=12';
+import { skyEnv } from './shiplight.js?v=12';
+import { buildShip, buildStation, makeFlames, makeTurret, animateNavLights, animateStation, makeRockMaterial } from './models.js?v=12';
 
 const KIT = ['laser', 'cannon', 'missile', 'cannon', 'missile', 'pulse'];
 export class Preview {

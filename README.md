@@ -12,6 +12,12 @@ An original 3D space-mining, auto-combat and empire-building game for mobile bro
 
 Built with [three.js](https://threejs.org) (vendored in `vendor/`, MIT licence). The ship hulls are modelled in Blender from Python scripts (`tools/blender/`) and shipped as compressed glTF (`models/`); everything else (effects, stations, music and sound) is generated procedurally in code. Progress autosaves to your browser's local storage.
 
+## v12: Big hulls reshaped toward the concept silhouettes
+- Dreadnought: stacked tiers of chunky sloped armour modules rising to a tall stepped citadel, a red emblem block with a winged emblem, a longer pointed prow and a deep ventral keel (height ~0.3 of its length, like the art).
+- Fleet Carrier: pointed flight deck with lit edge rails, a massive layered aft superstructure with side armour pods and a turret tower, two blue sensor domes on pylons.
+- Battlecruiser: forward-facing turbine nacelles slung on each flank (the concept's blue rings), armoured dorsal humps. Cruiser: aft deck stepping up into a wedge, bridge tower seated properly. Intercept Carrier: tall bridge spine, taller shoulders, forward-swept blade wings, raised stern.
+- Same scale, hitboxes, stats, faction paint, damage and LODs; turrets/engines/hangar bays come from the new models. Before/after sheets: `shots/reshape/`.
+
 ## v10: Blender-built fleet
 - All 15 hulls are now hand-built Blender models matched to the concept sheet (`models/*.glb`, about 1.8 MB for the whole fleet, meshopt-compressed). Builders live in `tools/blender/` and run with Blender's `bpy` module.
 - Same hitboxes, stats, faction paint, damage states, far-away LODs and engine/hardpoint positions as before; carriers launch fighters from their modelled hangar bays; modelled turrets replace the old bolt-on ones; real glass canopies.

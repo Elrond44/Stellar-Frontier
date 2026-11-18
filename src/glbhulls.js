@@ -24,7 +24,7 @@ export function preloadGlbHulls(ids = GLB_IDS, base = 'models/', timeoutMs = 150
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   const one = (id) => new Promise((res) => {
     const t = setTimeout(() => { GLB.failed[id] = 'timeout'; res(); }, timeoutMs);
-    loader.load(base + id + '.glb?v=bt4', (g) => { clearTimeout(t); try { GLB.cache[id] = prep(g.scene); } catch (e) { GLB.failed[id] = String(e); } res(); },
+    loader.load(base + id + '.glb?v=bt5', (g) => { clearTimeout(t); try { GLB.cache[id] = prep(g.scene); } catch (e) { GLB.failed[id] = String(e); } res(); },
       undefined, (e) => { clearTimeout(t); GLB.failed[id] = String(e && e.message || e); console.warn('glb hull fallback', id, e); res(); });
   });
   GLB.loading = Promise.all(ids.map(one)).then(() => GLB);
@@ -123,9 +123,9 @@ export function preloadTex(level, ids = TEX_IDS, base = 'models/tex/') {
   const tl = new THREE.TextureLoader(); const suf = level === 'half' ? '-half' : '';
   const get = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer(); });
   const one = (id) => {
-    const url = `${base}${id}${suf}.${fmt}.glb?v=tx1`;
+    const url = `${base}${id}${suf}.${fmt}.glb?v=tx2`;
     return Promise.all([get(url).then((buf) => { TEX.bytes[id + suf] = buf.byteLength; return new Promise((res, rej) => loader.parse(buf, base, res, rej)); }),
-      new Promise((res, rej) => tl.load(`${base}${id}${suf}-mask.webp?v=tx1`, res, undefined, rej))])
+      new Promise((res, rej) => tl.load(`${base}${id}${suf}-mask.webp?v=tx2`, res, undefined, rej))])
       .then(([g, mask]) => {
         mask.flipY = false; mask.colorSpace = THREE.NoColorSpace; mask.anisotropy = 4;
         let src = null; g.scene.traverse((o) => { if (o.isMesh && !src) src = o.material; });

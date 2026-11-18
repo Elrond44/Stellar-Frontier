@@ -23,7 +23,7 @@ KTXBIN = '/tmp/ktx/KTX-Software-4.4.2-Linux-x86_64/bin'
 
 CFG = {
     'dreadnought': dict(L=720.0, tile=60.0, size=2048, panel=9.0, greebles=2600, windows=0.45, win=(1.3, 0.8, 3.4),
-                        view=(0.85, -0.48, 0.24), dist=0.5, number='SF-01', stripes=[(-215, -175), (-60, -35), (95, 135)],
+                        view=(0.85, -0.48, 0.24), dist=0.5, number='SF-01', stripes=[],  # v12: the reshaped hull already carries its red modules
                         decals=[('num', -300, 0.35, 15), ('num', 200, 0.35, 15), ('emb', -120, 0.5, 34), ('emb', 160, 0.5, 30)], emblem=0xb8262c,
                         ext=0.55),
     'scout': dict(L=20.0, tile=5.0, size=1024, panel=0.75, greebles=150, windows=0.0, win=(0.1, 0.06, 0.2),
